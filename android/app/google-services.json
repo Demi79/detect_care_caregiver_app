@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "961808917290",
+    "project_id": "vision-ai-ecfb4",
+    "storage_bucket": "vision-ai-ecfb4.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:961808917290:android:7f9bf304cb314b44f33453",
+        "android_client_info": {
+          "package_name": "com.example.detect_care_caregiver_app"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyBTBDyDDLnYSPdScjCUCeWDwtGOOIx8Zi4"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
