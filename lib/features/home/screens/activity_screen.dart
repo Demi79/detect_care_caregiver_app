@@ -10,13 +10,13 @@ class ActivityScreen extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text('Activity')),
-      body: Center(child: const Text('Nội dung màn Activity…')),
+      appBar: AppBar(title: const Text('Hoạt động')),
+      body: Center(child: const Text('Nội dung màn Hoạt động…')),
       bottomNavigationBar: TabSelector(
-        selectedTab: 'Activity',
+        selectedTab: 'activity',
         onTabChanged: (label) {
           switch (label) {
-            case 'Warning':
+            case 'warning':
               Navigator.pushReplacement(
                 context,
                 MaterialPageRoute(
@@ -24,7 +24,7 @@ class ActivityScreen extends StatelessWidget {
                 ),
               );
               break;
-            case 'Report':
+            case 'report':
               Navigator.pushReplacement(
                 context,
                 MaterialPageRoute(builder: (_) => const HealthOverviewScreen()),

@@ -39,7 +39,7 @@ class UserMenuButton extends StatelessWidget {
           value: 'profile',
           child: Text('Hồ sơ cá nhân'),
         ),
-        const PopupMenuItem<String>(value: 'logout', child: Text('Logout')),
+        const PopupMenuItem<String>(value: 'logout', child: Text('Đăng xuất')),
       ],
     );
   }

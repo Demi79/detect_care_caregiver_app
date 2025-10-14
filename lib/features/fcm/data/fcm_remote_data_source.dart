@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'dart:developer' as dev;
 import 'package:http/http.dart' as http;
 
 import 'package:detect_care_caregiver_app/core/network/api_client.dart';
@@ -25,7 +26,7 @@ class FcmRemoteDataSource {
     final payload = {'userId': userId, 'token': token, 'type': type};
 
     if (_api != null) {
-      final res = await _api!.post(endpoints.postTokenPath, body: payload);
+      final res = await _api.post(endpoints.postTokenPath, body: payload);
       if (res.statusCode < 200 || res.statusCode >= 300) {
         throw Exception('Save FCM token failed: ${res.statusCode} ${res.body}');
       }
@@ -44,7 +45,7 @@ class FcmRemoteDataSource {
       headers['Authorization'] = 'Bearer $access';
     }
 
-    final res = await _client!.post(
+    final res = await _client.post(
       endpoints.postTokenUri,
       headers: headers,
       body: jsonEncode(payload),
@@ -76,51 +77,32 @@ class FcmRemoteDataSource {
       throw ArgumentError('fromUserId phải là UUID');
     }
 
+    for (final id in toUserIds) {
+      if (!_isUuid(id)) {
+        throw ArgumentError('Invalid user ID format: $id');
+      }
+    }
+
     final payload = <String, dynamic>{
-      'message': {
-        'token': toUserIds.first,
-        'notification': {
-          'title': category == 'help' ? '🆘 Help Request' : 'New Message',
-          'body': message,
-        },
-        'data': {
-          'type': 'actor_message',
-          'direction': direction,
-          'category': category,
-          'message': message,
-          'fromUserId': fromUserId,
-          if (deeplink != null && deeplink.isNotEmpty) 'deeplink': deeplink,
-        },
-        'android': {
-          'priority': 'high',
-          'notification': {
-            'channel_id': 'healthcare_alerts',
-            'priority': 'high',
-            'default_sound': true,
-            'default_vibrate_timings': true,
-          },
-        },
-        'apns': {
-          'headers': {'apns-priority': '10'},
-          'payload': {
-            'aps': {'sound': 'default', 'badge': 1, 'content-available': 1},
-          },
-        },
-      },
-      'validate_only': false,
+      'toUserIds': toUserIds,
+      'direction': direction,
+      'category': category,
+      'message': message,
+      'fromUserId': fromUserId,
+      if (deeplink != null && deeplink.isNotEmpty) 'deeplink': deeplink,
     };
 
-    print('\n📤 [FCM] Sending push message:');
-    print('URL: ${endpoints.postMessageUri}');
-    print('Payload:');
-    print(JsonEncoder.withIndent('  ').convert(payload));
+    dev.log('\n📤 [FCM] Sending push message:');
+    dev.log('URL: ${endpoints.postMessageUri}');
+    dev.log('Payload:');
+    dev.log(JsonEncoder.withIndent('  ').convert(payload));
 
     if (_api != null) {
-      final res = await _api!.post(endpoints.postMessagePath, body: payload);
+      final res = await _api.post(endpoints.postMessagePath, body: payload);
 
-      print('\n📥 [FCM] Push response:');
-      print('Status: ${res.statusCode}');
-      print('Body: ${res.body}');
+      dev.log('\n📥 [FCM] Push response:');
+      dev.log('Status: ${res.statusCode}');
+      dev.log('Body: ${res.body}');
 
       if (res.statusCode < 200 || res.statusCode >= 300) {
         throw Exception('Push FCM thất bại: ${res.statusCode} ${res.body}');
@@ -138,15 +120,15 @@ class FcmRemoteDataSource {
       headers['Authorization'] = 'Bearer $access';
     }
 
-    final res = await _client!.post(
+    final res = await _client.post(
       endpoints.postMessageUri,
       headers: headers,
       body: jsonEncode(payload),
     );
 
-    print('\n📥 [FCM] Push response:');
-    print('Status: ${res.statusCode}');
-    print('Body: ${res.body}');
+    dev.log('\n📥 [FCM] Push response:');
+    dev.log('Status: ${res.statusCode}');
+    dev.log('Body: ${res.body}');
 
     if (res.statusCode < 200 || res.statusCode >= 300) {
       throw Exception('Push FCM thất bại: ${res.statusCode} ${res.body}');

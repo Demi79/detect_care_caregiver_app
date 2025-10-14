@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'package:flutter/foundation.dart';
 import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:detect_care_caregiver_app/features/fcm/data/fcm_remote_data_source.dart';
 
@@ -12,11 +13,24 @@ class FcmRegistration {
     if (userId.isEmpty || _lastUserId == userId) return;
     _lastUserId = userId;
 
-    await FirebaseMessaging.instance.requestPermission();
+    try {
+      final permissions = await FirebaseMessaging.instance.requestPermission();
+      if (permissions.authorizationStatus == AuthorizationStatus.denied) {
+        debugPrint('❌ [FCM] No permission granted for notifications');
+        return;
+      }
 
-    final token = await FirebaseMessaging.instance.getToken();
-    if (token != null && token.isNotEmpty) {
+      final token = await FirebaseMessaging.instance.getToken();
+      if (token == null || token.isEmpty) {
+        debugPrint('❌ [FCM] Failed to get FCM token');
+        return;
+      }
+
       await ds.saveToken(userId: userId, token: token, type: type);
+      debugPrint('✅ [FCM] Successfully registered token for user $userId');
+    } catch (e) {
+      debugPrint('❌ [FCM] Error registering device: $e');
+      rethrow;
     }
 
     await _sub?.cancel();

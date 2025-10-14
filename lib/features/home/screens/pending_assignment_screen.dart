@@ -28,12 +28,12 @@ class _PendingAssignmentsScreenState extends State<PendingAssignmentsScreen> {
   void initState() {
     super.initState();
     _dataSource = AssignmentsRemoteDataSource();
-    _futureAssignments = _dataSource.listPending();
+    _futureAssignments = _dataSource.listPending(status: 'pending');
   }
 
   Future<void> _reload() async {
     setState(() {
-      _futureAssignments = _dataSource.listPending();
+      _futureAssignments = _dataSource.listPending(status: 'pending');
     });
   }
 
@@ -98,7 +98,7 @@ class _PendingAssignmentsScreenState extends State<PendingAssignmentsScreen> {
       backgroundColor: _backgroundColor,
 
       appBar: AppBar(
-        title: const Text("Pending Assignments"),
+        title: const Text("Yêu cầu đang chờ xử lý"),
         centerTitle: true,
         backgroundColor: _primaryBlue,
         foregroundColor: Colors.white,
@@ -122,7 +122,7 @@ class _PendingAssignmentsScreenState extends State<PendingAssignmentsScreen> {
                 }
               },
               style: FilledButton.styleFrom(
-                backgroundColor: const Color(0xFF2196F3), // xanh
+                backgroundColor: const Color(0xFF2196F3),
                 padding: const EdgeInsets.symmetric(
                   vertical: 14,
                   horizontal: 20,
@@ -243,7 +243,7 @@ class _PendingAssignmentsScreenState extends State<PendingAssignmentsScreen> {
                 ),
                 onPressed: _reload,
                 icon: const Icon(Icons.refresh, size: 16),
-                label: const Text('Reload', style: TextStyle(fontSize: 13)),
+                label: const Text('Tải lại', style: TextStyle(fontSize: 13)),
               ),
             ),
           ),
@@ -369,7 +369,7 @@ class _PendingAssignmentsScreenState extends State<PendingAssignmentsScreen> {
                                   borderRadius: BorderRadius.circular(8),
                                 ),
                                 child: Text(
-                                  "Customer: ${a.customerName ?? ''}",
+                                  "Khách hàng: ${a.customerName ?? ''}",
                                   style: const TextStyle(
                                     fontSize: 14,
                                     fontWeight: FontWeight.w600,

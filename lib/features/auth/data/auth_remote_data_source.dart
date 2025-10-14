@@ -112,56 +112,85 @@ class AuthRemoteDataSource {
     return User.fromJson(serverKeyed);
   }
 
-  Future<LoginResult> caregiverLogin(String phone, String code) async {
-    final res = await _api.post(
-      '/auth/caregiver/login',
-      body: {'phone_number': phone, 'otp_code': code},
-    );
-
-    if (res.statusCode != 200) {
-      throw Exception('Caregiver login failed: ${res.statusCode} ${res.body}');
-    }
-
-    final result = json.decode(res.body) as Map<String, dynamic>;
-    final token = result['access_token']?.toString();
-    final userMap = (result['user'] as Map).cast<String, dynamic>();
-
-    if (token == null || token.isEmpty) {
-      throw Exception('Thiếu access_token trong phản hồi caregiver login');
-    }
-
-    return LoginResult(
-      accessToken: token,
-      userServerJson: userMap,
-      user: User.fromJson(userMap),
-    );
-  }
-
   Future<LoginResult> caregiverLoginWithPassword(
     String email,
     String password,
   ) async {
     final body = {'email': email, 'password': password};
+    debugPrint('📤 caregiverLoginWithPassword body=$body');
 
     final res = await _api.post('/auth/caregiver/login', body: body);
+
+    debugPrint('📥 status=${res.statusCode}');
+    debugPrint('📥 body=${res.body}');
 
     if (res.statusCode != 200) {
       throw Exception('Caregiver login failed: ${res.statusCode} ${res.body}');
     }
 
-    final result = json.decode(res.body) as Map<String, dynamic>;
-    final token = result['access_token']?.toString();
-    final userMap = (result['user'] as Map).cast<String, dynamic>();
+    final decoded = json.decode(res.body) as Map<String, dynamic>;
+    final data = (decoded['data'] as Map?)?.cast<String, dynamic>();
 
-    if (token == null || token.isEmpty) {
-      throw Exception('Thiếu access_token trong phản hồi caregiver login');
+    if (decoded['success'] != true || data == null) {
+      throw Exception('Phản hồi không hợp lệ: ${res.body}');
     }
 
-    return LoginResult(
+    final token = data['access_token']?.toString();
+    final userMap = (data['user'] as Map?)?.cast<String, dynamic>();
+
+    if (token == null || token.isEmpty || userMap == null) {
+      throw Exception('Phản hồi thiếu access_token hoặc user: ${res.body}');
+    }
+
+    final result = LoginResult(
       accessToken: token,
       userServerJson: userMap,
       user: User.fromJson(userMap),
     );
+
+    debugPrint(
+      '✅ token len=${result.accessToken.length}, user=${result.user.email}',
+    );
+    return result;
+  }
+
+  Future<LoginResult> caregiverLogin(String phone, String code) async {
+    final body = {'phone_number': phone, 'otp_code': code};
+    debugPrint('📤 caregiverLogin(OTP) body=$body');
+
+    final res = await _api.post('/auth/caregiver/login', body: body);
+
+    debugPrint('📥 status=${res.statusCode}');
+    debugPrint('📥 body=${res.body}');
+
+    if (res.statusCode != 200) {
+      throw Exception('Caregiver login failed: ${res.statusCode} ${res.body}');
+    }
+
+    final decoded = json.decode(res.body) as Map<String, dynamic>;
+    final data = (decoded['data'] as Map?)?.cast<String, dynamic>();
+
+    if (decoded['success'] != true || data == null) {
+      throw Exception('Phản hồi không hợp lệ: ${res.body}');
+    }
+
+    final token = data['access_token']?.toString();
+    final userMap = (data['user'] as Map?)?.cast<String, dynamic>();
+
+    if (token == null || token.isEmpty || userMap == null) {
+      throw Exception('Phản hồi thiếu access_token hoặc user: ${res.body}');
+    }
+
+    final result = LoginResult(
+      accessToken: token,
+      userServerJson: userMap,
+      user: User.fromJson(userMap),
+    );
+
+    debugPrint(
+      '✅ token len=${result.accessToken.length}, user=${result.user.email}',
+    );
+    return result;
   }
 
   Future<void> saveFcmToken(String userId) async {

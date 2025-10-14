@@ -124,7 +124,7 @@ class AssignmentsRemoteDataSource {
 
   Future<Assignment?> deleteById(String assignmentId) async {
     debugPrint('\n❌ Deleting assignment: $assignmentId');
-    final res = await _api.delete('/assignments/$assignmentId');
+    final res = await _api.delete('/caregiver-invitations/$assignmentId');
     debugPrint('📥 Delete response:');
     debugPrint('   Status: ${res.statusCode}');
     debugPrint('   Body: ${res.body}');
@@ -228,7 +228,7 @@ class AssignmentsRemoteDataSource {
     bool activeOnly = true,
   }) async {
     final res = await _api.get(
-      '/assignments/by-customer/$customerId',
+      '/caregiver-invitations/by-customer/$customerId',
       query: {'active_only': activeOnly.toString()},
     );
 
@@ -255,8 +255,15 @@ class AssignmentsRemoteDataSource {
         .toList();
   }
 
-  Future<List<Assignment>> listPending() async {
-    final res = await _api.get('/assignments/caregiver/me');
+  Future<List<Assignment>> listPending({bool? isActive, String? status}) async {
+    final Map<String, String> query = {};
+    if (isActive != null) query['active_only'] = isActive.toString();
+    if (status != null) query['status'] = status;
+
+    final res = await _api.get(
+      '/caregiver-invitations/caregiver/me',
+      query: query,
+    );
     if (res.statusCode < 200 || res.statusCode >= 300) {
       throw Exception('Fetch pending failed: ${res.statusCode} ${res.body}');
     }
@@ -271,14 +278,23 @@ class AssignmentsRemoteDataSource {
       throw Exception('Unexpected response format for pending assignments');
     }
 
-    return data
+    final assignments = data
         .cast<Map>()
         .map((e) => Assignment.fromJson(e.cast<String, dynamic>()))
         .toList();
+
+    assignments.sort((a, b) {
+      final dateA = DateTime.tryParse(a.assignedAt) ?? DateTime(0);
+      final dateB = DateTime.tryParse(b.assignedAt) ?? DateTime(0);
+      return dateB.compareTo(dateA);
+    });
+    // print("assignments: $assignments");
+
+    return assignments;
   }
 
   Future<Assignment> accept(String assignmentId) async {
-    final res = await _api.post('/assignments/$assignmentId/accept');
+    final res = await _api.post('/caregiver-invitations/$assignmentId/accept');
 
     if (res.statusCode < 200 || res.statusCode >= 300) {
       throw Exception(
@@ -295,7 +311,7 @@ class AssignmentsRemoteDataSource {
   }
 
   Future<Assignment> reject(String assignmentId) async {
-    final res = await _api.post('/assignments/$assignmentId/reject');
+    final res = await _api.post('/caregiver-invitations/$assignmentId/reject');
 
     if (res.statusCode < 200 || res.statusCode >= 300) {
       throw Exception(

@@ -27,6 +27,7 @@ import 'package:detect_care_caregiver_app/services/notification_manager.dart';
 import 'package:detect_care_caregiver_app/features/fcm/data/fcm_endpoints.dart';
 import 'package:detect_care_caregiver_app/features/fcm/data/fcm_remote_data_source.dart';
 import 'package:detect_care_caregiver_app/features/fcm/services/fcm_registration.dart';
+import 'package:detect_care_caregiver_app/core/network/api_client.dart';
 
 import 'package:firebase_core/firebase_core.dart';
 import 'package:firebase_messaging/firebase_messaging.dart';
@@ -228,6 +229,111 @@ Future<void> main() async {
       child: const MyApp(),
     ),
   );
+
+  // Register global unauthenticated handler: when ApiClient sees a 401 it will
+  // call this callback. It shows a brief Vietnamese message then logs out and
+  // navigates to the AuthGate. A simple reentrancy guard prevents duplicate
+  // handling when multiple requests fail at once.
+  bool _unauthInProgress = false;
+  ApiClient.onUnauthenticated = () async {
+    if (_unauthInProgress) return;
+    _unauthInProgress = true;
+    try {
+      final navigator = NavigatorKey.navigatorKey.currentState;
+      if (navigator == null) return;
+
+      final ctx = navigator.context;
+
+      // Show a SnackBar with the Vietnamese message
+      try {
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          try {
+            ScaffoldMessenger.of(ctx).showSnackBar(
+              const SnackBar(
+                content: Text(
+                  'Phiên đăng nhập đã hết hạn. Vui lòng đăng nhập lại.',
+                ),
+                duration: Duration(milliseconds: 1100),
+              ),
+            );
+          } catch (_) {}
+        });
+      } catch (_) {}
+
+      // Wait briefly so the user can see the message
+      await Future.delayed(const Duration(milliseconds: 1200));
+
+      // Attempt to logout via AuthProvider if available
+      try {
+        final auth = Provider.of<AuthProvider>(ctx, listen: false);
+        await auth.logout();
+      } catch (_) {}
+
+      // Navigate to AuthGate, clearing the stack.
+      try {
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          navigator.pushAndRemoveUntil(
+            MaterialPageRoute(builder: (_) => const AuthGate()),
+            (route) => false,
+          );
+        });
+      } catch (_) {}
+    } catch (e) {
+      debugPrint('ApiClient.onUnauthenticated handler failed: $e');
+    } finally {
+      _unauthInProgress = false;
+    }
+  };
+  // Register assignment-lost handler on AuthProvider (if available)
+  try {
+    final navigator = NavigatorKey.navigatorKey.currentState;
+    final ctx = navigator?.context;
+    if (ctx != null) {
+      try {
+        final auth = Provider.of<AuthProvider>(ctx, listen: false);
+        auth.onAssignmentLost = () async {
+          try {
+            // Show alert dialog with the provided Vietnamese text
+            WidgetsBinding.instance.addPostFrameCallback((_) {
+              showDialog(
+                context: ctx,
+                barrierDismissible: false,
+                builder: (dCtx) => AlertDialog(
+                  title: const Text('Liên kết chăm sóc đã kết thúc'),
+                  content: const Text(
+                    'Bạn và khách hàng này không còn được kết nối trong hệ thống.\nMột số tính năng và dữ liệu liên quan sẽ không còn khả dụng.',
+                  ),
+                  actions: [
+                    TextButton(
+                      onPressed: () {
+                        Navigator.of(dCtx).pop();
+                      },
+                      child: const Text('Đóng'),
+                    ),
+                  ],
+                ),
+              );
+            });
+
+            // Wait briefly for user to read then navigate to pending assignment screen
+            await Future.delayed(const Duration(milliseconds: 1400));
+
+            // Navigate to PendingAssignmentsScreen and clear stack
+            navigator?.pushAndRemoveUntil(
+              MaterialPageRoute(
+                builder: (_) => const PendingAssignmentsScreen(),
+              ),
+              (route) => false,
+            );
+          } catch (e) {
+            debugPrint('onAssignmentLost handler failed: $e');
+          }
+        };
+      } catch (_) {}
+    }
+  } catch (e) {
+    debugPrint('Failed to register onAssignmentLost: $e');
+  }
 }
 
 // NavigatorKey global

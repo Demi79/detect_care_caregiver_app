@@ -1,14 +1,25 @@
 import 'dart:convert' as convert;
 import 'dart:developer' as dev;
 
-import 'package:detect_care_caregiver_app/features/home/data/event_endpoints.dart';
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
+import 'package:http/http.dart' as http;
+
+import 'package:detect_care_caregiver_app/core/network/api_client.dart';
+import 'package:detect_care_caregiver_app/features/auth/data/auth_storage.dart';
+import 'package:detect_care_caregiver_app/features/home/data/event_endpoints.dart';
+import 'package:detect_care_caregiver_app/features/events/data/events_remote_data_source.dart';
 
 import '../models/event_log.dart';
 
 class EventService {
   final _supabase = Supabase.instance.client;
+  final ApiClient _api;
+
+  EventService.withDefaultClient()
+    : _api = ApiClient(tokenProvider: AuthStorage.getAccessToken);
+
+  EventService(this._api);
 
   void debugProbe() {
     final session = _supabase.auth.currentSession;
@@ -41,41 +52,31 @@ class EventService {
         name: 'EventService.fetchLogs',
       );
 
-      // 1) Base query + embed snapshots
       var query = _supabase
           .from(EventEndpoints.eventsTable)
           .select(EventEndpoints.selectList);
 
-      // 2) Status
       if (status != null && status.isNotEmpty && status != 'All') {
         query = query.eq(EventEndpoints.status, status);
       }
 
-      // 3) Day range (UTC, inclusive start, exclusive end)
       if (dayRange != null) {
-        final startLocal = DateTime(
+        final startUtc = DateTime(
           dayRange.start.year,
           dayRange.start.month,
           dayRange.start.day,
-        );
-        final endLocalInclusive = DateTime(
+        ).toUtc();
+        final endUtc = DateTime(
           dayRange.end.year,
           dayRange.end.month,
-          dayRange.end.day,
-        );
-        final endExclusiveLocal = endLocalInclusive.add(
-          const Duration(days: 1),
-        );
-
-        final startUtc = startLocal.toUtc();
-        final endExclusiveUtc = endExclusiveLocal.toUtc();
+          dayRange.end.day + 1,
+        ).toUtc();
 
         query = query
             .gte(EventEndpoints.detectedAt, startUtc.toIso8601String())
-            .lt(EventEndpoints.detectedAt, endExclusiveUtc.toIso8601String());
+            .lt(EventEndpoints.detectedAt, endUtc.toIso8601String());
       }
 
-      // 4) Search
       if (search != null && search.isNotEmpty) {
         final s = search.replaceAll("'", "''");
         query = query.or(
@@ -84,33 +85,54 @@ class EventService {
         );
       }
 
-      // 5) Order + Pagination
       final from = (page - 1) * limit;
       final to = page * limit - 1;
-      final rows = await query
-          .order(EventEndpoints.detectedAt, ascending: false)
-          .range(from, to);
+      List<Map<String, dynamic>> normalized = [];
 
-      _logRawRows(rows);
-      debugPrint('[EventService] RAW rows len=${(rows as List).length}');
+      try {
+        final rows = await query
+            .order(EventEndpoints.detectedAt, ascending: false)
+            .range(from, to);
 
-      // 6) Normalize
-      final List<Map<String, dynamic>> normalized = [];
-      for (final r in (rows as List)) {
-        final m = await _normalizeRow(r as Map<String, dynamic>);
-        normalized.add(m);
+        _logRawRows(rows);
+        debugPrint('[EventService] RAW rows len=${(rows as List).length}');
+
+        for (final r in (rows as List)) {
+          final m = await _normalizeRow(r as Map<String, dynamic>);
+          normalized.add(m);
+        }
+      } catch (e, st) {
+        dev.log(
+          '[EventService] Supabase fetch failed, falling back to REST /events: $e',
+          name: 'EventService.fetchLogs',
+          stackTrace: st,
+        );
+
+        try {
+          final ds = EventsRemoteDataSource();
+          final list = await ds.listEvents();
+          for (final r in list) {
+            final m = await _normalizeRow(r);
+            normalized.add(m);
+          }
+        } catch (restErr, restSt) {
+          dev.log(
+            '[EventService] REST fallback also failed: $restErr',
+            name: 'EventService.fetchLogs',
+            stackTrace: restSt,
+          );
+          return [];
+        }
       }
 
       _logNormalizedSample(normalized);
 
-      // 7) Period filter (local)
       final filtered = (period == null || period.isEmpty || period == 'All')
           ? normalized
           : normalized
                 .where((e) => _matchesPeriod(e['detectedAt'], period))
                 .toList();
 
-      // 8) to models
       return filtered.map(EventLog.fromJson).toList();
     } catch (e, st) {
       dev.log(
@@ -123,6 +145,87 @@ class EventService {
           '[EventService] PostgrestException code=${e.code}, details=${e.details}, hint=${e.hint}, message=${e.message}',
         );
       }
+      rethrow;
+    }
+  }
+
+  Future<EventLog> proposeEventStatus({
+    required String eventId,
+    required String proposedStatus,
+    String? proposedEventType,
+    String? reason,
+    DateTime? pendingUntil,
+  }) async {
+    try {
+      if (eventId.trim().isEmpty) {
+        throw Exception('ID sự kiện không hợp lệ. Vui lòng thử lại.');
+      }
+      final body = <String, dynamic>{
+        'proposed_status': proposedStatus,
+        if (proposedEventType != null && proposedEventType.isNotEmpty)
+          'proposed_event_type': proposedEventType,
+        if (reason != null && reason.isNotEmpty) 'reason': reason,
+        if (pendingUntil != null)
+          'pending_until': pendingUntil.toUtc().toIso8601String(),
+      };
+
+      dev.log(
+        '📤 [EventService] proposeEventStatus($eventId): $body',
+        name: 'EventService',
+      );
+
+      final res = await _api.post('/events/$eventId/propose', body: body);
+      dev.log(
+        '📥 [EventService] proposeEventStatus → ${res.statusCode}',
+        name: 'EventService',
+      );
+
+      if (res.statusCode == 200 || res.statusCode == 201) {
+        final decoded = _api.extractDataFromResponse(res);
+        if (decoded is Map<String, dynamic>) {
+          return EventLog.fromJson(decoded);
+        } else {
+          throw Exception('Phản hồi không hợp lệ từ server.');
+        }
+      }
+
+      String _messageFromResponse(http.Response r) {
+        try {
+          final decoded = _api.extractDataFromResponse(r);
+          if (decoded is Map) {
+            for (final key in ['message', 'error', 'detail', 'description']) {
+              if (decoded.containsKey(key) && decoded[key] != null) {
+                return decoded[key].toString();
+              }
+            }
+            if (decoded.containsKey('errors')) {
+              return decoded['errors'].toString();
+            }
+          }
+        } catch (_) {}
+        try {
+          if (r.body.trim().isNotEmpty) return r.body;
+        } catch (_) {}
+        return 'Lỗi không xác định (${r.statusCode}).';
+      }
+
+      final serverMsg = _messageFromResponse(res);
+
+      if (res.statusCode == 400) {
+        throw Exception('Yêu cầu không hợp lệ hoặc sự kiện quá 72 giờ.');
+      } else if (res.statusCode == 403) {
+        throw Exception('Chỉ caregiver mới được phép gửi đề xuất.');
+      } else if (res.statusCode == 409) {
+        throw Exception('Sự kiện này đã trong danh sách chờ duyệt cập nhật');
+      } else {
+        throw Exception(serverMsg);
+      }
+    } catch (e, st) {
+      dev.log(
+        '❌ [EventService] proposeEventStatus error: $e',
+        name: 'EventService',
+        stackTrace: st,
+      );
       rethrow;
     }
   }

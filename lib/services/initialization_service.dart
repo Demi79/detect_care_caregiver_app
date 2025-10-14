@@ -65,7 +65,7 @@ class InitializationService {
     } catch (e, stackTrace) {
       _log('❌ Initialization error: $e');
       if (kDebugMode) {
-        print(stackTrace);
+        debugPrintStack(stackTrace: stackTrace);
       }
       rethrow;
     }

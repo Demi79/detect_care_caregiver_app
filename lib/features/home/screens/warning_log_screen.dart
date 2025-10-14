@@ -17,6 +17,7 @@ class WarningLogScreen extends StatelessWidget {
   final ValueChanged<DateTimeRange?> onDayRangeChanged;
   final ValueChanged<String?> onStatusChanged;
   final ValueChanged<String?> onPeriodChanged;
+  final void Function(String eventId, {bool? confirmed})? onEventUpdated;
 
   const WarningLogScreen({
     super.key,
@@ -27,6 +28,7 @@ class WarningLogScreen extends StatelessWidget {
     required this.onDayRangeChanged,
     required this.onStatusChanged,
     required this.onPeriodChanged,
+    this.onEventUpdated,
   });
 
   static void _noop(String? _) {}
@@ -42,6 +44,7 @@ class WarningLogScreen extends StatelessWidget {
         onDayRangeChanged: _noopDay,
         onStatusChanged: _noop,
         onPeriodChanged: _noop,
+        onEventUpdated: null,
       );
 
   @override
@@ -77,7 +80,16 @@ class WarningLogScreen extends StatelessWidget {
             ...logs.map(
               (log) => Padding(
                 padding: const EdgeInsets.only(bottom: 12),
-                child: ActionLogCard(data: log),
+                child: ActionLogCard(
+                  data: log,
+                  onUpdated: (newStatus, {bool? confirmed}) {
+                    try {
+                      if (onEventUpdated != null) {
+                        onEventUpdated!(log.eventId, confirmed: confirmed);
+                      }
+                    } catch (_) {}
+                  },
+                ),
               ),
             ),
         ],
@@ -108,7 +120,7 @@ class _SummaryRow extends StatelessWidget {
       children: [
         Expanded(
           child: _SummaryCard(
-            title: 'Critical Alerts',
+            title: 'Cảnh báo nghiêm trọng',
             value: '$critical',
             icon: Icons.emergency_rounded,
             color: Colors.red,
@@ -117,7 +129,7 @@ class _SummaryRow extends StatelessWidget {
         const SizedBox(width: 12),
         Expanded(
           child: _SummaryCard(
-            title: 'Total log',
+            title: 'Tổng ghi nhật ký',
             value: '$total',
             icon: Icons.list_alt_rounded,
             color: AppTheme.reportColor,
@@ -126,7 +138,7 @@ class _SummaryRow extends StatelessWidget {
         const SizedBox(width: 12),
         Expanded(
           child: _SummaryCard(
-            title: 'Other Events',
+            title: 'Sự kiện khác',
             value: '$others',
             icon: Icons.monitor_heart_rounded,
             color: AppTheme.activityColor,
@@ -220,7 +232,7 @@ class _EmptyState extends StatelessWidget {
           ),
           const SizedBox(height: 20),
           Text(
-            'No results found',
+            'Không tìm thấy kết quả',
             style: Theme.of(context).textTheme.titleMedium?.copyWith(
               fontWeight: FontWeight.w600,
               color: AppTheme.text,
@@ -228,7 +240,7 @@ class _EmptyState extends StatelessWidget {
           ),
           const SizedBox(height: 8),
           Text(
-            'Try adjusting your search or filters',
+            'Thử thay đổi từ khóa hoặc bộ lọc',
             style: Theme.of(context).textTheme.bodyMedium?.copyWith(
               color: AppTheme.unselectedTextColor,
             ),

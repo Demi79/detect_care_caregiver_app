@@ -26,12 +26,11 @@ class FcmQuickSendController {
   }
 
   Future<List<String>> _getAcceptedActiveCustomerIds() async {
-    final list = await _assignDs.listPending();
-    return list
-        .where((a) => a.status.toLowerCase() == 'accepted' && a.isActive)
-        .map((a) => a.customerId)
-        .toSet()
-        .toList();
+    final list = await _assignDs.listPending(
+      isActive: true,
+      status: 'accepted',
+    );
+    return list.map((a) => a.customerId).toSet().toList();
   }
 
   Future<Map<String, dynamic>> sendMessage({
@@ -58,7 +57,9 @@ class FcmQuickSendController {
     }
 
     if (toUserIds.isEmpty) {
-      return {'successCount': 0, 'failureCount': 0, 'info': 'no_recipients'};
+      throw ArgumentError(
+        'Không tìm thấy người dùng. Vui lòng kiểm tra lại danh sách người nhận.',
+      );
     }
 
     if (toUserIds.length > 50) {

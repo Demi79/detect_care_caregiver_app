@@ -481,7 +481,8 @@ class _AssignmentsScreenState extends State<AssignmentsScreen> {
                     controller: _searchController,
                     textInputAction: TextInputAction.search,
                     decoration: InputDecoration(
-                      hintText: 'Nhập username, email, họ tên caregiver...',
+                      hintText:
+                          'Nhập tên người dùng, email, họ tên caregiver...',
                       hintStyle: TextStyle(color: Colors.grey.shade600),
                       prefixIcon: Icon(
                         Icons.search,

@@ -1,13 +1,15 @@
 import 'package:detect_care_caregiver_app/features/health_overview/data/health_report_service.dart';
+import 'package:detect_care_caregiver_app/features/home/service/event_service.dart';
+import 'package:flutter/foundation.dart';
 import 'package:detect_care_caregiver_app/features/health_overview/widgets/section_header.dart';
 import 'package:detect_care_caregiver_app/features/home/constants/filter_constants.dart';
 import 'package:detect_care_caregiver_app/features/home/widgets/filter_bar.dart';
 import 'package:flutter/material.dart';
+import 'package:detect_care_caregiver_app/features/health_overview/widgets/high_risk_time_table.dart';
 
 import '../../../core/theme/app_theme.dart';
 import '../../../core/widgets/error_widget.dart';
 import '../../../core/widgets/loading_widget.dart';
-
 import '../widgets/overview_widgets.dart';
 import 'health_insights_screen.dart';
 
@@ -34,6 +36,14 @@ class _HealthOverviewScreenState extends State<HealthOverviewScreen> {
   void initState() {
     super.initState();
     _fetch();
+
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      // if (kDebugMode) {
+      //   Future.delayed(const Duration(milliseconds: 400), () {
+      //     _debugCompareEvents();
+      //   });
+      // }
+    });
   }
 
   static DateTimeRange _todayRange() {
@@ -72,16 +82,24 @@ class _HealthOverviewScreenState extends State<HealthOverviewScreen> {
   @override
   Widget build(BuildContext context) {
     final rangeText = (_selectedDayRange == null)
-        ? 'Today'
+        ? 'Hôm nay'
         : '${_fmtDate(_selectedDayRange!.start)} → ${_fmtDate(_selectedDayRange!.end)}';
 
     return Scaffold(
       backgroundColor: AppTheme.scaffoldBackground,
       appBar: AppBar(
-        title: Text('Health Overview • $rangeText'),
+        title: Text('Tổng quan sức khỏe • $rangeText'),
         backgroundColor: Colors.white,
         foregroundColor: AppTheme.text,
         elevation: 0.5,
+        // actions: [
+        //   if (kDebugMode)
+        //     IconButton(
+        //       tooltip: 'Debug: compare events',
+        //       icon: const Icon(Icons.bug_report),
+        //       onPressed: _debugCompareEvents,
+        //     ),
+        // ],
       ),
       body: SafeArea(
         child: RefreshIndicator(
@@ -91,7 +109,7 @@ class _HealthOverviewScreenState extends State<HealthOverviewScreen> {
               : (_error != null)
               ? ErrorDisplay(error: _error!, onRetry: _fetch)
               : (_data == null)
-              ? const Center(child: Text('No data'))
+              ? const Center(child: Text('Không có dữ liệu'))
               : SingleChildScrollView(
                   physics: const AlwaysScrollableScrollPhysics(),
                   padding: const EdgeInsets.all(AppTheme.spacingL),
@@ -102,19 +120,143 @@ class _HealthOverviewScreenState extends State<HealthOverviewScreen> {
     );
   }
 
+  // Debug helper: fetch events from EventService for the currently selected
+  // day range and 'Afternoon' period to compare counts with server-side
+  // health report aggregation. Visible only in debug builds.
+  // Future<void> _debugCompareEvents() async {
+  //   if (!kDebugMode) {
+  //     return;
+  //   }
+  //   final r = _selectedDayRange ?? _todayRange();
+  //   // final svc = EventService(EventService.withDefaultClient());
+  //   try {
+  //     debugPrint(
+  //       '[DEBUG] Requesting events for ${r.start}..${r.end} (period=Afternoon)',
+  //     );
+  //     final logsAf = await svc.fetchLogs(
+  //       page: 1,
+  //       limit: 1000,
+  //       dayRange: DateTimeRange(start: r.start, end: r.end),
+  //       period: 'Afternoon',
+  //     );
+
+  //     debugPrint(
+  //       '[DEBUG] EventService returned ${logsAf.length} items (period=Afternoon)',
+  //     );
+
+  //     debugPrint(
+  //       '[DEBUG] Requesting events for ${r.start}..${r.end} (no period)',
+  //     );
+  //     final logsAll = await svc.fetchLogs(
+  //       page: 1,
+  //       limit: 1000,
+  //       dayRange: DateTimeRange(start: r.start, end: r.end),
+  //     );
+  //     debugPrint(
+  //       '[DEBUG] EventService returned ${logsAll.length} items (no period)',
+  //     );
+
+  //     // Group logsAll by period using EventService._matchesPeriod logic equivalently
+  //     int morning = 0, afternoon = 0, evening = 0, night = 0;
+  //     // Also compute UTC-based grouping to compare with server behavior
+  //     int utcMorning = 0, utcAfternoon = 0, utcEvening = 0, utcNight = 0;
+  //     List<String> sampleAf = [];
+
+  //     // Verbose sample collection (first 20)
+  //     final samples = <String>[];
+  //     var sampleCount = 0;
+
+  //     for (final e in logsAll) {
+  //       final detected = e.detectedAt;
+  //       if (detected == null) {
+  //         continue;
+  //       }
+
+  //       // local grouping
+  //       final localH = detected.toLocal().hour;
+  //       if (localH >= 5 && localH < 12) {
+  //         morning++;
+  //       } else if (localH >= 12 && localH < 18) {
+  //         afternoon++;
+  //         if (sampleAf.length < 5) {
+  //           sampleAf.add(detected.toLocal().toIso8601String());
+  //         }
+  //       } else if (localH >= 18 && localH < 22) {
+  //         evening++;
+  //       } else {
+  //         night++;
+  //       }
+
+  //       // UTC grouping
+  //       final utcH = detected.toUtc().hour;
+  //       if (utcH >= 5 && utcH < 12) {
+  //         utcMorning++;
+  //       } else if (utcH >= 12 && utcH < 18) {
+  //         utcAfternoon++;
+  //       } else if (utcH >= 18 && utcH < 22) {
+  //         utcEvening++;
+  //       } else {
+  //         utcNight++;
+  //       }
+
+  //       if (sampleCount < 20) {
+  //         sampleCount++;
+  //         // collect id,type,status,detectedAt local+UTC,description,confidence
+  //         final id = e.eventId;
+  //         final type = e.eventType;
+  //         final status = e.status;
+  //         final desc = e.eventDescription ?? '';
+  //         final conf = e.confidenceScore.toStringAsFixed(2);
+  //         final localIso = detected.toLocal().toIso8601String();
+  //         final utcIso = detected.toUtc().toIso8601String();
+  //         final shortDesc = desc.length > 50
+  //             ? '${desc.substring(0, 50)}...'
+  //             : desc;
+  //         samples.add(
+  //           '[id:$id type:$type status:$status local:$localIso utc:$utcIso conf:$conf desc:$shortDesc]',
+  //         );
+  //       }
+  //     }
+
+  //     debugPrint(
+  //       '[DEBUG] Local group counts -> morning=$morning, afternoon=$afternoon, evening=$evening, night=$night',
+  //     );
+  //     debugPrint(
+  //       '[DEBUG] UTC group counts   -> morning=$utcMorning, afternoon=$utcAfternoon, evening=$utcEvening, night=$utcNight',
+  //     );
+  //     debugPrint(
+  //       '[DEBUG] Sample events (${samples.length}) = ${samples.join(' | ')}',
+  //     );
+
+  //     if (mounted) {
+  //       ScaffoldMessenger.of(context).showSnackBar(
+  //         SnackBar(
+  //           content: Text(
+  //             'DEBUG: local_af=$afternoon utc_af=$utcAfternoon total=${logsAll.length} samples=${samples.length}',
+  //           ),
+  //           duration: const Duration(seconds: 6),
+  //         ),
+  //       );
+  //     }
+  //   } catch (e) {
+  //     debugPrint('[DEBUG] fetchLogs failed: $e');
+  //     if (mounted) {
+  //       ScaffoldMessenger.of(
+  //         context,
+  //       ).showSnackBar(SnackBar(content: Text('DEBUG: fetch failed: $e')));
+  //     }
+  //   }
+  // }
+
   Widget _buildContent(BuildContext context, HealthReportOverviewDto d) {
     final abnormalRange = d.kpis.abnormalTotal;
     final resolvedRate = d.kpis.resolvedTrueRate;
     final avgResp = Duration(seconds: d.kpis.avgResponseSeconds);
     final overSlaCritical = d.kpis.openCriticalOverSla;
 
-    String cap(String s) =>
-        s.isEmpty ? '' : (s[0].toUpperCase() + s.substring(1).toLowerCase());
-
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        // --------- FILTER BAR ----------
         FilterBar(
           statusOptions: HomeFilters.statusOptions,
           periodOptions: HomeFilters.periodOptions,
@@ -132,7 +274,6 @@ class _HealthOverviewScreenState extends State<HealthOverviewScreen> {
         ),
         const SizedBox(height: AppTheme.spacingL),
 
-        // --------- DASHBOARD ----------
         KPITiles(
           abnormalToday: abnormalRange,
           resolvedRate: resolvedRate,
@@ -141,17 +282,15 @@ class _HealthOverviewScreenState extends State<HealthOverviewScreen> {
         ),
         const SizedBox(height: AppTheme.spacingL),
 
-        // --------- HIGH RISK TIME ----------
-        _HighRiskTimeCompact(
+        HighRiskTimeTable(
           morning: d.highRiskTime.morning,
           afternoon: d.highRiskTime.afternoon,
           evening: d.highRiskTime.evening,
           night: d.highRiskTime.night,
-          highlightLabel: cap(d.highRiskTime.topLabel),
+          highlightKey: d.highRiskTime.topLabel,
         ),
         const SizedBox(height: AppTheme.spacingL),
 
-        // --------- AI SUMMARY ----------
         Container(
           padding: const EdgeInsets.all(AppTheme.spacingM),
           decoration: BoxDecoration(
@@ -160,15 +299,14 @@ class _HealthOverviewScreenState extends State<HealthOverviewScreen> {
             boxShadow: AppTheme.cardShadow,
           ),
           child: Text(
-            d.aiSummary.isEmpty ? "No AI summary available" : d.aiSummary,
+            d.aiSummary.isEmpty ? "Không có tóm tắt AI" : d.aiSummary,
             style: Theme.of(context).textTheme.bodyMedium,
           ),
         ),
         const SizedBox(height: AppTheme.spacingXL),
 
-        // --------- SECTION HEADER: AI & Activity Insights ----------
         SectionHeader(
-          title: 'AI & Activity Insights',
+          title: 'AI & Thông tin hoạt động',
           onViewAll: () {
             Navigator.of(context).push(
               MaterialPageRoute(
@@ -182,114 +320,6 @@ class _HealthOverviewScreenState extends State<HealthOverviewScreen> {
         ),
         const SizedBox(height: AppTheme.spacingS),
       ],
-    );
-  }
-}
-
-/* ================== High-Risk Time compact (dashboard) ================== */
-class _HighRiskTimeCompact extends StatelessWidget {
-  final int morning, afternoon, evening, night;
-  final String highlightLabel;
-
-  const _HighRiskTimeCompact({
-    required this.morning,
-    required this.afternoon,
-    required this.evening,
-    required this.night,
-    required this.highlightLabel,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    final map = {
-      'Morning': morning,
-      'Afternoon': afternoon,
-      'Evening': evening,
-      'Night': night,
-    };
-    final maxVal =
-        (map.values.isEmpty ? 1 : map.values.reduce((a, b) => a > b ? a : b))
-            .clamp(1, 999);
-
-    Widget bar(String label, int v) {
-      final h = (v <= 0) ? 6.0 : 100.0 * v / maxVal;
-      final isHot = label == highlightLabel;
-      return Expanded(
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.end,
-          children: [
-            Container(
-              height: h,
-              width: 16,
-              decoration: BoxDecoration(
-                color: isHot ? AppTheme.dangerColor : AppTheme.primaryBlue,
-                borderRadius: BorderRadius.circular(8),
-              ),
-            ),
-            const SizedBox(height: 6),
-            Text(
-              label,
-              textAlign: TextAlign.center,
-              style: Theme.of(
-                context,
-              ).textTheme.bodySmall?.copyWith(color: AppTheme.textSecondary),
-            ),
-            Text(
-              '$v',
-              style: Theme.of(
-                context,
-              ).textTheme.labelSmall?.copyWith(color: AppTheme.textSecondary),
-            ),
-          ],
-        ),
-      );
-    }
-
-    return Container(
-      padding: const EdgeInsets.all(AppTheme.spacingL),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(AppTheme.borderRadiusMedium),
-        boxShadow: AppTheme.cardShadow,
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              Icon(
-                Icons.local_fire_department_rounded,
-                color: AppTheme.primaryBlue,
-              ),
-              const SizedBox(width: 8),
-              Text(
-                'High-Risk Time',
-                style: Theme.of(
-                  context,
-                ).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w700),
-              ),
-            ],
-          ),
-          const SizedBox(height: AppTheme.spacingM),
-          SizedBox(
-            height: 150,
-            child: Row(
-              crossAxisAlignment: CrossAxisAlignment.end,
-              children: [
-                bar('Morning', morning),
-                bar('Afternoon', afternoon),
-                bar('Evening', evening),
-                bar('Night', night),
-              ],
-            ),
-          ),
-          const SizedBox(height: AppTheme.spacingS),
-          Text(
-            'Khung giờ rủi ro cao: $highlightLabel',
-            style: Theme.of(context).textTheme.bodyMedium,
-          ),
-        ],
-      ),
     );
   }
 }

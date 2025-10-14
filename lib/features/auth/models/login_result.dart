@@ -12,8 +12,11 @@ class LoginResult {
   });
 
   factory LoginResult.fromApi(Map<String, dynamic> json) {
-    final rawUser = (json['user'] as Map).cast<String, dynamic>();
-    final token = json['access_token'] as String;
+    final data = json['data'] ?? {};
+
+    final rawUser = (data['user'] as Map).cast<String, dynamic>();
+    final token = data['access_token'] as String;
+
     return LoginResult(
       accessToken: token,
       userServerJson: rawUser,

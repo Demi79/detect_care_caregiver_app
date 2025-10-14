@@ -1,3 +1,4 @@
+import 'dart:developer' as dev;
 import 'package:detect_care_caregiver_app/features/home/models/log_entry.dart';
 
 class EventLog implements LogEntry {
@@ -23,9 +24,15 @@ class EventLog implements LogEntry {
   final Map<String, dynamic> contextData;
   @override
   final Map<String, dynamic> boundingBoxes;
-
   @override
   final bool confirmStatus;
+
+  final String? confirmationState;
+  final String? proposedStatus;
+  final String? previousStatus;
+  final String? proposedBy;
+  final String? pendingReason;
+  final DateTime? pendingUntil;
 
   EventLog({
     required this.eventId,
@@ -40,11 +47,17 @@ class EventLog implements LogEntry {
     this.contextData = const {},
     this.boundingBoxes = const {},
     required this.confirmStatus,
+    this.confirmationState,
+    this.proposedStatus,
+    this.previousStatus,
+    this.proposedBy,
+    this.pendingReason,
+    this.pendingUntil,
   });
+
   factory EventLog.fromJson(Map<String, dynamic> json) {
-    print('\n📥 [EventLog] Parsing JSON:');
-    print('Input data:');
-    json.forEach((k, v) => print('  $k: $v (${v?.runtimeType})'));
+    dev.log('\n📥 [EventLog] Parsing JSON:');
+    json.forEach((k, v) => dev.log('  $k: $v (${v?.runtimeType})'));
 
     String? s(dynamic v) => v?.toString();
     double d(dynamic v) {
@@ -77,33 +90,30 @@ class EventLog implements LogEntry {
       return null;
     }
 
-    // ---- Event ID (dùng cả snake & camel)
     final rawEventId = first(json, ['event_id', 'eventId', 'id']);
-    print('\n🆔 [EventLog] Event ID parsing:');
-    print(
-      '  Raw value from JSON (first match): $rawEventId (${rawEventId?.runtimeType})',
-    );
     final parsedEventId = s(rawEventId) ?? '';
-    print('  Final parsed value: $parsedEventId');
 
-    // ---- Confirm status: LẤY TỪ first(...) và DÙNG nó
     final confirmKeys = [
       'confirm_status',
       'confirmed',
       'confirmStatus',
       'is_confirmed',
     ];
-    print('\n🔍 [EventLog] Checking all confirm status keys:');
-    for (final key in confirmKeys) {
-      print('  $key: ${json[key]} (${json[key]?.runtimeType})');
-    }
-
     final rawConfirm = first(json, confirmKeys);
     final parsedConfirm = _parseConfirmStatus(rawConfirm);
-    print('\n✅ [EventLog] Confirm status result:');
-    print('  Selected raw value: $rawConfirm (${rawConfirm?.runtimeType})');
-    print('  Final parsed value: $parsedConfirm');
-    print('  Parse logic used: ${_getParseLogicUsed(rawConfirm)}');
+    // normalize context/detection maps and ensure camera id is present in contextData
+    final ctxMap = m(first(json, ['context_data', 'contextData']));
+    final detMap = m(first(json, ['detection_data', 'detectionData']));
+    // top-level camera id fallback
+    final topCamera = first(json, ['camera_id', 'cameraId', 'camera']);
+    if (topCamera != null && topCamera.toString().isNotEmpty) {
+      if (!ctxMap.containsKey('camera_id') && !ctxMap.containsKey('camera')) {
+        ctxMap['camera_id'] = topCamera;
+      }
+      if (!detMap.containsKey('camera_id') && !detMap.containsKey('camera')) {
+        detMap['camera_id'] = topCamera;
+      }
+    }
 
     return EventLog(
       eventId: parsedEventId,
@@ -117,13 +127,21 @@ class EventLog implements LogEntry {
       ),
       detectedAt: dt(first(json, ['detected_at', 'detectedAt'])),
       createdAt: dt(first(json, ['created_at', 'createdAt'])),
-      detectionData: m(first(json, ['detection_data', 'detectionData'])),
+      detectionData: detMap,
       aiAnalysisResult: m(
         first(json, ['ai_analysis_result', 'aiAnalysisResult']),
       ),
-      contextData: m(first(json, ['context_data', 'contextData'])),
+      contextData: ctxMap,
       boundingBoxes: m(first(json, ['bounding_boxes', 'boundingBoxes'])),
-      confirmStatus: parsedConfirm, // <-- dùng parsedConfirm
+      confirmStatus: parsedConfirm,
+      confirmationState: s(
+        first(json, ['confirmation_state', 'confirmationState']),
+      ),
+      proposedStatus: s(first(json, ['proposed_status', 'proposedStatus'])),
+      previousStatus: s(first(json, ['previous_status', 'previousStatus'])),
+      proposedBy: s(first(json, ['proposed_by', 'proposedBy'])),
+      pendingReason: s(first(json, ['pending_reason', 'pendingReason'])),
+      pendingUntil: dt(first(json, ['pending_until', 'pendingUntil'])),
     );
   }
 
@@ -141,6 +159,13 @@ class EventLog implements LogEntry {
       'context_data': contextData,
       'bounding_boxes': boundingBoxes,
       'confirm_status': confirmStatus,
+      'confirmation_state': confirmationState,
+      'proposed_status': proposedStatus,
+      'previous_status': previousStatus,
+      'proposed_by': proposedBy,
+      'pending_reason': pendingReason,
+      if (pendingUntil != null)
+        'pending_until': pendingUntil!.toIso8601String(),
     };
   }
 
@@ -166,24 +191,13 @@ class EventLog implements LogEntry {
     return false;
   }
 
-  static String _getParseLogicUsed(dynamic value) {
-    if (value == null) return 'Null value -> false';
-    if (value is bool) return 'Direct boolean value';
-    if (value is num) return 'Number value (!= 0)';
-    if (value is String) {
-      final s = value.trim().toLowerCase();
-      if (['true', 't', '1', 'yes', 'y'].contains(s)) {
-        return 'String matched positive value: "$s"';
-      }
-      if (['false', 'f', '0', 'no', 'n'].contains(s)) {
-        return 'String matched negative value: "$s"';
-      }
-      return 'String did not match any known values: "$s" -> false';
-    }
-    return 'Unknown type ${value.runtimeType} -> false';
-  }
-
-  EventLog copyWith({String? status, bool? confirmStatus}) => EventLog(
+  EventLog copyWith({
+    String? status,
+    bool? confirmStatus,
+    String? proposedStatus,
+    String? pendingReason,
+    String? confirmationState,
+  }) => EventLog(
     eventId: eventId,
     status: status ?? this.status,
     eventType: eventType,
@@ -196,5 +210,8 @@ class EventLog implements LogEntry {
     contextData: contextData,
     boundingBoxes: boundingBoxes,
     confirmStatus: confirmStatus ?? this.confirmStatus,
+    proposedStatus: proposedStatus ?? this.proposedStatus,
+    pendingReason: pendingReason ?? this.pendingReason,
+    confirmationState: confirmationState ?? this.confirmationState,
   );
 }

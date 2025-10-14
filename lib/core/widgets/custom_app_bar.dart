@@ -49,7 +49,7 @@ class CustomAppBar extends StatelessWidget implements PreferredSizeWidget {
               padding: const EdgeInsets.only(right: 12),
               child: CircleAvatar(
                 radius: 16,
-                backgroundColor: AppTheme.primaryBlue.withValues(alpha: 0.2),
+                backgroundColor: AppTheme.primaryBlue.withValues(alpha: 51),
                 child: const Icon(Icons.person, color: AppTheme.primaryBlue),
               ),
             ),

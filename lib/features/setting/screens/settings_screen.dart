@@ -1,4 +1,5 @@
 import 'package:detect_care_caregiver_app/features/activity_logs/screens/activity_logs_screen.dart';
+import 'package:detect_care_caregiver_app/features/profile/screens/profile_screen.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
@@ -37,19 +38,18 @@ class _SettingsScreenState extends State<SettingsScreen> {
                   children: [
                     const SizedBox(height: 24),
 
-                    _buildSectionTitle('ACCOUNT'),
+                    _buildSectionTitle('TÀI KHOẢN'),
                     const SizedBox(height: 12),
                     _accountSection(),
 
                     const SizedBox(height: 24),
 
-                    _buildSectionTitle('ALERT SETTINGS'),
+                    _buildSectionTitle('CÀI ĐẶT CẢNH BÁO'),
                     const SizedBox(height: 12),
                     _alertSettingsSection(context),
-
                     const SizedBox(height: 24),
 
-                    _buildSectionTitle('OTHER SETTINGS'),
+                    _buildSectionTitle('CÀI ĐẶT KHÁC'),
                     const SizedBox(height: 12),
                     _otherSettingsSection(),
 
@@ -83,9 +83,10 @@ class _SettingsScreenState extends State<SettingsScreen> {
           const Spacer(),
           Text(
             'Cài đặt',
-            style: Theme.of(
-              context,
-            ).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w600),
+            style: Theme.of(context).textTheme.titleLarge?.copyWith(
+              fontWeight: FontWeight.w600,
+              color: const Color(0xFF007AFF),
+            ),
           ),
           const Spacer(),
           IconButton(
@@ -106,8 +107,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
       child: Text(
         title,
         style: Theme.of(context).textTheme.labelMedium?.copyWith(
-          color: Theme.of(context).colorScheme.onSurfaceVariant,
-          fontWeight: FontWeight.w500,
+          color: const Color(0xFF007AFF),
+          fontWeight: FontWeight.w600,
           letterSpacing: 0.5,
         ),
       ),
@@ -119,7 +120,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
       SettingsItem(
         icon: Icons.person_outline,
         title: 'Hồ sơ cá nhân',
-        onTap: () {},
+        onTap: () => Navigator.of(
+          context,
+        ).push(MaterialPageRoute(builder: (_) => const ProfileScreen())),
       ),
       const SettingsDivider(),
       SettingsItem(
@@ -138,27 +141,26 @@ class _SettingsScreenState extends State<SettingsScreen> {
         icon: Icons.warning_outlined,
         title: 'Thiết lập của bạn',
         onTap: () {
-          final auth = context.read<AuthProvider>();
-          final caregiverId = auth.currentUserId ?? '';
-          final caregiverDisplay =
-              auth.user?.fullName ?? auth.user?.phone ?? 'Caregiver';
-
           Navigator.of(context).push(
-            MaterialPageRoute(
-              builder: (_) => CaregiverSettingsScreen(
-                caregiverId: caregiverId,
-                caregiverDisplay: caregiverDisplay,
-                customerId:
-                    '', // để trống -> màn hình tự resolve phần tử đầu tiên
-              ),
-            ),
+            MaterialPageRoute(builder: (_) => const CaregiverSettingsScreen()),
           );
         },
+      ),
+      const Padding(
+        padding: EdgeInsets.only(left: 16, right: 16, bottom: 10),
+        // child: Text(
+        //   '⚠️ Một số quyền được thiết lập bởi Customer và không thể chỉnh sửa (theo chuẩn y tế).',
+        //   style: TextStyle(
+        //     color: Colors.redAccent,
+        //     fontSize: 13,
+        //     fontWeight: FontWeight.w500,
+        //   ),
+        // ),
       ),
       const SettingsDivider(),
       SettingsItem(
         icon: Icons.local_activity_outlined,
-        title: 'Quản lý nhật ký hoạt',
+        title: 'Quản lý nhật ký hoạt động',
         onTap: () {
           Navigator.of(
             context,

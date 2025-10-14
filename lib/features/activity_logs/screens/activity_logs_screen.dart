@@ -148,41 +148,42 @@ class _ActivityLogsScreenState extends State<ActivityLogsScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: backgroundColor,
-      appBar: AppBar(
-        title: const Text(
-          'Nhật ký hoạt động',
-          style: TextStyle(
-            fontWeight: FontWeight.w600,
-            color: Color(0xFF1E293B),
-          ),
-        ),
-        backgroundColor: surfaceColor,
-        elevation: 0,
-        shadowColor: Colors.transparent,
-        surfaceTintColor: Colors.transparent,
-        iconTheme: const IconThemeData(color: Color(0xFF1E293B)),
-        actions: [
-          Container(
-            margin: const EdgeInsets.only(right: 16),
-            child: IconButton(
-              tooltip: 'Làm mới',
-              onPressed: _initialLoading ? null : _loadInitial,
-              icon: AnimatedRotation(
-                turns: _initialLoading ? 1 : 0,
-                duration: const Duration(seconds: 1),
-                child: Icon(
-                  Icons.refresh_rounded,
-                  color: _initialLoading ? textSecondary : primaryBlue,
-                ),
-              ),
-              style: IconButton.styleFrom(
-                backgroundColor: lightBlue,
-                padding: const EdgeInsets.all(8),
-              ),
-            ),
-          ),
-        ],
-      ),
+
+      // appBar: AppBar(
+      //   title: const Text(
+      //     'Nhật ký hoạt động',
+      //     style: TextStyle(
+      //       fontWeight: FontWeight.w600,
+      //       color: Color(0xFF1E293B),
+      //     ),
+      //   ),
+      //   backgroundColor: surfaceColor,
+      //   elevation: 0,
+      //   shadowColor: Colors.transparent,
+      //   surfaceTintColor: Colors.transparent,
+      //   iconTheme: const IconThemeData(color: Color(0xFF1E293B)),
+      //   actions: [
+      //     Container(
+      //       margin: const EdgeInsets.only(right: 16),
+      //       child: IconButton(
+      //         tooltip: 'Làm mới',
+      //         onPressed: _initialLoading ? null : _loadInitial,
+      //         icon: AnimatedRotation(
+      //           turns: _initialLoading ? 1 : 0,
+      //           duration: const Duration(seconds: 1),
+      //           child: Icon(
+      //             Icons.refresh_rounded,
+      //             color: _initialLoading ? textSecondary : primaryBlue,
+      //           ),
+      //         ),
+      //         style: IconButton.styleFrom(
+      //           backgroundColor: lightBlue,
+      //           padding: const EdgeInsets.all(8),
+      //         ),
+      //       ),
+      //     ),
+      //   ],
+      // ),
       body: _loadingUserId
           ? const Center(
               child: CircularProgressIndicator(

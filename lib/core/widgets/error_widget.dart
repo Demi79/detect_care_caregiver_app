@@ -19,7 +19,7 @@ class ErrorDisplay extends StatelessWidget {
             Icon(Icons.error_outline, size: 64, color: AppTheme.dangerColor),
             const SizedBox(height: AppTheme.spacingL),
             Text(
-              'Oops! Something went wrong',
+              'Đã xảy ra lỗi',
               style: Theme.of(context).textTheme.headlineSmall?.copyWith(
                 color: AppTheme.text,
                 fontWeight: FontWeight.w600,
@@ -39,7 +39,7 @@ class ErrorDisplay extends StatelessWidget {
               ElevatedButton.icon(
                 onPressed: onRetry,
                 icon: const Icon(Icons.refresh),
-                label: const Text('Try Again'),
+                label: const Text('Thử lại'),
                 style: ElevatedButton.styleFrom(
                   backgroundColor: AppTheme.primaryBlue,
                 ),

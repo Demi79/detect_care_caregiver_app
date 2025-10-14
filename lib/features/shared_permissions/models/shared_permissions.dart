@@ -19,17 +19,17 @@ class SharedPermissions {
 
   factory SharedPermissions.fromJson(Map<String, dynamic> json) {
     return SharedPermissions(
-      streamView: json['stream_view'] == true,
-      alertRead: json['alert_read'] == true,
-      alertAck: json['alert_ack'] == true,
-      logAccessDays: (json['log_access_days'] ?? 0) as int,
-      reportAccessDays: (json['report_access_days'] ?? 0) as int,
+      streamView: json['stream:view'] ?? json['stream_view'] ?? false,
+      alertRead: json['alert:read'] ?? json['alert_read'] ?? false,
+      alertAck: json['alert:ack'] ?? json['alert_ack'] ?? false,
+      profileView: json['profile:view'] ?? json['profile_view'] ?? false,
+      logAccessDays: json['log_access_days'] ?? 0,
+      reportAccessDays: json['report_access_days'] ?? 0,
       notificationChannel:
           (json['notification_channel'] as List?)
               ?.map((e) => e.toString())
               .toList() ??
-          const <String>[],
-      profileView: json['profile_view'] == true,
+          [],
     );
   }
 

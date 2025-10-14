@@ -127,7 +127,7 @@ class _ProfileScreenState extends State<ProfileScreen>
 
     return Scaffold(
       backgroundColor: const Color(0xFFF8FAFC),
-      appBar: _buildAppBar(context),
+      // appBar: _buildAppBar(context),
       body: FadeTransition(
         opacity: _fadeAnimation,
         child: SlideTransition(
@@ -165,8 +165,7 @@ class _ProfileScreenState extends State<ProfileScreen>
                   _buildEditButton(),
                   const SizedBox(height: 24),
 
-                  _fcmQuickSendCard(context, caregiverId: user.id),
-
+                  // _fcmQuickSendCard(context, caregiverId: user.id),
                   const SizedBox(height: 24),
                   _buildLogoutButton(context),
                 ],
@@ -178,34 +177,34 @@ class _ProfileScreenState extends State<ProfileScreen>
     );
   }
 
-  PreferredSizeWidget _buildAppBar(BuildContext context) {
-    return AppBar(
-      backgroundColor: Colors.white,
-      elevation: 0,
-      centerTitle: true,
-      title: const Text(
-        'Hồ sơ cá nhân',
-        style: TextStyle(
-          color: Color(0xFF1E293B),
-          fontSize: 18,
-          fontWeight: FontWeight.w700,
-        ),
-      ),
-      leading: IconButton(
-        icon: const Icon(Icons.arrow_back_ios_new, color: Color(0xFF374151)),
-        onPressed: () => Navigator.pop(context),
-      ),
-      actions: [
-        IconButton(
-          icon: Icon(
-            _isEditing ? Icons.check : Icons.edit,
-            color: _isEditing ? Colors.green : Colors.grey,
-          ),
-          onPressed: () => setState(() => _isEditing = !_isEditing),
-        ),
-      ],
-    );
-  }
+  // PreferredSizeWidget _buildAppBar(BuildContext context) {
+  //   return AppBar(
+  //     backgroundColor: Colors.white,
+  //     // elevation: 0,
+  //     // centerTitle: true,
+  //     // title: const Text(
+  //     //   'Hồ sơ cá nhân',
+  //     //   style: TextStyle(
+  //     //     color: Color(0xFF1E293B),
+  //     //     fontSize: 18,
+  //     //     fontWeight: FontWeight.w700,
+  //     //   ),
+  //     // ),
+  //     // leading: IconButton(
+  //     //   icon: const Icon(Icons.arrow_back_ios_new, color: Color(0xFF374151)),
+  //     //   onPressed: () => Navigator.pop(context),
+  //     // ),
+  //     // actions: [
+  //     //   IconButton(
+  //     //     icon: Icon(
+  //     //       _isEditing ? Icons.check : Icons.edit,
+  //     //       color: _isEditing ? Colors.green : Colors.grey,
+  //     //     ),
+  //     //     onPressed: () => setState(() => _isEditing = !_isEditing),
+  //     //   ),
+  //     // ],
+  //   );
+  // }
 
   Widget _buildAvatar(String url) {
     final avatarUrl = url.isNotEmpty ? url : _defaultAvatarUrl;
@@ -257,190 +256,190 @@ class _ProfileScreenState extends State<ProfileScreen>
   }
 
   // ====== CARD GỬI FCM ======
-  Widget _fcmQuickSendCard(
-    BuildContext context, {
-    required String caregiverId,
-  }) {
-    const bg = Color(0xFFF8FAFC);
+  // Widget _fcmQuickSendCard(
+  //   BuildContext context, {
+  //   required String caregiverId,
+  // }) {
+  //   const bg = Color(0xFFF8FAFC);
 
-    return Container(
-      margin: const EdgeInsets.only(top: 12),
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(16),
-        boxShadow: AppTheme.cardShadow,
-        border: Border.all(color: const Color(0xFFE2E8F0)),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          const Row(
-            children: [
-              Icon(Icons.send_rounded, color: Color(0xFF2563EB), size: 20),
-              SizedBox(width: 8),
-              Text(
-                'Gửi thông báo',
-                style: TextStyle(fontSize: 16, fontWeight: FontWeight.w700),
-              ),
-            ],
-          ),
-          const SizedBox(height: 12),
+  //   return Container(
+  //     margin: const EdgeInsets.only(top: 12),
+  //     padding: const EdgeInsets.all(16),
+  //     decoration: BoxDecoration(
+  //       color: Colors.white,
+  //       borderRadius: BorderRadius.circular(16),
+  //       boxShadow: AppTheme.cardShadow,
+  //       border: Border.all(color: const Color(0xFFE2E8F0)),
+  //     ),
+  //     child: Column(
+  //       crossAxisAlignment: CrossAxisAlignment.start,
+  //       children: [
+  //         const Row(
+  //           children: [
+  //             Icon(Icons.send_rounded, color: Color(0xFF2563EB), size: 20),
+  //             SizedBox(width: 8),
+  //             Text(
+  //               'Gửi thông báo',
+  //               style: TextStyle(fontSize: 16, fontWeight: FontWeight.w700),
+  //             ),
+  //           ],
+  //         ),
+  //         const SizedBox(height: 12),
 
-          DropdownButtonFormField<String>(
-            value: _selectedReceiver,
-            items: <DropdownMenuItem<String>>[
-              const DropdownMenuItem(value: '_ALL_', child: Text('Tất cả')),
-              ..._customers.map(
-                (c) => DropdownMenuItem(
-                  value: c.id,
-                  child: Text(c.name, overflow: TextOverflow.ellipsis),
-                ),
-              ),
-            ],
-            onChanged: (v) => setState(() => _selectedReceiver = v ?? '_ALL_'),
-            decoration: InputDecoration(
-              labelText: 'Người nhận',
-              filled: true,
-              fillColor: bg,
-              contentPadding: const EdgeInsets.symmetric(
-                horizontal: 14,
-                vertical: 10,
-              ),
-              border: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(12),
-                borderSide: BorderSide.none,
-              ),
-            ),
-          ),
+  //         DropdownButtonFormField<String>(
+  //           value: _selectedReceiver,
+  //           items: <DropdownMenuItem<String>>[
+  //             const DropdownMenuItem(value: '_ALL_', child: Text('Tất cả')),
+  //             ..._customers.map(
+  //               (c) => DropdownMenuItem(
+  //                 value: c.id,
+  //                 child: Text(c.name, overflow: TextOverflow.ellipsis),
+  //               ),
+  //             ),
+  //           ],
+  //           onChanged: (v) => setState(() => _selectedReceiver = v ?? '_ALL_'),
+  //           decoration: InputDecoration(
+  //             labelText: 'Người nhận',
+  //             filled: true,
+  //             fillColor: bg,
+  //             contentPadding: const EdgeInsets.symmetric(
+  //               horizontal: 14,
+  //               vertical: 10,
+  //             ),
+  //             border: OutlineInputBorder(
+  //               borderRadius: BorderRadius.circular(12),
+  //               borderSide: BorderSide.none,
+  //             ),
+  //           ),
+  //         ),
 
-          const SizedBox(height: 12),
+  //         const SizedBox(height: 12),
 
-          TextField(
-            controller: _msgCtl,
-            minLines: 1,
-            maxLines: 3,
-            decoration: InputDecoration(
-              hintText: 'Nội dung…',
-              filled: true,
-              fillColor: bg,
-              contentPadding: const EdgeInsets.symmetric(
-                horizontal: 14,
-                vertical: 12,
-              ),
-              border: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(12),
-                borderSide: BorderSide.none,
-              ),
-            ),
-          ),
+  //         TextField(
+  //           controller: _msgCtl,
+  //           minLines: 1,
+  //           maxLines: 3,
+  //           decoration: InputDecoration(
+  //             hintText: 'Nội dung…',
+  //             filled: true,
+  //             fillColor: bg,
+  //             contentPadding: const EdgeInsets.symmetric(
+  //               horizontal: 14,
+  //               vertical: 12,
+  //             ),
+  //             border: OutlineInputBorder(
+  //               borderRadius: BorderRadius.circular(12),
+  //               borderSide: BorderSide.none,
+  //             ),
+  //           ),
+  //         ),
 
-          const SizedBox(height: 12),
+  //         const SizedBox(height: 12),
 
-          Row(
-            children: [
-              Expanded(
-                child: ElevatedButton.icon(
-                  icon: const Icon(Icons.notifications_active_rounded),
-                  label: Text(_sending ? 'Đang gửi…' : 'Gửi'),
-                  onPressed: _sending
-                      ? null
-                      : () => _onSendFcm(context, caregiverId),
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: AppTheme.primaryBlue,
-                    foregroundColor: Colors.white,
-                    padding: const EdgeInsets.symmetric(vertical: 12),
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(12),
-                    ),
-                  ),
-                ),
-              ),
-            ],
-          ),
+  //         Row(
+  //           children: [
+  //             Expanded(
+  //               child: ElevatedButton.icon(
+  //                 icon: const Icon(Icons.notifications_active_rounded),
+  //                 label: Text(_sending ? 'Đang gửi…' : 'Gửi'),
+  //                 onPressed: _sending
+  //                     ? null
+  //                     : () => _onSendFcm(context, caregiverId),
+  //                 style: ElevatedButton.styleFrom(
+  //                   backgroundColor: AppTheme.primaryBlue,
+  //                   foregroundColor: Colors.white,
+  //                   padding: const EdgeInsets.symmetric(vertical: 12),
+  //                   shape: RoundedRectangleBorder(
+  //                     borderRadius: BorderRadius.circular(12),
+  //                   ),
+  //                 ),
+  //               ),
+  //             ),
+  //           ],
+  //         ),
 
-          if (_sendLog != null) ...[
-            const SizedBox(height: 8),
-            Text(
-              _sendLog!,
-              style: const TextStyle(fontSize: 12, color: Color(0xFF475569)),
-              maxLines: 3,
-              overflow: TextOverflow.ellipsis,
-            ),
-          ],
-        ],
-      ),
-    );
-  }
+  //         if (_sendLog != null) ...[
+  //           const SizedBox(height: 8),
+  //           Text(
+  //             _sendLog!,
+  //             style: const TextStyle(fontSize: 12, color: Color(0xFF475569)),
+  //             maxLines: 3,
+  //             overflow: TextOverflow.ellipsis,
+  //           ),
+  //         ],
+  //       ],
+  //     ),
+  //   );
+  // }
 
-  Future<void> _onSendFcm(BuildContext context, String caregiverId) async {
-    final msg = _msgCtl.text.trim();
-    if (msg.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Nhập nội dung trước khi gửi')),
-      );
-      return;
-    }
+  // Future<void> _onSendFcm(BuildContext context, String caregiverId) async {
+  //   final msg = _msgCtl.text.trim();
+  //   if (msg.isEmpty) {
+  //     ScaffoldMessenger.of(context).showSnackBar(
+  //       const SnackBar(content: Text('Nhập nội dung trước khi gửi')),
+  //     );
+  //     return;
+  //   }
 
-    setState(() => _sending = true);
-    try {
-      await _fcmReg.registerForUser(caregiverId, type: 'device');
-      final fromToken = await _fcmReg.getCurrentTokenSafely();
+  //   setState(() => _sending = true);
+  //   try {
+  //     await _fcmReg.registerForUser(caregiverId, type: 'device');
+  //     final fromToken = await _fcmReg.getCurrentTokenSafely();
 
-      List<String> toUserIds;
-      if (_selectedReceiver == '_ALL_') {
-        final list = await _assignDs.listPending();
-        toUserIds = list
-            .where((a) => a.status.toLowerCase() == 'accepted' && a.isActive)
-            .map((a) => a.customerId)
-            .toSet()
-            .toList();
-      } else {
-        toUserIds = [_selectedReceiver];
-      }
+  //     List<String> toUserIds;
+  //     if (_selectedReceiver == '_ALL_') {
+  //       final list = await _assignDs.listPending();
+  //       toUserIds = list
+  //           .where((a) => a.status.toLowerCase() == 'accepted' && a.isActive)
+  //           .map((a) => a.customerId)
+  //           .toSet()
+  //           .toList();
+  //     } else {
+  //       toUserIds = [_selectedReceiver];
+  //     }
 
-      if (toUserIds.isEmpty) {
-        setState(() => _sendLog = 'Không có người nhận phù hợp');
-        if (mounted) {
-          ScaffoldMessenger.of(
-            context,
-          ).showSnackBar(const SnackBar(content: Text('Không có người nhận')));
-        }
-        return;
-      }
+  //     if (toUserIds.isEmpty) {
+  //       setState(() => _sendLog = 'Không có người nhận phù hợp');
+  //       if (mounted) {
+  //         ScaffoldMessenger.of(
+  //           context,
+  //         ).showSnackBar(const SnackBar(content: Text('Không có người nhận')));
+  //       }
+  //       return;
+  //     }
 
-      final resp = await _fcmDs.pushMessage(
-        toUserIds: toUserIds,
-        direction: 'caregiver_to_customer',
-        category: 'report',
-        message: msg,
-        fromUserId: caregiverId,
-      );
+  //     final resp = await _fcmDs.pushMessage(
+  //       toUserIds: toUserIds,
+  //       direction: 'caregiver_to_customer',
+  //       category: 'report',
+  //       message: msg,
+  //       fromUserId: caregiverId,
+  //     );
 
-      final ok = (resp['successCount'] ?? 0).toString();
-      final fail = (resp['failureCount'] ?? 0).toString();
+  //     final ok = (resp['successCount'] ?? 0).toString();
+  //     final fail = (resp['failureCount'] ?? 0).toString();
 
-      setState(() {
-        _sendLog = 'Gửi: $ok · Lỗi: $fail';
-        _msgCtl.clear();
-      });
+  //     setState(() {
+  //       _sendLog = 'Gửi: $ok · Lỗi: $fail';
+  //       _msgCtl.clear();
+  //     });
 
-      if (mounted) {
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(SnackBar(content: Text('Gửi: $ok · Lỗi: $fail')));
-      }
-    } catch (e) {
-      setState(() => _sendLog = 'Lỗi: $e');
-      if (mounted) {
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(SnackBar(content: Text('Lỗi: $e')));
-      }
-    } finally {
-      if (mounted) setState(() => _sending = false);
-    }
-  }
+  //     if (mounted) {
+  //       ScaffoldMessenger.of(
+  //         context,
+  //       ).showSnackBar(SnackBar(content: Text('Gửi: $ok · Lỗi: $fail')));
+  //     }
+  //   } catch (e) {
+  //     setState(() => _sendLog = 'Lỗi: $e');
+  //     if (mounted) {
+  //       ScaffoldMessenger.of(
+  //         context,
+  //       ).showSnackBar(SnackBar(content: Text('Lỗi: $e')));
+  //     }
+  //   } finally {
+  //     if (mounted) setState(() => _sending = false);
+  //   }
+  // }
 
   Widget _buildLogoutButton(BuildContext context) {
     return OutlinedButton.icon(

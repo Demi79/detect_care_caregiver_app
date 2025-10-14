@@ -1,15 +1,14 @@
 import 'package:flutter/material.dart';
+
 import '../../../core/theme/app_theme.dart';
+import '../constants/filter_constants.dart';
 
 class FilterBar extends StatelessWidget {
   final List<String> statusOptions;
   final List<String> periodOptions;
-
   final DateTimeRange? selectedDayRange;
-
   final String selectedStatus;
   final String selectedPeriod;
-
   final ValueChanged<String?> onStatusChanged;
   final ValueChanged<DateTimeRange?> onDayRangeChanged;
   final ValueChanged<String?> onPeriodChanged;
@@ -26,116 +25,325 @@ class FilterBar extends StatelessWidget {
     required this.onPeriodChanged,
   });
 
-  DateTimeRange _todayRange() {
-    final now = DateTime.now();
-    final start = DateTime(now.year, now.month, now.day);
-    return DateTimeRange(start: start, end: start);
-  }
-
-  String _fmtDate(DateTime dt) =>
-      '${dt.year.toString().padLeft(4, '0')}-'
-      '${dt.month.toString().padLeft(2, '0')}-'
-      '${dt.day.toString().padLeft(2, '0')}';
-
   @override
   Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.all(10),
-      decoration: BoxDecoration(
-        color: AppTheme.cardBackground,
+    final colorScheme = Theme.of(context).colorScheme;
+    final defaultRange = HomeFilters.defaultDayRange;
+
+    final bool hasCustomStatus =
+        _normalize(selectedStatus) != _normalize(HomeFilters.defaultStatus);
+    final bool hasCustomPeriod =
+        _normalize(selectedPeriod) != _normalize(HomeFilters.defaultPeriod);
+    final bool hasCustomDayRange =
+        selectedDayRange != null &&
+        !_isSameRange(selectedDayRange, defaultRange);
+    final bool hasActiveFilters =
+        hasCustomStatus || hasCustomPeriod || hasCustomDayRange;
+
+    final appliedParts = <String>[];
+    if (hasCustomDayRange && selectedDayRange != null) {
+      appliedParts.add('Ngày = ${_formatRange(selectedDayRange!)}');
+    }
+    if (hasCustomStatus) {
+      appliedParts.add('Trạng thái = ${_translateStatus(selectedStatus)}');
+    }
+    if (hasCustomPeriod) {
+      appliedParts.add('Giai đoạn = ${_translatePeriod(selectedPeriod)}');
+    }
+
+    return Card(
+      elevation: 1,
+      color: AppTheme.cardBackground,
+      shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(AppTheme.borderRadiusLarge),
-        boxShadow: AppTheme.cardShadow,
+        side: BorderSide(
+          color: Color.lerp(colorScheme.outlineVariant, Colors.white, 0.4)!,
+        ),
       ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          // Header
-          Row(
-            children: [
-              Container(
-                padding: const EdgeInsets.all(8),
-                decoration: BoxDecoration(
-                  color: AppTheme.primaryBlue.withValues(alpha: 0.1),
-                  borderRadius: BorderRadius.circular(8),
-                ),
-                child: const Icon(
-                  Icons.tune_rounded,
-                  color: AppTheme.primaryBlue,
-                  size: 20,
-                ),
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(16, 14, 16, 16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            _buildHeader(context, defaultRange),
+            if (hasActiveFilters) ...[
+              const SizedBox(height: 12),
+              _buildAppliedSummary(
+                context,
+                appliedParts.join(' • '),
+                defaultRange,
               ),
-              const SizedBox(width: 12),
-              Text(
-                'Filters',
-                style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                  fontWeight: FontWeight.w600,
-                  color: AppTheme.text,
-                ),
+            ],
+            const SizedBox(height: 16),
+            _LabeledPill(
+              icon: Icons.schedule_rounded,
+              accentColor: AppTheme.successColor,
+              label: 'Ngày',
+              value: _formatRange(
+                selectedDayRange ?? HomeFilters.defaultDayRange,
               ),
-              const Spacer(),
-              TextButton(
-                onPressed: () {
-                  onStatusChanged('All');
-                  onDayRangeChanged(_todayRange());
-                  onPeriodChanged('All');
-                },
-                child: const Text(
-                  'Reset',
-                  style: TextStyle(
-                    color: AppTheme.primaryBlue,
-                    fontWeight: FontWeight.w500,
-                    fontSize: 12,
+              highlight: hasCustomDayRange,
+              onTap: () => _pickDateRange(
+                context,
+                selectedDayRange ?? defaultRange,
+                defaultRange,
+              ),
+            ),
+            const SizedBox(height: 16),
+            Row(
+              children: [
+                Expanded(
+                  child: _LabeledPill(
+                    icon: Icons.place_outlined,
+                    accentColor: AppTheme.primaryBlue,
+                    label: 'Trạng thái',
+                    value: _translateStatus(selectedStatus),
+                    highlight: hasCustomStatus,
+                    onTap: () => _selectStatus(context),
                   ),
                 ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 16),
-
-          // Hàng 1: Day (căn giữa)
-          Row(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [Expanded(child: _buildDayRangeChip(context))],
-          ),
-          const SizedBox(height: 12),
-
-          // Hàng 2: Status + Period (căn giữa)
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-            children: [
-              Expanded(
-                child: _buildDropdownChip(
-                  context: context,
-                  label: 'Status',
-                  selectedValue: selectedStatus,
-                  options: statusOptions,
-                  onChanged: onStatusChanged,
-                  icon: Icons.health_and_safety_rounded,
-                  color: _getStatusColor(selectedStatus),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: _LabeledPill(
+                    icon: Icons.auto_awesome_rounded,
+                    accentColor: _Palette.stageAccent,
+                    label: 'Giai đoạn',
+                    value: _translatePeriod(selectedPeriod),
+                    highlight: hasCustomPeriod,
+                    onTap: () => _selectPeriod(context),
+                  ),
                 ),
+              ],
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildHeader(BuildContext context, DateTimeRange defaultRange) {
+    final colorScheme = Theme.of(context).colorScheme;
+    return Row(
+      children: [
+        Container(
+          padding: const EdgeInsets.all(8),
+          decoration: BoxDecoration(
+            color: Color.lerp(colorScheme.primary, Colors.white, 0.85),
+            borderRadius: BorderRadius.circular(12),
+          ),
+          child: Icon(Icons.tune_rounded, size: 20, color: colorScheme.primary),
+        ),
+        const SizedBox(width: 10),
+        Text(
+          'Bộ lọc',
+          style: Theme.of(
+            context,
+          ).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w600),
+        ),
+        const Spacer(),
+        TextButton(
+          onPressed: () => _reset(defaultRange),
+          child: const Text('Đặt lại'),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildAppliedSummary(
+    BuildContext context,
+    String summary,
+    DateTimeRange defaultRange,
+  ) {
+    final colorScheme = Theme.of(context).colorScheme;
+    final textTheme = Theme.of(context).textTheme;
+    final Color chipColor = Color.lerp(colorScheme.primary, Colors.white, 0.9)!;
+
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+      decoration: BoxDecoration(
+        color: chipColor,
+        borderRadius: BorderRadius.circular(12),
+      ),
+      child: Row(
+        children: [
+          Icon(Icons.filter_alt_outlined, size: 18, color: colorScheme.primary),
+          const SizedBox(width: 8),
+          Expanded(
+            child: Text(
+              'Đang áp dụng: $summary',
+              style: textTheme.bodyMedium?.copyWith(
+                fontWeight: FontWeight.w500,
+                color: colorScheme.primary,
+                height: 1.3,
               ),
-              const SizedBox(width: 12),
-              Expanded(
-                child: _buildDropdownChip(
-                  context: context,
-                  label: 'Period',
-                  selectedValue: selectedPeriod,
-                  options: periodOptions,
-                  onChanged: onPeriodChanged,
-                  icon: Icons.wb_sunny_rounded,
-                  color: AppTheme.reportColor,
-                ),
-              ),
-            ],
+            ),
+          ),
+          TextButton(
+            onPressed: () => _reset(defaultRange),
+            child: const Text('Bỏ hết'),
           ),
         ],
       ),
     );
   }
 
-  Widget _buildDayRangeChip(BuildContext context) {
-    final Color color = AppTheme.activityColor;
-    final DateTimeRange displayRange = selectedDayRange ?? _todayRange();
+  Future<void> _pickDateRange(
+    BuildContext context,
+    DateTimeRange initial,
+    DateTimeRange fallback,
+  ) async {
+    final DateTime today = DateTime.now();
+    final DateTimeRange? picked = await showDateRangePicker(
+      context: context,
+      firstDate: DateTime(2023, 1, 1),
+      lastDate: DateTime(today.year, today.month, today.day),
+      initialDateRange: initial,
+    );
+    if (picked != null) {
+      onDayRangeChanged(
+        DateTimeRange(
+          start: DateTime(
+            picked.start.year,
+            picked.start.month,
+            picked.start.day,
+          ),
+          end: DateTime(picked.end.year, picked.end.month, picked.end.day),
+        ),
+      );
+    } else if (selectedDayRange == null) {
+      onDayRangeChanged(fallback);
+    }
+  }
+
+  Future<void> _selectStatus(BuildContext context) async {
+    final result = await showDialog<String>(
+      context: context,
+      builder: (_) => SimpleDialog(
+        title: const Text('Chọn trạng thái'),
+        children: statusOptions
+            .map(
+              (status) => SimpleDialogOption(
+                onPressed: () => Navigator.pop(context, status),
+                child: Text(_translateStatus(status)),
+              ),
+            )
+            .toList(),
+      ),
+    );
+    if (result != null) {
+      onStatusChanged(result);
+    }
+  }
+
+  Future<void> _selectPeriod(BuildContext context) async {
+    final result = await showDialog<String>(
+      context: context,
+      builder: (_) => SimpleDialog(
+        title: const Text('Chọn giai đoạn'),
+        children: periodOptions
+            .map(
+              (period) => SimpleDialogOption(
+                onPressed: () => Navigator.pop(context, period),
+                child: Text(_translatePeriod(period)),
+              ),
+            )
+            .toList(),
+      ),
+    );
+    if (result != null) {
+      onPeriodChanged(result);
+    }
+  }
+
+  void _reset(DateTimeRange defaultRange) {
+    onStatusChanged(HomeFilters.defaultStatus);
+    onPeriodChanged(HomeFilters.defaultPeriod);
+    onDayRangeChanged(defaultRange);
+  }
+
+  static bool _isSameDay(DateTime a, DateTime b) =>
+      a.year == b.year && a.month == b.month && a.day == b.day;
+
+  static bool _isSameRange(DateTimeRange? a, DateTimeRange? b) {
+    if (a == null || b == null) return false;
+    return _isSameDay(a.start, b.start) && _isSameDay(a.end, b.end);
+  }
+
+  static String _formatRange(DateTimeRange range) =>
+      '${_formatDate(range.start)} → ${_formatDate(range.end)}';
+
+  static String _formatDate(DateTime dt) =>
+      '${dt.year.toString().padLeft(4, '0')}-${dt.month.toString().padLeft(2, '0')}-${dt.day.toString().padLeft(2, '0')}';
+
+  static String _normalize(String value) => value.toLowerCase();
+
+  String _translateStatus(String status) {
+    switch (status.toLowerCase()) {
+      case 'all':
+        return 'Tất cả trạng thái';
+      case 'danger':
+      case 'critical':
+        return 'Nguy hiểm';
+      case 'warning':
+        return 'Cảnh báo';
+      case 'normal':
+        return 'Bình thường';
+      default:
+        return status;
+    }
+  }
+
+  String _translatePeriod(String period) {
+    switch (period.toLowerCase()) {
+      case 'all':
+        return 'Tất cả giai đoạn';
+      case 'morning':
+        return 'Buổi sáng';
+      case 'afternoon':
+        return 'Buổi chiều';
+      case 'evening':
+        return 'Buổi tối';
+      case 'night':
+        return 'Ban đêm';
+      default:
+        return period;
+    }
+  }
+}
+
+class _LabeledPill extends StatelessWidget {
+  const _LabeledPill({
+    required this.icon,
+    required this.label,
+    required this.value,
+    required this.accentColor,
+    required this.onTap,
+    required this.highlight,
+  });
+
+  final IconData icon;
+  final String label;
+  final String value;
+  final Color accentColor;
+  final VoidCallback onTap;
+  final bool highlight;
+
+  Color _towardsWhite(double amount) =>
+      Color.lerp(accentColor, Colors.white, amount)!;
+
+  Color _towardsBlack(double amount) =>
+      Color.lerp(accentColor, Colors.black, amount)!;
+
+  @override
+  Widget build(BuildContext context) {
+    final textTheme = Theme.of(context).textTheme;
+
+    final Color background = _towardsWhite(highlight ? 0.82 : 0.9);
+    final Color borderColor = _towardsWhite(highlight ? 0.65 : 0.8);
+    final Color labelColor = _towardsBlack(0.18);
+    final Color valueColor = _towardsBlack(0.15);
+    final Color affordanceColor = _towardsBlack(0.2);
+    final Color indicatorColor = _towardsBlack(0.05);
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -143,187 +351,88 @@ class FilterBar extends StatelessWidget {
         Row(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Icon(Icons.schedule_rounded, size: 16, color: color),
-            const SizedBox(width: 4),
+            Icon(icon, size: 18, color: labelColor),
+            const SizedBox(width: 6),
             Text(
-              'Day',
-              style: Theme.of(context).textTheme.labelMedium?.copyWith(
-                color: AppTheme.textSecondary,
-                fontWeight: FontWeight.w500,
-              ),
+              label,
+              style:
+                  textTheme.labelMedium?.copyWith(
+                    fontWeight: FontWeight.w600,
+                    color: labelColor,
+                  ) ??
+                  TextStyle(
+                    fontSize: 13,
+                    fontWeight: FontWeight.w600,
+                    color: labelColor,
+                  ),
             ),
           ],
         ),
         const SizedBox(height: 8),
-        InkWell(
-          borderRadius: BorderRadius.circular(AppTheme.borderRadiusMedium),
-          onTap: () async {
-            final today = DateTime.now();
-
-            final picked = await showDateRangePicker(
-              context: context,
-              firstDate: DateTime(2023, 1, 1),
-              lastDate: DateTime(today.year, today.month, today.day),
-              initialDateRange: selectedDayRange ?? _todayRange(),
-              helpText: 'Select Date Range',
-              saveText: 'Apply',
-              cancelText: 'Cancel',
-              builder: (context, child) {
-                return Theme(
-                  data: Theme.of(context).copyWith(
-                    dialogBackgroundColor: Colors.white,
-                    scaffoldBackgroundColor: Colors.white,
-                    colorScheme: ColorScheme.light(
-                      primary: Colors.blue.shade300,
-                      onPrimary: Colors.white,
-                      surface: Colors.white,
-                      onSurface: Colors.black87,
-                      secondary: Colors.blue.shade300,
-                      onSecondary: Colors.white,
-                    ),
-                    textButtonTheme: TextButtonThemeData(
-                      style: TextButton.styleFrom(
-                        foregroundColor: Colors.blue.shade300,
-                      ),
-                    ),
-                  ),
-                  child: child!,
-                );
-              },
-            );
-
-            if (picked != null) onDayRangeChanged(picked);
-          },
-          child: Container(
-            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-            decoration: BoxDecoration(
-              color: AppTheme.surfaceBackground,
-              borderRadius: BorderRadius.circular(AppTheme.borderRadiusMedium),
-              border: Border.all(color: color.withValues(alpha: 0.2), width: 1),
-            ),
-            child: Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                if (selectedDayRange != null)
+        Material(
+          color: Colors.transparent,
+          child: InkWell(
+            onTap: onTap,
+            borderRadius: BorderRadius.circular(14),
+            splashColor: affordanceColor.withValues(alpha: 31),
+            highlightColor: affordanceColor.withValues(alpha: 20),
+            child: Container(
+              width: double.infinity,
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 11),
+              decoration: BoxDecoration(
+                color: background,
+                borderRadius: BorderRadius.circular(14),
+                border: Border.all(color: borderColor, width: 1),
+              ),
+              child: Row(
+                children: [
                   Container(
                     width: 8,
                     height: 8,
-                    margin: const EdgeInsets.only(right: 8),
                     decoration: BoxDecoration(
-                      color: color,
+                      color: indicatorColor,
                       shape: BoxShape.circle,
                     ),
                   ),
-                Text(
-                  '${_fmtDate(displayRange.start)} → ${_fmtDate(displayRange.end)}',
-                  style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                    color: AppTheme.text,
-                    fontWeight: FontWeight.w500,
-                  ),
-                ),
-                const SizedBox(width: 8),
-                Icon(Icons.keyboard_arrow_down_rounded, color: color, size: 20),
-              ],
-            ),
-          ),
-        ),
-      ],
-    );
-  }
-
-  Widget _buildDropdownChip({
-    required BuildContext context,
-    required String label,
-    required String selectedValue,
-    required List<String> options,
-    required ValueChanged<String?> onChanged,
-    required IconData icon,
-    required Color color,
-  }) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Icon(icon, size: 16, color: color),
-            const SizedBox(width: 4),
-            Text(
-              label,
-              style: Theme.of(context).textTheme.labelMedium?.copyWith(
-                color: AppTheme.textSecondary,
-                fontWeight: FontWeight.w500,
-              ),
-            ),
-          ],
-        ),
-        const SizedBox(height: 8),
-        Container(
-          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-          decoration: BoxDecoration(
-            color: AppTheme.surfaceBackground,
-            borderRadius: BorderRadius.circular(AppTheme.borderRadiusMedium),
-            border: Border.all(color: color.withValues(alpha: 0.2), width: 1),
-          ),
-          child: DropdownButtonHideUnderline(
-            child: DropdownButton<String>(
-              value: selectedValue,
-              onChanged: onChanged,
-              isDense: true,
-              icon: Icon(
-                Icons.keyboard_arrow_down_rounded,
-                color: color,
-                size: 20,
-              ),
-              style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                color: AppTheme.text,
-                fontWeight: FontWeight.w500,
-              ),
-              items: options.map((String option) {
-                final bool isSel = option == selectedValue;
-                return DropdownMenuItem<String>(
-                  value: option,
-                  child: Row(
-                    children: [
-                      if (isSel)
-                        Container(
-                          width: 8,
-                          height: 8,
-                          margin: const EdgeInsets.only(right: 8),
-                          decoration: BoxDecoration(
-                            color: color,
-                            shape: BoxShape.circle,
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      value,
+                      overflow: TextOverflow.ellipsis,
+                      style:
+                          textTheme.labelLarge?.copyWith(
+                            fontWeight: FontWeight.w600,
+                            fontSize: 14,
+                            color: valueColor,
+                            height: 1.25,
+                          ) ??
+                          TextStyle(
+                            fontSize: 14,
+                            fontWeight: FontWeight.w600,
+                            color: valueColor,
                           ),
-                        ),
-                      Text(
-                        option,
-                        style: TextStyle(
-                          fontWeight: isSel ? FontWeight.w600 : FontWeight.w400,
-                          color: isSel ? color : AppTheme.text,
-                        ),
-                      ),
-                    ],
+                    ),
                   ),
-                );
-              }).toList(),
+                  const SizedBox(width: 8),
+                  Icon(
+                    Icons.keyboard_arrow_down_rounded,
+                    size: 20,
+                    color: affordanceColor,
+                  ),
+                ],
+              ),
             ),
           ),
         ),
       ],
     );
   }
+}
 
-  Color _getStatusColor(String status) {
-    switch (status.toLowerCase()) {
-      case 'danger':
-      case 'critical':
-        return AppTheme.dangerColor;
-      case 'warning':
-        return AppTheme.warningColor;
-      case 'normal':
-        return AppTheme.successColor;
-      default:
-        return AppTheme.primaryBlue;
-    }
-  }
+class _Palette {
+  static final Color stageAccent = Color.lerp(
+    AppTheme.reportColor,
+    const Color(0xFF8B5CF6),
+    0.6,
+  )!;
 }

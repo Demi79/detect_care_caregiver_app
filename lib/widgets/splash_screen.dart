@@ -49,7 +49,7 @@ class _SplashScreenState extends State<SplashScreen> {
                 const Icon(Icons.error_outline, color: Colors.red, size: 48),
                 const SizedBox(height: 16),
                 const Text(
-                  'Initialization Error',
+                  'Lỗi khi khởi tạo',
                   style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
                 ),
                 const SizedBox(height: 8),
@@ -61,7 +61,7 @@ class _SplashScreenState extends State<SplashScreen> {
                 const SizedBox(height: 16),
                 ElevatedButton(
                   onPressed: _initialize,
-                  child: const Text('Retry'),
+                  child: const Text('Thử lại'),
                 ),
               ],
             ),

@@ -1,10 +1,14 @@
 import 'package:detect_care_caregiver_app/features/home/widgets/alert_new_event_card.dart';
 import 'package:flutter/material.dart';
 import 'package:url_launcher/url_launcher.dart';
+import '../../features/emergency_contacts/data/emergency_contacts_remote_data_source.dart';
+import '../../features/auth/data/auth_storage.dart';
 import '../../features/home/models/log_entry.dart';
 import '../utils/app_lifecycle.dart';
 import '../../main.dart';
 import '../../features/events/data/events_remote_data_source.dart';
+import '../../features/home/widgets/action_log_card.dart';
+import '../events/app_events.dart';
 
 class InAppAlert {
   static bool _showing = false;
@@ -36,31 +40,98 @@ class InAppAlert {
                   child: AlertEventCard(
                     eventId: e.eventId,
                     eventType: e.eventType,
-                    patientName: "Bệnh nhân XYZ",
+                    // patientName: "Bệnh nhân XYZ",
                     timestamp: e.detectedAt ?? e.createdAt ?? DateTime.now(),
-                    location: "Phòng ngủ",
+                    // location: "Phòng ngủ",
                     severity: _mapSeverityFrom(e),
                     description: (e.eventDescription?.isNotEmpty ?? false)
                         ? e.eventDescription!
                         : 'Chạm “Chi tiết” để xem thêm…',
                     isHandled: _isHandled(e),
+                    cameraId: (() {
+                      try {
+                        final det = e.detectionData;
+                        final ctx = e.contextData;
+                        return (det['camera_id'] ??
+                                det['camera'] ??
+                                ctx['camera_id'] ??
+                                ctx['camera'])
+                            ?.toString();
+                      } catch (_) {
+                        return null;
+                      }
+                    })(),
+                    confidence: (() {
+                      try {
+                        if (e.confidenceScore != 0.0) return e.confidenceScore;
+                        final det = e.detectionData;
+                        final ctx = e.contextData;
+                        final c =
+                            det['confidence'] ??
+                            det['confidence_score'] ??
+                            ctx['confidence'];
+                        if (c == null) return null;
+                        if (c is num) return c.toDouble();
+                        return double.tryParse(c.toString());
+                      } catch (_) {
+                        return null;
+                      }
+                    })(),
                     onEmergencyCall: () async {
-                      final uri = Uri.parse('tel:115');
-                      await launchUrl(uri);
+                      try {
+                        String phone = '115';
+
+                        final userId = await AuthStorage.getUserId();
+                        if (userId != null && userId.isNotEmpty) {
+                          try {
+                            final ds = EmergencyContactsRemoteDataSource();
+                            final list = await ds.list(userId);
+                            if (list.isNotEmpty) {
+                              list.sort(
+                                (a, b) => b.alertLevel.compareTo(a.alertLevel),
+                              );
+                              EmergencyContactDto? chosen;
+                              for (final c in list) {
+                                if (c.phone.trim().isNotEmpty) {
+                                  chosen = c;
+                                  break;
+                                }
+                              }
+                              chosen ??= list.first;
+                              if (chosen.phone.trim().isNotEmpty) {
+                                phone = chosen.phone.trim();
+                              }
+                            }
+                          } catch (_) {}
+                        }
+
+                        final uri = Uri.parse('tel:$phone');
+                        await launchUrl(uri);
+                      } catch (err) {
+                        ScaffoldMessenger.of(ctx).showSnackBar(
+                          SnackBar(
+                            content: Text('Không thể gọi: $err'),
+                            backgroundColor: Colors.red,
+                          ),
+                        );
+                      }
                     },
                     onMarkHandled: () async {
                       try {
                         final ds = EventsRemoteDataSource();
-                        print('\n🔄 [InAppAlert] Calling confirmEvent:');
-                        print('  eventId: ${e.eventId}');
-                        print('  confirm: true');
+                        debugPrint('\n🔄 [InAppAlert] Calling confirmEvent:');
+                        debugPrint('  eventId: ${e.eventId}');
+                        debugPrint('  confirm: true');
 
                         await ds.confirmEvent(
                           eventId: e.eventId,
-                          confirm: true,
+                          confirmStatusBool: true,
                         );
 
                         Navigator.of(ctx, rootNavigator: true).maybePop();
+                        try {
+                          AppEvents.instance.notifyEventsChanged();
+                        } catch (_) {}
                       } catch (err) {
                         ScaffoldMessenger.of(ctx).showSnackBar(
                           SnackBar(
@@ -70,8 +141,77 @@ class InAppAlert {
                         );
                       }
                     },
-                    onViewDetails: () {
+                    onViewDetails: () async {
                       Navigator.of(ctx, rootNavigator: true).maybePop();
+
+                      try {
+                        final overlayCtx = NavigatorKey
+                            .navigatorKey
+                            .currentState
+                            ?.overlay
+                            ?.context;
+                        if (overlayCtx == null) return;
+
+                        final sub = AppEvents.instance.eventsChanged.listen((
+                          _,
+                        ) {
+                          try {
+                            Navigator.of(
+                              overlayCtx,
+                              rootNavigator: true,
+                            ).maybePop();
+                          } catch (_) {}
+                        });
+
+                        await showModalBottomSheet(
+                          context: overlayCtx,
+                          isScrollControlled: true,
+                          isDismissible: true,
+                          backgroundColor: Colors.transparent,
+                          builder: (_) {
+                            return DraggableScrollableSheet(
+                              initialChildSize: 0.75,
+                              minChildSize: 0.5,
+                              maxChildSize: 0.95,
+                              expand: false,
+                              builder: (context, scrollController) {
+                                return Container(
+                                  decoration: const BoxDecoration(
+                                    color: Colors.white,
+                                    borderRadius: BorderRadius.only(
+                                      topLeft: Radius.circular(24),
+                                      topRight: Radius.circular(24),
+                                    ),
+                                  ),
+                                  child: SingleChildScrollView(
+                                    controller: scrollController,
+                                    child: Padding(
+                                      padding: const EdgeInsets.all(16),
+                                      child: ActionLogCard(
+                                        data: e,
+                                        onUpdated: (newStatus, {confirmed}) {
+                                          try {
+                                            Navigator.of(
+                                              context,
+                                              rootNavigator: true,
+                                            ).maybePop();
+                                          } catch (_) {}
+                                        },
+                                      ),
+                                    ),
+                                  ),
+                                );
+                              },
+                            );
+                          },
+                        );
+
+                        try {
+                          await sub.cancel();
+                        } catch (_) {}
+                      } catch (_) {
+                        // fallback: do nothing if navigation fails
+                      }
                     },
                     onDismiss: () {
                       Navigator.of(ctx, rootNavigator: true).maybePop();

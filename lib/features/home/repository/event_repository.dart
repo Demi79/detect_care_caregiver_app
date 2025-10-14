@@ -56,4 +56,51 @@ class EventRepository {
       rethrow;
     }
   }
+
+  Future<EventLog> proposeEvent({
+    required String eventId,
+    required String proposedStatus,
+    String? proposedEventType,
+    String? reason,
+    DateTime? pendingUntil,
+  }) async {
+    try {
+      dev.log('🔧 [Repository] proposeEvent');
+      if (eventId.trim().isEmpty) {
+        throw Exception('Không tìm thấy ID sự kiện. Không thể gửi đề xuất.');
+      }
+      return await _service.proposeEventStatus(
+        eventId: eventId,
+        proposedStatus: proposedStatus,
+        proposedEventType: proposedEventType,
+        reason: reason,
+        pendingUntil: pendingUntil,
+      );
+    } catch (e) {
+      dev.log('❌ Repository proposeEvent error: $e');
+      rethrow;
+    }
+  }
+
+  Future<bool> confirmEvent(String eventId) async {
+    try {
+      dev.log('✅ confirmEvent: $eventId');
+      await Future.delayed(const Duration(milliseconds: 600));
+      return true;
+    } catch (e) {
+      dev.log('❌ Repository error - confirmEvent: $e');
+      return false;
+    }
+  }
+
+  Future<bool> rejectEvent(String eventId) async {
+    try {
+      dev.log('🚫 rejectEvent: $eventId');
+      await Future.delayed(const Duration(milliseconds: 600));
+      return true;
+    } catch (e) {
+      dev.log('❌ Repository error - rejectEvent: $e');
+      return false;
+    }
+  }
 }

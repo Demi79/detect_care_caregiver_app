@@ -1,10 +1,11 @@
 import 'package:flutter/material.dart';
-
+import 'package:detect_care_caregiver_app/features/patient/screens/update_patient_info_screen.dart';
 import '../theme/app_theme.dart';
 
 class CustomBottomNavBar extends StatelessWidget {
   final int currentIndex;
   final ValueChanged<int> onTap;
+  final Map<int, int> badgeCounts;
 
   final double height;
   final double iconSize;
@@ -22,6 +23,7 @@ class CustomBottomNavBar extends StatelessWidget {
     super.key,
     required this.currentIndex,
     required this.onTap,
+    this.badgeCounts = const {},
     this.height = 70,
     this.iconSize = 28,
     this.centerGap = 20,
@@ -42,8 +44,7 @@ class CustomBottomNavBar extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     assert(
-      (currentIndex >= 0 && currentIndex < _navSpecs.length) ||
-          currentIndex == 4,
+      (currentIndex >= 0 && currentIndex <= _navSpecs.length),
       'currentIndex $currentIndex is not a valid bottom nav index.',
     );
 
@@ -62,24 +63,25 @@ class CustomBottomNavBar extends StatelessWidget {
         elevation: elevation,
         borderRadius: BorderRadius.circular(borderRadius),
         color: color,
-        shadowColor: Colors.black.withOpacity(0.2),
+        shadowColor: Colors.black.withValues(alpha: 51),
         child: Container(
           height: height,
           decoration: BoxDecoration(
             borderRadius: BorderRadius.circular(borderRadius),
             color: color,
-            // Thêm gradient để tạo hiệu ứng đẹp hơn
             gradient: LinearGradient(
               begin: Alignment.topCenter,
               end: Alignment.bottomCenter,
-              colors: [color, color.withOpacity(0.95)],
+              colors: [color, color.withValues(alpha: 242)],
             ),
-            // Thêm border subtle để tạo độ sâu
-            border: Border.all(color: Colors.grey.withOpacity(0.1), width: 1),
+            border: Border.all(
+              color: Colors.grey.withValues(alpha: 26),
+              width: 1,
+            ),
           ),
           child: ClipRRect(
             borderRadius: BorderRadius.circular(borderRadius),
-            child: _buildFloatingBottomAppBar(leftSpecs, rightSpecs),
+            child: _buildFloatingBottomAppBar(context, leftSpecs, rightSpecs),
           ),
         ),
       ),
@@ -87,17 +89,16 @@ class CustomBottomNavBar extends StatelessWidget {
   }
 
   Widget _buildFloatingBottomAppBar(
+    BuildContext context,
     List<_NavSpec> leftSpecs,
     List<_NavSpec> rightSpecs,
   ) {
     return Container(
       decoration: BoxDecoration(
-        // Notch shape cho floating design
         borderRadius: BorderRadius.circular(borderRadius),
       ),
       child: Stack(
         children: [
-          // Background với notch
           CustomPaint(
             size: Size.infinite,
             painter: FloatingNotchPainter(
@@ -107,15 +108,14 @@ class CustomBottomNavBar extends StatelessWidget {
               borderRadius: borderRadius,
             ),
           ),
-          // Navigation items
           Padding(
             padding: padding,
             child: Row(
               mainAxisAlignment: alignment,
               children: [
-                ...leftSpecs.map(_buildItemButton),
+                ...leftSpecs.map((s) => _buildItemButton(context, s)),
                 SizedBox(width: centerGap),
-                ...rightSpecs.map(_buildItemButton),
+                ...rightSpecs.map((s) => _buildItemButton(context, s)),
               ],
             ),
           ),
@@ -124,27 +124,90 @@ class CustomBottomNavBar extends StatelessWidget {
     );
   }
 
-  Widget _buildItemButton(_NavSpec spec) {
+  Widget _buildItemButton(BuildContext context, _NavSpec spec) {
     final isSelected = spec.index == currentIndex;
+    final badgeCount = badgeCounts[spec.index] ?? 0;
 
     return Container(
-      decoration: BoxDecoration(
-        borderRadius: BorderRadius.circular(15),
-        color: isSelected
-            ? AppTheme.primaryBlue.withOpacity(0.1)
-            : Colors.transparent,
-      ),
-      child: IconButton(
-        key: ValueKey('bottom-item-${spec.index}-${spec.item.name}'),
-        tooltip: spec.tooltip,
-        onPressed: () => onTap(spec.index),
-        icon: AnimatedContainer(
-          duration: const Duration(milliseconds: 200),
-          curve: Curves.easeInOut,
-          child: Icon(
-            spec.icon,
-            color: isSelected ? AppTheme.primaryBlue : Colors.grey,
-            size: isSelected ? iconSize + 2 : iconSize,
+      padding: const EdgeInsets.symmetric(horizontal: 6),
+      child: Semantics(
+        button: true,
+        label: spec.tooltip,
+        child: InkWell(
+          borderRadius: BorderRadius.circular(12),
+          onTap: () {
+            if (spec.item == BottomNavItem.patient) {
+              Navigator.of(context).push(
+                MaterialPageRoute(
+                  builder: (_) => const UpdatePatientInfoScreen(readOnly: true),
+                ),
+              );
+              return;
+            }
+            onTap(spec.index);
+          },
+          child: SizedBox(
+            width: 64,
+            height: 56,
+            child: Stack(
+              alignment: Alignment.center,
+              children: [
+                Column(
+                  mainAxisSize: MainAxisSize.min,
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    Icon(
+                      spec.icon,
+                      color: isSelected ? AppTheme.primaryBlue : Colors.grey,
+                      size: isSelected ? iconSize + 2 : iconSize,
+                    ),
+                    const SizedBox(height: 3),
+                    Text(
+                      spec.tooltip,
+                      style: TextStyle(
+                        fontSize: 10,
+                        color: isSelected ? AppTheme.primaryBlue : Colors.grey,
+                      ),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ],
+                ),
+                if (badgeCount > 0)
+                  Positioned(
+                    right: 4,
+                    top: 4,
+                    child: Semantics(
+                      label: badgeCount > 99
+                          ? '99+ thông báo'
+                          : '$badgeCount thông báo',
+                      child: Container(
+                        alignment: Alignment.center,
+                        constraints: const BoxConstraints(
+                          minWidth: 18,
+                          minHeight: 18,
+                        ),
+                        padding: const EdgeInsets.symmetric(horizontal: 2),
+                        decoration: BoxDecoration(
+                          color: AppTheme.dangerColor,
+                          shape: BoxShape.rectangle,
+                          borderRadius: BorderRadius.circular(12),
+                          border: Border.all(color: Colors.white, width: 1.5),
+                        ),
+                        child: Text(
+                          badgeCount > 99 ? '99+' : badgeCount.toString(),
+                          style: const TextStyle(
+                            color: Colors.white,
+                            fontSize: 11,
+                            fontWeight: FontWeight.bold,
+                          ),
+                          textAlign: TextAlign.center,
+                        ),
+                      ),
+                    ),
+                  ),
+              ],
+            ),
           ),
         ),
       ),
@@ -176,20 +239,13 @@ class FloatingNotchPainter extends CustomPainter {
     final centerX = size.width / 2;
     final notchTop = 0.0;
 
-    // Vẽ path với notch
     path.moveTo(borderRadius, 0);
-
-    // Đi đến điểm bắt đầu notch
     path.lineTo(centerX - notchRadius - notchMargin, notchTop);
-
-    // Tạo notch cong
     path.arcToPoint(
       Offset(centerX + notchRadius + notchMargin, notchTop),
       radius: Radius.circular(notchRadius + notchMargin),
       clockwise: false,
     );
-
-    // Hoàn thành phần còn lại
     path.lineTo(size.width - borderRadius, 0);
     path.arcToPoint(
       Offset(size.width, borderRadius),
@@ -218,10 +274,8 @@ class FloatingNotchPainter extends CustomPainter {
   bool shouldRepaint(covariant CustomPainter oldDelegate) => false;
 }
 
-/// Logical destinations for the bottom bar.
-enum BottomNavItem { home, camera, search, notifications, profile, patient }
+enum BottomNavItem { home, camera, share_permissions, profile, patient }
 
-/// Presentation spec for a destination (icon, tooltip, index).
 class _NavSpec {
   final BottomNavItem item;
   final int index;
@@ -235,7 +289,6 @@ class _NavSpec {
   });
 }
 
-// Keep the visual order and index mapping in one place.
 const List<_NavSpec> _navSpecs = [
   _NavSpec(
     item: BottomNavItem.camera,
@@ -244,21 +297,21 @@ const List<_NavSpec> _navSpecs = [
     tooltip: 'Camera',
   ),
   _NavSpec(
-    item: BottomNavItem.search,
+    item: BottomNavItem.share_permissions,
     index: 1,
-    icon: Icons.search_outlined,
-    tooltip: 'Search',
+    icon: Icons.group,
+    tooltip: 'Thiết lập',
   ),
   _NavSpec(
-    item: BottomNavItem.notifications,
+    item: BottomNavItem.patient,
     index: 2,
-    icon: Icons.notifications_outlined,
-    tooltip: 'Notifications',
+    icon: Icons.favorite_outline,
+    tooltip: 'Bệnh nhân',
   ),
   _NavSpec(
     item: BottomNavItem.profile,
     index: 3,
     icon: Icons.person_outline,
-    tooltip: 'Profile',
+    tooltip: 'Hồ sơ',
   ),
 ];

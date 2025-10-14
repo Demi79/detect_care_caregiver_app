@@ -53,8 +53,12 @@ class _FcmQuickSendSheetState extends State<FcmQuickSendSheet> {
         _customers = opts;
         _loadingList = false;
       });
-    } catch (_) {
-      setState(() => _loadingList = false);
+    } catch (e) {
+      debugPrint('\u274c Lỗi tải khách hàng: $e');
+      setState(() {
+        _loadingList = false;
+        _customers = [];
+      });
     }
   }
 
@@ -114,7 +118,7 @@ class _FcmQuickSendSheetState extends State<FcmQuickSendSheet> {
             mainAxisSize: MainAxisSize.min,
             children: [
               const Text(
-                'Gửi thông báo cho người chăm sóc',
+                'Gửi thông báo cho người nhà',
                 style: TextStyle(fontSize: 16, fontWeight: FontWeight.w700),
               ),
               const SizedBox(height: 12),

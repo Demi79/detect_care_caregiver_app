@@ -7,12 +7,14 @@ import 'package:provider/provider.dart';
 class AlertEventCard extends StatefulWidget {
   final String eventId;
   final String eventType;
-  final String patientName;
+  final String? patientName;
   final DateTime timestamp;
-  final String location;
+  // final String location;
   final String severity;
   final String description;
   final String? imageUrl;
+  final String? cameraId;
+  final double? confidence;
   final bool isHandled;
   final VoidCallback? onEmergencyCall;
   final VoidCallback? onMarkHandled;
@@ -23,12 +25,14 @@ class AlertEventCard extends StatefulWidget {
     super.key,
     required this.eventId,
     required this.eventType,
-    required this.patientName,
+    this.patientName,
     required this.timestamp,
-    required this.location,
+    // required this.location,
     required this.severity,
     required this.description,
     this.imageUrl,
+    this.cameraId,
+    this.confidence,
     this.isHandled = false,
     this.onEmergencyCall,
     this.onMarkHandled,
@@ -290,15 +294,16 @@ class _AlertEventCardState extends State<AlertEventCard>
                   ],
                 ),
                 const SizedBox(height: 4),
-                Text(
-                  widget.patientName,
-                  overflow: TextOverflow.ellipsis,
-                  style: const TextStyle(
-                    fontSize: 16,
-                    fontWeight: FontWeight.w600,
-                    color: Color(0xFF2D3748),
+                if (widget.patientName?.trim().isNotEmpty == true)
+                  Text(
+                    widget.patientName!,
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(
+                      fontSize: 16,
+                      fontWeight: FontWeight.w600,
+                      color: Color(0xFF2D3748),
+                    ),
                   ),
-                ),
               ],
             ),
           ),
@@ -354,22 +359,21 @@ class _AlertEventCardState extends State<AlertEventCard>
           const SizedBox(height: 12),
 
           // Location
-          Row(
-            children: [
-              const Icon(Icons.location_on, size: 16, color: Color(0xFF718096)),
-              const SizedBox(width: 4),
-              Expanded(
-                child: Text(
-                  widget.location,
-                  style: const TextStyle(
-                    fontSize: 12,
-                    color: Color(0xFF718096),
-                  ),
-                ),
-              ),
-            ],
-          ),
-
+          // Row(
+          //   children: [
+          //     const Icon(Icons.location_on, size: 16, color: Color(0xFF718096)),
+          //     const SizedBox(width: 4),
+          //     Expanded(
+          //       child: Text(
+          //         widget.location,
+          //         style: const TextStyle(
+          //           fontSize: 12,
+          //           color: Color(0xFF718096),
+          //         ),
+          //       ),
+          //     ),
+          //   ],
+          // ),
           const SizedBox(height: 12),
 
           // View more button
@@ -416,12 +420,30 @@ class _AlertEventCardState extends State<AlertEventCard>
           const Divider(height: 1),
           const SizedBox(height: 12),
 
-          _buildInfoRow('Event ID', widget.eventId),
+          _buildInfoRow('Mã sự kiện', widget.eventId),
           const SizedBox(height: 8),
 
           _buildInfoRow(
             'Thời gian',
             '${widget.timestamp.day}/${widget.timestamp.month}/${widget.timestamp.year} ${widget.timestamp.hour.toString().padLeft(2, '0')}:${widget.timestamp.minute.toString().padLeft(2, '0')}',
+          ),
+
+          const SizedBox(height: 8),
+
+          _buildInfoRow('Loại', widget.eventType),
+          const SizedBox(height: 8),
+          _buildInfoRow(
+            'Mô tả',
+            widget.description.isNotEmpty ? widget.description : '-',
+          ),
+          const SizedBox(height: 8),
+          _buildInfoRow('Camera', widget.cameraId ?? '-'),
+          const SizedBox(height: 8),
+          _buildInfoRow(
+            'Độ tin cậy',
+            widget.confidence != null
+                ? widget.confidence!.toStringAsFixed(2)
+                : '-',
           ),
 
           if (widget.imageUrl != null) ...[
@@ -525,12 +547,12 @@ class _AlertEventCardState extends State<AlertEventCard>
                 child: ElevatedButton.icon(
                   onPressed: _handleEmergencyCall,
                   icon: const Icon(Icons.phone, color: Colors.white),
-                  label: const Text(
+                  label: Text(
                     'GỌI KHẨN CẤP',
-                    style: TextStyle(
+                    style: const TextStyle(
                       fontWeight: FontWeight.bold,
                       color: Colors.white,
-                    ),
+                    ).copyWith(fontSize: 13),
                   ),
                   style: ElevatedButton.styleFrom(
                     backgroundColor: const Color(0xFFE53E3E),
@@ -548,7 +570,13 @@ class _AlertEventCardState extends State<AlertEventCard>
                 child: ElevatedButton.icon(
                   onPressed: _handleMarkAsHandled,
                   icon: const Icon(Icons.check),
-                  label: const Text('ĐÃ XỬ LÝ'),
+                  label: Text(
+                    'ĐÃ XỬ LÝ',
+                    style: const TextStyle(
+                      fontWeight: FontWeight.bold,
+                      color: Colors.white,
+                    ).copyWith(fontSize: 13),
+                  ),
                   style: ElevatedButton.styleFrom(
                     backgroundColor: const Color(0xFF48BB78),
                     foregroundColor: Colors.white,
@@ -566,15 +594,10 @@ class _AlertEventCardState extends State<AlertEventCard>
 
           const SizedBox(height: 8),
 
-          // Nút mới: Gửi thông báo cho người chăm sóc (mở bottom-sheet)
           SizedBox(
             width: double.infinity,
             child: OutlinedButton.icon(
               onPressed: () {
-                // Lưu ý: cần import sheet & provider ở đầu file:
-                // import 'package:provider/provider.dart';
-                // import 'package:detect_care_caregiver_app/features/auth/providers/auth_provider.dart';
-                // import 'package:detect_care_caregiver_app/features/fcm/widgets/fcm_quick_send_sheet.dart';
                 final caregiver = context.read<AuthProvider>().user;
                 if (caregiver == null) return;
                 showModalBottomSheet(
@@ -590,7 +613,7 @@ class _AlertEventCardState extends State<AlertEventCard>
                 );
               },
               icon: const Icon(Icons.notifications_outlined),
-              label: const Text('Gửi thông báo cho người chăm sóc'),
+              label: const Text('Gửi thông báo cho người nhà'),
               style: OutlinedButton.styleFrom(
                 padding: const EdgeInsets.symmetric(vertical: 12),
               ),

@@ -1,4 +1,9 @@
 import 'dart:convert' as convert;
+import 'package:detect_care_caregiver_app/features/home/repository/event_repository.dart';
+import '../../../main.dart';
+import 'package:detect_care_caregiver_app/core/events/app_events.dart';
+import 'package:detect_care_caregiver_app/core/ui/overlay_toast.dart';
+import 'package:detect_care_caregiver_app/features/home/service/event_service.dart';
 import 'package:flutter/material.dart';
 import '../../../core/theme/app_theme.dart';
 import 'package:detect_care_caregiver_app/features/home/models/event_log.dart';
@@ -155,7 +160,7 @@ class ActionLogCard extends StatelessWidget {
               children: [
                 _factCard(
                   icon: Icons.analytics_outlined,
-                  label: 'Confidence',
+                  label: 'Độ tin cậy',
                   value: _percent(data.confidenceScore),
                   color: _getConfidenceColor(data.confidenceScore),
                   fullWidth: true,
@@ -164,7 +169,7 @@ class ActionLogCard extends StatelessWidget {
 
                 _factCard(
                   icon: Icons.fingerprint_outlined,
-                  label: 'Event ID',
+                  label: 'ID sự kiện',
                   value: _shortId(data.eventId),
                   color: Colors.blue.shade600,
                   fullWidth: true,
@@ -174,7 +179,7 @@ class ActionLogCard extends StatelessWidget {
                   const SizedBox(height: 12),
                   _factCard(
                     icon: Icons.schedule_outlined,
-                    label: 'Created',
+                    label: 'Ngày tạo',
                     value: _formatDateTime(data.createdAt),
                     color: Colors.grey.shade600,
                     fullWidth: true,
@@ -188,7 +193,7 @@ class ActionLogCard extends StatelessWidget {
                   child: ElevatedButton.icon(
                     onPressed: () => _showDetails(context),
                     icon: const Icon(Icons.visibility_outlined, size: 18),
-                    label: const Text('View Details'),
+                    label: const Text('Xem chi tiết'),
                     style: ElevatedButton.styleFrom(
                       backgroundColor: statusColor.withValues(alpha: 0.1),
                       foregroundColor: statusColor,
@@ -424,13 +429,20 @@ class ActionLogCard extends StatelessWidget {
     }
   }
 
-  void _showDetails(BuildContext context) {
+  void _showDetails(BuildContext context) async {
     final Color statusColor = AppTheme.getStatusColor(data.status);
     final Color typeColor = _eventTypeColor(data.eventType);
 
-    showModalBottomSheet(
+    final sub = AppEvents.instance.eventsChanged.listen((_) {
+      try {
+        Navigator.of(context, rootNavigator: true).maybePop();
+      } catch (_) {}
+    });
+
+    await showModalBottomSheet(
       context: context,
       isScrollControlled: true,
+      isDismissible: true,
       backgroundColor: Colors.transparent,
       builder: (context) {
         return DraggableScrollableSheet(
@@ -558,7 +570,7 @@ class ActionLogCard extends StatelessWidget {
                           child: ElevatedButton.icon(
                             onPressed: () => _showUpdateModal(context),
                             icon: const Icon(Icons.edit_outlined, size: 18),
-                            label: const Text('Update'),
+                            label: const Text('Đề xuất'),
                             style: ElevatedButton.styleFrom(
                               backgroundColor: Colors.blue.shade600,
                               foregroundColor: Colors.white,
@@ -591,7 +603,7 @@ class ActionLogCard extends StatelessWidget {
                               _showImagesModal(context, eventLog);
                             },
                             icon: const Icon(Icons.image_outlined, size: 18),
-                            label: const Text('View Images'),
+                            label: const Text('Xem ảnh'),
                             style: ElevatedButton.styleFrom(
                               backgroundColor: Colors.grey.shade100,
                               foregroundColor: Colors.grey.shade700,
@@ -616,12 +628,12 @@ class ActionLogCard extends StatelessWidget {
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          _sectionTitle('Event Overview'),
+                          _sectionTitle('Chi tiết sự kiện'),
                           const SizedBox(height: 12),
                           _detailCard([
                             _kvRow(
-                              'Confirmed',
-                              data.confirmStatus ? 'Yes' : 'No',
+                              'Trạng thái xử lý',
+                              data.confirmStatus ? 'Rồi' : 'Chưa',
                               data.confirmStatus
                                   ? Colors.green.shade600
                                   : Colors.grey.shade600,
@@ -631,38 +643,38 @@ class ActionLogCard extends StatelessWidget {
                             ),
 
                             _kvRow(
-                              'Status',
+                              'Trạng thái',
                               data.status,
                               statusColor,
                               Icons.flag_outlined,
                             ),
                             _kvRow(
-                              'Type',
+                              'Kiểu sự kiện',
                               data.eventType,
                               typeColor,
                               Icons.category_outlined,
                             ),
                             _kvRow(
-                              'Confidence',
+                              'Độ tin cậy',
                               _percent(data.confidenceScore),
                               _getConfidenceColor(data.confidenceScore),
                               Icons.analytics_outlined,
                             ),
                             _kvRow(
-                              'Event ID',
+                              'Mã sự kiện',
                               _shortId(data.eventId),
                               Colors.grey.shade600,
                               Icons.fingerprint_outlined,
                             ),
                             _kvRow(
-                              'Detected',
+                              'Thời gian phát hiện',
                               _formatDateTime(data.detectedAt),
                               Colors.grey.shade600,
                               Icons.access_time_outlined,
                             ),
                             if (data.createdAt != null)
                               _kvRow(
-                                'Created',
+                                'Thời gian tạo',
                                 _formatDateTime(data.createdAt),
                                 Colors.grey.shade600,
                                 Icons.schedule_outlined,
@@ -695,6 +707,90 @@ class ActionLogCard extends StatelessWidget {
                       ),
                     ),
                   ),
+
+                  // Confirm toggle
+                  Padding(
+                    padding: const EdgeInsets.fromLTRB(20, 6, 20, 8),
+                    child: StatefulBuilder(
+                      builder: (ctx, setState) {
+                        bool confirmed = (data.confirmStatus as bool?) ?? false;
+                        final initiallyConfirmed = data.confirmStatus == true;
+
+                        Future<void> _toggleConfirm(bool value) async {
+                          if (initiallyConfirmed) return;
+
+                          if (!value) {
+                            return;
+                          }
+
+                          setState(() => confirmed = true);
+                          final messenger = ScaffoldMessenger.of(ctx);
+                          try {
+                            final ds = EventsRemoteDataSource();
+                            await ds.confirmEvent(
+                              eventId: data.eventId,
+                              confirmStatusBool: true,
+                            );
+
+                            messenger.showSnackBar(
+                              SnackBar(
+                                content: const Text(
+                                  'Đã đánh dấu sự kiện là đã xử lý',
+                                ),
+                                backgroundColor: Colors.green.shade600,
+                                behavior: SnackBarBehavior.floating,
+                                duration: const Duration(seconds: 2),
+                              ),
+                            );
+
+                            if (onUpdated != null) {
+                              onUpdated!('confirm', confirmed: true);
+                            }
+                            try {
+                              AppEvents.instance.notifyEventsChanged();
+                            } catch (_) {}
+                          } catch (e) {
+                            setState(() => confirmed = false);
+                            messenger.showSnackBar(
+                              SnackBar(
+                                content: Text(
+                                  'Xử lý thất bại: ${e.toString()}',
+                                ),
+                                backgroundColor: Colors.red.shade600,
+                                behavior: SnackBarBehavior.floating,
+                                duration: const Duration(seconds: 3),
+                              ),
+                            );
+                          }
+                        }
+
+                        return Container(
+                          padding: const EdgeInsets.symmetric(vertical: 8),
+                          child: SwitchListTile(
+                            value: confirmed,
+                            onChanged: initiallyConfirmed
+                                ? null
+                                : (v) async => await _toggleConfirm(v),
+                            title: Text(
+                              'Đánh dấu đã xử lý',
+                              style: TextStyle(
+                                fontWeight: FontWeight.w700,
+                                color: Colors.grey.shade800,
+                              ),
+                            ),
+                            subtitle: Text(
+                              initiallyConfirmed
+                                  ? 'Xác nhận bạn đã xử lý sự kiện này'
+                                  : 'Xác nhận bạn đã xử lý sự kiện này',
+                              style: TextStyle(color: Colors.grey.shade600),
+                            ),
+                            activeColor: Colors.green.shade600,
+                            contentPadding: EdgeInsets.zero,
+                          ),
+                        );
+                      },
+                    ),
+                  ),
                 ],
               ),
             );
@@ -702,6 +798,11 @@ class ActionLogCard extends StatelessWidget {
         );
       },
     );
+
+    // Cancel the subscription when the sheet is closed.
+    try {
+      await sub.cancel();
+    } catch (_) {}
   }
 
   Widget _confirmChip(bool confirmed) {
@@ -824,7 +925,7 @@ class ActionLogCard extends StatelessWidget {
   }
 
   void _showUpdateModal(BuildContext pageContext) {
-    final statusOptions = ['danger', 'warning', 'normal'];
+    final allStatusOptions = ['danger', 'warning', 'normal'];
     final statusLabels = {
       'danger': 'Nguy hiểm',
       'warning': 'Cảnh báo',
@@ -836,20 +937,14 @@ class ActionLogCard extends StatelessWidget {
       'normal': Icons.check_circle_rounded,
     };
 
-    String selectedStatus = data.status.toLowerCase();
-    String note = '';
-    bool? confirmToggle = data.confirmStatus;
+    // Hide the current status from the selectable options.
+    final currentLower = data.status.toLowerCase();
+    final statusOptions = allStatusOptions
+        .where((s) => s != currentLower)
+        .toList();
 
-    bool _mapStatusToConfirm(String s) {
-      switch (s) {
-        case 'danger':
-        case 'warning':
-          return true;
-        case 'normal':
-        default:
-          return false;
-      }
-    }
+    String? selectedStatus;
+    String note = '';
 
     showDialog(
       context: pageContext,
@@ -870,7 +965,6 @@ class ActionLogCard extends StatelessWidget {
               child: Column(
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  // Header
                   Row(
                     children: [
                       Container(
@@ -888,7 +982,7 @@ class ActionLogCard extends StatelessWidget {
                       const SizedBox(width: 12),
                       const Expanded(
                         child: Text(
-                          'Cập nhật sự kiện',
+                          'Đề xuất cập nhật sự kiện',
                           style: TextStyle(
                             fontWeight: FontWeight.w800,
                             fontSize: 20,
@@ -899,26 +993,30 @@ class ActionLogCard extends StatelessWidget {
                   ),
                   const SizedBox(height: 16),
 
-                  // Trạng thái
+                  // Hiển thị trạng thái hiện tại
+                  Text(
+                    'Trạng thái hiện tại: ${data.status.toUpperCase()}',
+                    style: TextStyle(
+                      fontWeight: FontWeight.w600,
+                      color: AppTheme.getStatusColor(data.status),
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+
+                  // Chọn trạng thái đề xuất
                   _ElevatedCard(
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Row(
-                          children: [
-                            const SizedBox(width: 8),
-                            Text(
-                              'Cập nhật trạng thái',
-                              style: TextStyle(
-                                fontWeight: FontWeight.w700,
-                                fontSize: 16,
-                                color: Colors.grey.shade800,
-                              ),
-                            ),
-                          ],
+                        Text(
+                          'Chọn trạng thái đề xuất:',
+                          style: TextStyle(
+                            fontWeight: FontWeight.w700,
+                            fontSize: 16,
+                            color: Colors.grey.shade800,
+                          ),
                         ),
-                        const SizedBox(height: 12),
-
+                        const SizedBox(height: 10),
                         Wrap(
                           spacing: 10,
                           runSpacing: 10,
@@ -948,22 +1046,6 @@ class ActionLogCard extends StatelessWidget {
                                         : Colors.grey.shade300,
                                     width: isSelected ? 2 : 1,
                                   ),
-                                  boxShadow: [
-                                    if (isSelected)
-                                      BoxShadow(
-                                        color: statusColor.withValues(
-                                          alpha: 0.28,
-                                        ),
-                                        blurRadius: 14,
-                                        offset: const Offset(0, 8),
-                                      )
-                                    else
-                                      const BoxShadow(
-                                        color: Color.fromRGBO(0, 0, 0, 0.06),
-                                        blurRadius: 12,
-                                        offset: Offset(0, 6),
-                                      ),
-                                  ],
                                 ),
                                 child: Row(
                                   mainAxisSize: MainAxisSize.min,
@@ -981,7 +1063,6 @@ class ActionLogCard extends StatelessWidget {
                                       style: TextStyle(
                                         fontSize: 12,
                                         fontWeight: FontWeight.w700,
-                                        letterSpacing: 0.4,
                                         color: isSelected
                                             ? Colors.white
                                             : Colors.grey.shade800,
@@ -993,53 +1074,15 @@ class ActionLogCard extends StatelessWidget {
                             );
                           }).toList(),
                         ),
-                        const SizedBox(height: 4),
-                        Text(
-                          'Chọn mức độ phù hợp với tình trạng hiện tại.',
-                          style: TextStyle(
-                            fontSize: 12,
-                            color: Colors.grey.shade600,
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-
-                  const SizedBox(height: 16),
-
-                  // Xác nhận (ưu tiên boolean)
-                  _ElevatedCard(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Row(
-                          children: [
-                            Icon(
-                              Icons.verified_user_outlined,
-                              size: 18,
+                        const SizedBox(height: 6),
+                        if (statusOptions.isEmpty)
+                          Text(
+                            'Không có trạng thái khác để đề xuất.',
+                            style: TextStyle(
+                              fontSize: 12,
                               color: Colors.grey.shade600,
                             ),
-                            const SizedBox(width: 8),
-                            Text(
-                              'Xác nhận sự kiện',
-                              style: TextStyle(
-                                fontWeight: FontWeight.w700,
-                                fontSize: 16,
-                                color: Colors.grey.shade800,
-                              ),
-                            ),
-                          ],
-                        ),
-                        const SizedBox(height: 8),
-                        SwitchListTile(
-                          contentPadding: EdgeInsets.zero,
-                          title: const Text('Đánh dấu đã xử lý'),
-
-                          value:
-                              (confirmToggle ??
-                              _mapStatusToConfirm(selectedStatus)),
-                          onChanged: (v) => setState(() => confirmToggle = v),
-                        ),
+                          ),
                       ],
                     ),
                   ),
@@ -1048,108 +1091,56 @@ class ActionLogCard extends StatelessWidget {
 
                   // Ghi chú
                   _ElevatedCard(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Row(
-                          children: [
-                            Icon(
-                              Icons.note_alt_outlined,
-                              size: 18,
-                              color: Colors.grey.shade600,
-                            ),
-                            const SizedBox(width: 8),
-                            Text(
-                              'Ghi chú',
-                              style: TextStyle(
-                                fontWeight: FontWeight.w700,
-                                fontSize: 16,
-                                color: Colors.grey.shade800,
-                              ),
-                            ),
-                          ],
+                    child: TextField(
+                      onChanged: (v) => note = v,
+                      maxLines: 4,
+                      maxLength: 240,
+                      decoration: InputDecoration(
+                        labelText: 'Lý do đề xuất (bắt buộc)',
+                        border: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(10),
                         ),
-                        const SizedBox(height: 12),
-                        TextField(
-                          onChanged: (v) => note = v,
-                          maxLines: 4,
-                          maxLength: 250,
-                          decoration: InputDecoration(
-                            hintText:
-                                'Thêm ghi chú liên quan đến sự kiện (không bắt buộc)...',
-                            hintStyle: TextStyle(color: Colors.grey.shade500),
-                            prefixIcon: const Icon(Icons.edit_outlined),
-                            counterText: '',
-                            contentPadding: const EdgeInsets.all(12),
-                            filled: true,
-                            fillColor: Colors.white,
-                            border: OutlineInputBorder(
-                              borderRadius: BorderRadius.circular(10),
-                              borderSide: BorderSide(
-                                color: Colors.grey.shade300,
-                              ),
-                            ),
-                            focusedBorder: OutlineInputBorder(
-                              borderRadius: BorderRadius.circular(10),
-                              borderSide: BorderSide(
-                                color: Colors.blue.shade600,
-                              ),
-                            ),
-                          ),
-                        ),
-                        Text(
-                          'Mẹo: mô tả ngắn gọn tình hình thực tế…',
-                          style: TextStyle(
-                            fontSize: 12,
-                            color: Colors.grey.shade600,
-                          ),
-                        ),
-                      ],
+                        counterText: '',
+                      ),
                     ),
                   ),
 
                   const SizedBox(height: 20),
-
-                  // Actions
                   Row(
                     children: [
                       Expanded(
                         child: OutlinedButton(
                           onPressed: () => Navigator.of(dialogCtx).pop(),
-                          style: OutlinedButton.styleFrom(
-                            padding: const EdgeInsets.symmetric(vertical: 14),
-                            side: BorderSide(color: Colors.grey.shade300),
-                            shape: RoundedRectangleBorder(
-                              borderRadius: BorderRadius.circular(10),
-                            ),
-                            foregroundColor: Colors.grey.shade700,
-                          ),
                           child: const Text('Hủy'),
                         ),
                       ),
                       const SizedBox(width: 12),
                       Expanded(
                         child: ElevatedButton.icon(
-                          onPressed: () => _confirmUpdate(
-                            pageContext,
-                            selectedStatus,
-                            note,
-                            confirmToggle,
-                          ),
-                          icon: const Icon(Icons.save_rounded),
-                          label: const Text(
-                            'Lưu thay đổi',
-                            style: TextStyle(fontWeight: FontWeight.w700),
-                          ),
-                          style: ElevatedButton.styleFrom(
-                            padding: const EdgeInsets.symmetric(vertical: 14),
-                            backgroundColor: Colors.blue.shade600,
-                            foregroundColor: Colors.white,
-                            shape: RoundedRectangleBorder(
-                              borderRadius: BorderRadius.circular(10),
-                            ),
-                            elevation: 2,
-                          ),
+                          icon: const Icon(Icons.send_rounded),
+                          label: const Text('Gửi đề xuất'),
+                          onPressed: () {
+                            if (selectedStatus == null) {
+                              ScaffoldMessenger.of(pageContext).showSnackBar(
+                                const SnackBar(
+                                  content: Text(
+                                    'Vui lòng chọn trạng thái đề xuất',
+                                  ),
+                                ),
+                              );
+                              return;
+                            }
+                            if (note.trim().isEmpty) {
+                              ScaffoldMessenger.of(pageContext).showSnackBar(
+                                const SnackBar(
+                                  content: Text('Vui lòng nhập lý do đề xuất'),
+                                ),
+                              );
+                              return;
+                            }
+                            Navigator.of(dialogCtx).pop();
+                            _confirmPropose(pageContext, selectedStatus!, note);
+                          },
                         ),
                       ),
                     ],
@@ -1163,154 +1154,88 @@ class ActionLogCard extends StatelessWidget {
     );
   }
 
-  void _confirmUpdate(
-    BuildContext pageContext,
-    String newStatus,
-    String note,
-    bool? confirmToggle,
-  ) {
+  void _confirmPropose(BuildContext ctx, String newStatus, String note) {
     showDialog(
-      context: pageContext,
+      context: ctx,
       builder: (confirmCtx) => AlertDialog(
-        backgroundColor: Colors.white,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-        title: Row(
-          children: [
-            Container(
-              padding: const EdgeInsets.all(8),
-              decoration: BoxDecoration(
-                color: Colors.orange.shade50,
-                borderRadius: BorderRadius.circular(12),
-              ),
-              child: Icon(
-                Icons.warning_outlined,
-                color: Colors.orange.shade600,
-                size: 24,
-              ),
-            ),
-            const SizedBox(width: 12),
-            const Text(
-              'Xác nhận cập nhật',
-              style: TextStyle(fontWeight: FontWeight.w700),
-            ),
-          ],
-        ),
-        content: const Text(
-          'Hành động này sẽ sửa đổi kết quả ghi nhận từ AI. Tiếp tục?',
-          style: TextStyle(fontSize: 16, height: 1.4),
+        title: const Text('Xác nhận gửi đề xuất'),
+        content: Text(
+          'Đề xuất thay đổi trạng thái từ "${data.status}" sang "$newStatus"?\n'
+          'Khách hàng sẽ xem xét và phê duyệt yêu cầu này.',
         ),
         actions: [
           TextButton(
             onPressed: () => Navigator.of(confirmCtx).pop(),
-            child: Text('Hủy', style: TextStyle(color: Colors.grey.shade600)),
+            child: const Text('Hủy'),
           ),
           ElevatedButton(
             onPressed: () async {
               Navigator.of(confirmCtx).pop();
-              Navigator.of(pageContext).pop();
-              await _performUpdate(pageContext, newStatus, note, confirmToggle);
+              await _performPropose(ctx, newStatus, note);
             },
-            style: ElevatedButton.styleFrom(
-              backgroundColor: Colors.orange.shade600,
-              foregroundColor: Colors.white,
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(8),
-              ),
-            ),
-            child: const Text('Xác nhận'),
+            child: const Text('Gửi đề xuất'),
           ),
         ],
       ),
     );
   }
 
-  Future<void> _performUpdate(
-    BuildContext pageContext,
-    String newStatus, // 'danger' | 'warning' | 'normal'
+  Future<void> _performPropose(
+    BuildContext ctx,
+    String newStatus,
     String note,
-    bool? confirmToggle,
   ) async {
-    final messenger = ScaffoldMessenger.of(pageContext);
+    final navigatorCtx = NavigatorKey.navigatorKey.currentContext;
+    final messenger = navigatorCtx != null
+        ? ScaffoldMessenger.of(navigatorCtx)
+        : ScaffoldMessenger.of(ctx);
+    final repo = EventRepository(EventService.withDefaultClient());
 
-    print(
-      '\n📝 [ActionLog] Starting update process for event ${data.eventId}:',
-    );
-    print('Input parameters:');
-    print('  newStatus: $newStatus');
-    print('  note: ${note.isEmpty ? "(empty)" : note}');
-    print('  confirmToggle: $confirmToggle');
-
-    try {
-      final ds = EventsRemoteDataSource();
-
-      // 1) Cập nhật status/notes (endpoint /events/{id})
-      print('\n🔄 [ActionLog] Step 1: Updating event status and notes');
-      print('  eventId: ${data.eventId}');
-      print('  status: $newStatus');
-      print('  notes: ${note.trim().isEmpty ? '-' : note.trim()}');
-
-      await ds.updateEvent(
-        eventId: data.eventId,
-        status: newStatus,
-        notes: note.trim().isEmpty ? '-' : note.trim(),
-      );
-
-      print('✅ [ActionLog] Status update successful');
-
-      // 2) Gọi confirm:
-      //    - Nếu user có bật/tắt toggle -> ưu tiên boolean 'confirm'
-      //    - Nếu không đụng toggle -> gửi 'confirm_status' (legacy) để server map
-      if (confirmToggle != null) {
-        print('\n🔄 [ActionLog] Calling confirmEvent with toggle:');
-        print('  eventId: ${data.eventId}');
-        print('  confirm: $confirmToggle');
-        print('  notes: ${note.trim().isEmpty ? 'null' : note.trim()}');
-
-        await ds.confirmEvent(
-          eventId: data.eventId,
-          confirm: confirmToggle,
-          notes: note.trim().isEmpty ? null : note.trim(),
-        );
-      } else {
-        print('\n🔄 [ActionLog] Calling confirmEvent with status:');
-        print('  eventId: ${data.eventId}');
-        print('  confirmStatus: $newStatus');
-        print('  notes: ${note.trim().isEmpty ? 'null' : note.trim()}');
-
-        await ds.confirmEvent(
-          eventId: data.eventId,
-          confirmStatus: newStatus, // 'normal' | 'warning' | 'danger'
-          notes: note.trim().isEmpty ? null : note.trim(),
-        );
-      }
-
-      print('\n✅ [ActionLog] Event update completed successfully');
-      print('Summary:');
-      print('  - Updated status to: $newStatus');
-      print(
-        '  - Confirmation type: ${confirmToggle != null ? "toggle=$confirmToggle" : "status=$newStatus"}',
-      );
-      print('  - Notes updated: ${note.trim().isNotEmpty}');
-
+    if (data.eventId.trim().isEmpty) {
       messenger.showSnackBar(
-        SnackBar(
-          content: const Text('Cập nhật sự kiện thành công'),
-          backgroundColor: Colors.green.shade600,
-          behavior: SnackBarBehavior.floating,
-          duration: const Duration(seconds: 2),
+        const SnackBar(
+          content: Text('Không tìm thấy ID sự kiện. Không thể gửi đề xuất.'),
+          backgroundColor: Colors.red,
         ),
       );
-    } catch (e, stack) {
-      print('\n❌ [ActionLog] Event update failed:');
-      print('Error: $e');
-      print('Stack trace:');
-      print(stack);
+      return;
+    }
+
+    try {
+      await repo.proposeEvent(
+        eventId: data.eventId,
+        proposedStatus: newStatus,
+        reason: note,
+        pendingUntil: DateTime.now().add(const Duration(hours: 48)),
+      );
 
       messenger.showSnackBar(
         SnackBar(
-          content: Text('Cập nhật sự kiện thất bại: $e'),
+          content: Text('Đã gửi đề xuất thay đổi sang "${newStatus}"'),
+          backgroundColor: Colors.blue.shade600,
+        ),
+      );
+      try {
+        showOverlayToast('Đã gửi đề xuất thay đổi sang "$newStatus"');
+      } catch (_) {}
+
+      if (onUpdated != null) {
+        try {
+          onUpdated!(newStatus);
+        } catch (_) {}
+      }
+      try {
+        AppEvents.instance.notifyEventsChanged();
+      } catch (_) {}
+    } catch (e) {
+      final raw = e.toString();
+      final cleaned = raw.startsWith('Exception: ')
+          ? raw.replaceFirst('Exception: ', '')
+          : raw;
+      messenger.showSnackBar(
+        SnackBar(
+          content: Text('Gửi đề xuất thất bại: $cleaned'),
           backgroundColor: Colors.red.shade600,
-          behavior: SnackBarBehavior.floating,
         ),
       );
     }
@@ -1524,7 +1449,7 @@ class ActionLogCard extends StatelessWidget {
           ),
           const SizedBox(height: 16),
           Text(
-            'No Images Available',
+            'Không có ảnh',
             style: TextStyle(
               fontSize: 18,
               fontWeight: FontWeight.w600,
@@ -1533,7 +1458,7 @@ class ActionLogCard extends StatelessWidget {
           ),
           const SizedBox(height: 8),
           Text(
-            'No images were captured for this event.',
+            'Chưa có ảnh được ghi lại cho sự kiện này.',
             style: TextStyle(fontSize: 14, color: Colors.grey.shade500),
           ),
         ],

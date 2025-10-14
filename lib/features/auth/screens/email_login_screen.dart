@@ -78,8 +78,8 @@ class _EmailLoginScreenState extends State<EmailLoginScreen>
                     const SizedBox(height: 50),
                     _buildLoginForm(),
                     const SizedBox(height: 40),
-                    _buildBottomActions(),
-                    const SizedBox(height: 30),
+                    // _buildBottomActions(),
+                    // const SizedBox(height: 30),
                   ],
                 ),
               ),
@@ -518,39 +518,39 @@ class _EmailLoginScreenState extends State<EmailLoginScreen>
     );
   }
 
-  Widget _buildBottomActions() {
-    return Column(
-      children: [
-        Row(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Text(
-              'Chưa có tài khoản? ',
-              style: TextStyle(
-                color: const Color(0xFF6B7280),
-                fontSize: 14,
-                fontWeight: FontWeight.w400,
-              ),
-            ),
-            TextButton(
-              onPressed: () {
-                Navigator.push(
-                  context,
-                  MaterialPageRoute(builder: (_) => RegisterCaregiverScreen()),
-                );
-              },
-              child: const Text(
-                'Đăng ký ngay',
-                style: TextStyle(
-                  color: Color(0xFF2E7BF0),
-                  fontSize: 14,
-                  fontWeight: FontWeight.w600,
-                ),
-              ),
-            ),
-          ],
-        ),
-      ],
-    );
-  }
+  // Widget _buildBottomActions() {
+  //   return Column(
+  //     children: [
+  //       Row(
+  //         mainAxisAlignment: MainAxisAlignment.center,
+  //         children: [
+  //           Text(
+  //             'Chưa có tài khoản? ',
+  //             style: TextStyle(
+  //               color: const Color(0xFF6B7280),
+  //               fontSize: 14,
+  //               fontWeight: FontWeight.w400,
+  //             ),
+  //           ),
+  //           TextButton(
+  //             onPressed: () {
+  //               Navigator.push(
+  //                 context,
+  //                 MaterialPageRoute(builder: (_) => RegisterCaregiverScreen()),
+  //               );
+  //             },
+  //             child: const Text(
+  //               'Đăng ký ngay',
+  //               style: TextStyle(
+  //                 color: Color(0xFF2E7BF0),
+  //                 fontSize: 14,
+  //                 fontWeight: FontWeight.w600,
+  //               ),
+  //             ),
+  //           ),
+  //         ],
+  //       ),
+  //     ],
+  //   );
+  // }
 }

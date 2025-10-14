@@ -1,36 +1,23 @@
 import 'package:detect_care_caregiver_app/core/network/api_client.dart';
-import 'package:detect_care_caregiver_app/features/activity_logs/data/activity_log_endpoints.dart';
+import 'dart:convert';
 import 'package:detect_care_caregiver_app/features/activity_logs/models/activity_log.dart';
 import 'package:detect_care_caregiver_app/features/auth/data/auth_storage.dart';
 
 class ActivityLogsRemoteDataSource {
   final ApiClient _api;
-  final ActivityLogEndpoints _ep;
 
-  ActivityLogsRemoteDataSource({
-    ApiClient? api,
-    ActivityLogEndpoints? endpoints,
-  }) : _api = api ?? ApiClient(tokenProvider: AuthStorage.getAccessToken),
-       _ep =
-           endpoints ??
-           ActivityLogEndpoints(
-             ApiClient(tokenProvider: AuthStorage.getAccessToken).base,
-           );
+  ActivityLogsRemoteDataSource({ApiClient? api})
+    : _api = api ?? ApiClient(tokenProvider: AuthStorage.getAccessToken);
 
   Future<List<ActivityLog>> getUserLogs({
     required String userId,
     int? limit,
     int? offset,
+    String? search,
   }) async {
-    final path = _ep.userLogsPath(userId);
+    final path = '/activity-logs';
 
-    final res = await _api.get(
-      path,
-      query: {
-        if (limit != null) 'limit': limit,
-        if (offset != null) 'offset': offset,
-      },
-    );
+    final res = await _api.get(path, query: {'user_id': userId});
 
     if (res.statusCode < 200 || res.statusCode >= 300) {
       throw Exception(
@@ -38,6 +25,19 @@ class ActivityLogsRemoteDataSource {
       );
     }
 
-    return ActivityLog.listFromJson(res.body);
+    try {
+      final decoded = json.decode(res.body);
+      if (decoded is Map &&
+          decoded.containsKey('data') &&
+          decoded['data'] is List) {
+        final listJson = decoded['data'];
+        final jsonStr = json.encode(listJson);
+        return ActivityLog.listFromJson(jsonStr);
+      }
+
+      return ActivityLog.listFromJson(res.body);
+    } catch (e) {
+      throw Exception('Failed to parse activity logs: $e');
+    }
   }
 }
