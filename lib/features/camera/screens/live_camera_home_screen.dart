@@ -529,7 +529,7 @@ class _LiveCameraHomeScreenState extends State<LiveCameraHomeScreen>
                 child: _state.loading
                     ? const LoadingView()
                     : _state.cameras.isEmpty
-                    ? EmptyView(onAddCamera: _addCamera)
+                    ? const EmptyView()
                     : filteredCameras.isEmpty
                     ? NoSearchResultsView(
                         searchQuery: _state.search,

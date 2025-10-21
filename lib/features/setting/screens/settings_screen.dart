@@ -2,11 +2,11 @@ import 'package:detect_care_caregiver_app/features/activity_logs/screens/activit
 import 'package:detect_care_caregiver_app/features/profile/screens/profile_screen.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import 'package:detect_care_caregiver_app/core/theme/theme_provider.dart';
 
 import 'package:detect_care_caregiver_app/features/patient/screens/patient_profile_screen.dart';
 import 'package:detect_care_caregiver_app/features/shared_permissions/screens/caregiver_settings_screen.dart';
 
-import 'package:detect_care_caregiver_app/features/auth/providers/auth_provider.dart';
 import '../widgets/settings_card.dart';
 import '../widgets/settings_divider.dart';
 import '../widgets/settings_item.dart';
@@ -139,7 +139,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
     children: [
       SettingsItem(
         icon: Icons.warning_outlined,
-        title: 'Thiết lập của bạn',
+        title: 'Quyền được chia sẻ',
         onTap: () {
           Navigator.of(context).push(
             MaterialPageRoute(builder: (_) => const CaregiverSettingsScreen()),
@@ -176,8 +176,11 @@ class _SettingsScreenState extends State<SettingsScreen> {
       SettingsSwitchItem(
         icon: Icons.dark_mode_outlined,
         title: 'Chế độ ban đêm',
-        value: isDarkMode,
-        onChanged: (v) => setState(() => isDarkMode = v),
+        value: Provider.of<ThemeProvider>(context).isDark,
+        onChanged: (v) async {
+          final tp = Provider.of<ThemeProvider>(context, listen: false);
+          await tp.setDark(v);
+        },
       ),
       const SettingsDivider(),
       SettingsItem(

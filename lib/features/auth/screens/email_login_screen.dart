@@ -230,30 +230,35 @@ class _EmailLoginScreenState extends State<EmailLoginScreen>
                 border: Border.all(color: const Color(0xFFD1D5DB), width: 1.5),
                 color: const Color(0xFFFAFBFC),
               ),
-              child: TextFormField(
-                controller: emailController,
-                keyboardType: TextInputType.emailAddress,
-                validator: Validators.validateEmail,
-                style: const TextStyle(
-                  color: Color(0xFF374151),
-                  fontSize: 16,
-                  fontWeight: FontWeight.w400,
-                ),
-                decoration: InputDecoration(
-                  hintText: 'Nhập email của bạn',
-                  hintStyle: TextStyle(
-                    color: const Color(0xFF9CA3AF),
-                    fontSize: 15,
+              child: ClipRRect(
+                borderRadius: BorderRadius.circular(12),
+                child: TextFormField(
+                  controller: emailController,
+                  keyboardType: TextInputType.emailAddress,
+                  validator: Validators.validateEmail,
+                  style: const TextStyle(
+                    color: Color(0xFF374151),
+                    fontSize: 16,
                     fontWeight: FontWeight.w400,
                   ),
-                  border: InputBorder.none,
-                  contentPadding: const EdgeInsets.all(16),
-                  prefixIcon: Container(
-                    padding: const EdgeInsets.all(16),
-                    child: const Icon(
-                      Icons.email_outlined,
-                      color: Color(0xFF2E7BF0),
-                      size: 20,
+                  decoration: InputDecoration(
+                    hintText: 'Nhập email của bạn',
+                    hintStyle: TextStyle(
+                      color: const Color(0xFF9CA3AF),
+                      fontSize: 15,
+                      fontWeight: FontWeight.w400,
+                    ),
+                    border: InputBorder.none,
+                    enabledBorder: InputBorder.none,
+                    focusedBorder: InputBorder.none,
+                    contentPadding: const EdgeInsets.all(16),
+                    prefixIcon: Container(
+                      padding: const EdgeInsets.all(16),
+                      child: const Icon(
+                        Icons.email_outlined,
+                        color: Color(0xFF2E7BF0),
+                        size: 20,
+                      ),
                     ),
                   ),
                 ),
@@ -278,44 +283,49 @@ class _EmailLoginScreenState extends State<EmailLoginScreen>
                 border: Border.all(color: const Color(0xFFD1D5DB), width: 1.5),
                 color: const Color(0xFFFAFBFC),
               ),
-              child: TextFormField(
-                controller: passwordController,
-                obscureText: _obscurePassword,
-                validator: Validators.validatePassword,
-                style: const TextStyle(
-                  color: Color(0xFF374151),
-                  fontSize: 16,
-                  fontWeight: FontWeight.w400,
-                ),
-                decoration: InputDecoration(
-                  hintText: 'Nhập mật khẩu của bạn',
-                  hintStyle: TextStyle(
-                    color: const Color(0xFF9CA3AF),
-                    fontSize: 15,
+              child: ClipRRect(
+                borderRadius: BorderRadius.circular(12),
+                child: TextFormField(
+                  controller: passwordController,
+                  obscureText: _obscurePassword,
+                  validator: Validators.validatePassword,
+                  style: const TextStyle(
+                    color: Color(0xFF374151),
+                    fontSize: 16,
                     fontWeight: FontWeight.w400,
                   ),
-                  border: InputBorder.none,
-                  contentPadding: const EdgeInsets.all(16),
-                  prefixIcon: Container(
-                    padding: const EdgeInsets.all(16),
-                    child: const Icon(
-                      Icons.lock_outline,
-                      color: Color(0xFF2E7BF0),
-                      size: 20,
+                  decoration: InputDecoration(
+                    hintText: 'Nhập mật khẩu của bạn',
+                    hintStyle: TextStyle(
+                      color: const Color(0xFF9CA3AF),
+                      fontSize: 15,
+                      fontWeight: FontWeight.w400,
                     ),
-                  ),
-                  suffixIcon: IconButton(
-                    icon: Icon(
-                      _obscurePassword
-                          ? Icons.visibility_outlined
-                          : Icons.visibility_off_outlined,
-                      color: const Color(0xFF6B7280),
+                    border: InputBorder.none,
+                    enabledBorder: InputBorder.none,
+                    focusedBorder: InputBorder.none,
+                    contentPadding: const EdgeInsets.all(16),
+                    prefixIcon: Container(
+                      padding: const EdgeInsets.all(16),
+                      child: const Icon(
+                        Icons.lock_outline,
+                        color: Color(0xFF2E7BF0),
+                        size: 20,
+                      ),
                     ),
-                    onPressed: () {
-                      setState(() {
-                        _obscurePassword = !_obscurePassword;
-                      });
-                    },
+                    suffixIcon: IconButton(
+                      icon: Icon(
+                        _obscurePassword
+                            ? Icons.visibility_outlined
+                            : Icons.visibility_off_outlined,
+                        color: const Color(0xFF6B7280),
+                      ),
+                      onPressed: () {
+                        setState(() {
+                          _obscurePassword = !_obscurePassword;
+                        });
+                      },
+                    ),
                   ),
                 ),
               ),
@@ -475,7 +485,7 @@ class _EmailLoginScreenState extends State<EmailLoginScreen>
 
             // Google Login Button
             Container(
-              height: 50,
+              height: 60,
               decoration: BoxDecoration(
                 borderRadius: BorderRadius.circular(12),
                 border: Border.all(color: const Color(0xFFD1D5DB), width: 1),
@@ -492,6 +502,8 @@ class _EmailLoginScreenState extends State<EmailLoginScreen>
                   backgroundColor: Colors.white,
                   foregroundColor: const Color(0xFF374151),
                   shadowColor: Colors.transparent,
+                  padding: const EdgeInsets.symmetric(horizontal: 12),
+                  minimumSize: const Size.fromHeight(60),
                   shape: RoundedRectangleBorder(
                     borderRadius: BorderRadius.circular(12),
                   ),

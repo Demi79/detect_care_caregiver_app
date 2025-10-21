@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'dart:developer' as dev;
 
 import 'package:detect_care_caregiver_app/core/network/api_client.dart';
 import 'package:detect_care_caregiver_app/features/auth/data/auth_storage.dart';
@@ -68,12 +69,44 @@ class EmergencyContactsRemoteDataSource {
     if (res.statusCode < 200 || res.statusCode >= 300) {
       throw Exception('List contacts failed: ${res.statusCode} ${res.body}');
     }
-    final raw = json.decode(res.body);
-    if (raw is! List) throw Exception('Unexpected response: $raw');
-    return raw
-        .cast<Map<String, dynamic>>()
-        .map<EmergencyContactDto>(EmergencyContactDto.fromJson)
-        .toList();
+
+    dynamic extracted;
+    try {
+      extracted = _api.extractDataFromResponse(res);
+    } catch (_) {
+      // ignore and fallback to raw decode
+    }
+
+    final raw = extracted ?? json.decode(res.body);
+
+    dev.log('[EmergencyContacts] list response parsed: ${raw.runtimeType}');
+
+    if (raw is List) {
+      return raw
+          .cast<Map<String, dynamic>>()
+          .map<EmergencyContactDto>(EmergencyContactDto.fromJson)
+          .toList();
+    }
+
+    if (raw is Map && raw['data'] is List) {
+      return (raw['data'] as List)
+          .cast<Map<String, dynamic>>()
+          .map<EmergencyContactDto>(EmergencyContactDto.fromJson)
+          .toList();
+    }
+
+    if (raw is Map) {
+      for (final v in raw.values) {
+        if (v is List) {
+          return v
+              .cast<Map<String, dynamic>>()
+              .map<EmergencyContactDto>(EmergencyContactDto.fromJson)
+              .toList();
+        }
+      }
+    }
+
+    throw Exception('Unexpected response shape when listing contacts: $raw');
   }
 
   Future<EmergencyContactDto> create(

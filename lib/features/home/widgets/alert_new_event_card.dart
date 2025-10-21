@@ -3,6 +3,7 @@ import 'package:detect_care_caregiver_app/features/fcm/widgets/fcm_quick_send_sh
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
+import 'package:detect_care_caregiver_app/features/events/data/events_remote_data_source.dart';
 
 class AlertEventCard extends StatefulWidget {
   final String eventId;
@@ -53,6 +54,8 @@ class _AlertEventCardState extends State<AlertEventCard>
   late Animation<double> _scaleAnimation;
 
   bool _isExpanded = false;
+  bool _isConfirming = false;
+  bool _isConfirmed = false;
 
   @override
   void initState() {
@@ -148,10 +151,38 @@ class _AlertEventCardState extends State<AlertEventCard>
     widget.onEmergencyCall?.call();
   }
 
-  void _handleMarkAsHandled() {
+  Future<void> _handleMarkAsHandled() async {
+    if (_isConfirming || _isConfirmed) return;
+
     HapticFeedback.selectionClick();
-    _pulseController.stop();
-    widget.onMarkHandled?.call();
+    setState(() => _isConfirming = true);
+
+    final ds = EventsRemoteDataSource();
+    try {
+      await ds.confirmEvent(
+        eventId: widget.eventId,
+        confirm: true,
+        confirmStatusBool: true,
+      );
+
+      _pulseController.stop();
+      setState(() {
+        _isConfirming = false;
+        _isConfirmed = true;
+      });
+
+      widget.onMarkHandled?.call();
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Sự kiện đã được đánh dấu là đã xử lý')),
+      );
+    } catch (e, st) {
+      setState(() => _isConfirming = false);
+      debugPrint('Failed to confirm event ${widget.eventId}: $e\n$st');
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Không thể cập nhật trạng thái: $e')),
+      );
+    }
   }
 
   @override
@@ -233,7 +264,7 @@ class _AlertEventCardState extends State<AlertEventCard>
 
   Widget _buildHeader() {
     return Container(
-      padding: const EdgeInsets.all(16),
+      padding: const EdgeInsets.fromLTRB(16, 24, 16, 16),
       decoration: BoxDecoration(
         color: _getSeverityColor().withValues(alpha: 0.08),
         borderRadius: const BorderRadius.vertical(top: Radius.circular(16)),
@@ -244,99 +275,134 @@ class _AlertEventCardState extends State<AlertEventCard>
           ),
         ),
       ),
-      child: Row(
+      child: Stack(
+        clipBehavior: Clip.none,
         children: [
-          Container(
-            padding: const EdgeInsets.all(8),
-            decoration: BoxDecoration(
-              color: _getSeverityColor(),
-              shape: BoxShape.circle,
-            ),
-            child: Icon(_getEventIcon(), color: Colors.white, size: 20),
-          ),
-          const SizedBox(width: 12),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Wrap(
-                  crossAxisAlignment: WrapCrossAlignment.center,
-                  spacing: 8,
-                  runSpacing: 4,
+          Row(
+            children: [
+              Container(
+                padding: const EdgeInsets.all(8),
+                decoration: BoxDecoration(
+                  color: _getSeverityColor(),
+                  shape: BoxShape.circle,
+                ),
+                child: Icon(_getEventIcon(), color: Colors.white, size: 20),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text(
-                      widget.eventType.toUpperCase(),
-                      style: TextStyle(
-                        fontSize: 14,
-                        fontWeight: FontWeight.w700,
-                        color: _getSeverityColor(),
-                        letterSpacing: .5,
-                      ),
+                    Wrap(
+                      crossAxisAlignment: WrapCrossAlignment.center,
+                      spacing: 8,
+                      runSpacing: 4,
+                      children: [
+                        Text(
+                          widget.eventType.toUpperCase(),
+                          style: TextStyle(
+                            fontSize: 14,
+                            fontWeight: FontWeight.w700,
+                            color: _getSeverityColor(),
+                            letterSpacing: .5,
+                          ),
+                        ),
+                        Container(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 8,
+                            vertical: 2,
+                          ),
+                          decoration: BoxDecoration(
+                            color: _getSeverityColor(),
+                            borderRadius: BorderRadius.circular(8),
+                          ),
+                          child: Text(
+                            _severityText(),
+                            style: const TextStyle(
+                              fontSize: 10,
+                              fontWeight: FontWeight.w700,
+                              color: Colors.white,
+                            ),
+                          ),
+                        ),
+                      ],
                     ),
+                    const SizedBox(height: 4),
+                    if (widget.patientName?.trim().isNotEmpty == true)
+                      Text(
+                        widget.patientName!,
+                        overflow: TextOverflow.ellipsis,
+                        style: const TextStyle(
+                          fontSize: 16,
+                          fontWeight: FontWeight.w600,
+                          color: Color(0xFF2D3748),
+                        ),
+                      ),
+                  ],
+                ),
+              ),
+              const SizedBox(width: 8),
+              Column(
+                crossAxisAlignment: CrossAxisAlignment.end,
+                children: [
+                  if (widget.isHandled)
                     Container(
                       padding: const EdgeInsets.symmetric(
                         horizontal: 8,
-                        vertical: 2,
+                        vertical: 4,
                       ),
                       decoration: BoxDecoration(
-                        color: _getSeverityColor(),
-                        borderRadius: BorderRadius.circular(8),
+                        color: const Color(0xFF48BB78),
+                        borderRadius: BorderRadius.circular(12),
                       ),
-                      child: Text(
-                        _severityText(),
-                        style: const TextStyle(
+                      child: const Text(
+                        'ĐÃ XỬ LÝ',
+                        style: TextStyle(
                           fontSize: 10,
-                          fontWeight: FontWeight.w700,
+                          fontWeight: FontWeight.bold,
                           color: Colors.white,
                         ),
                       ),
                     ),
-                  ],
-                ),
-                const SizedBox(height: 4),
-                if (widget.patientName?.trim().isNotEmpty == true)
+                  const SizedBox(height: 4),
                   Text(
-                    widget.patientName!,
-                    overflow: TextOverflow.ellipsis,
+                    _getTimeAgo(),
                     style: const TextStyle(
-                      fontSize: 16,
-                      fontWeight: FontWeight.w600,
-                      color: Color(0xFF2D3748),
+                      fontSize: 12,
+                      color: Color(0xFF718096),
                     ),
                   ),
-              ],
-            ),
-          ),
-          const SizedBox(width: 8),
-          Column(
-            crossAxisAlignment: CrossAxisAlignment.end,
-            children: [
-              if (widget.isHandled)
-                Container(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 8,
-                    vertical: 4,
-                  ),
-                  decoration: BoxDecoration(
-                    color: const Color(0xFF48BB78),
-                    borderRadius: BorderRadius.circular(12),
-                  ),
-                  child: const Text(
-                    'ĐÃ XỬ LÝ',
-                    style: TextStyle(
-                      fontSize: 10,
-                      fontWeight: FontWeight.bold,
-                      color: Colors.white,
-                    ),
-                  ),
-                ),
-              const SizedBox(height: 4),
-              Text(
-                _getTimeAgo(),
-                style: const TextStyle(fontSize: 12, color: Color(0xFF718096)),
+                ],
               ),
             ],
           ),
+
+          if (widget.onDismiss != null)
+            Positioned(
+              top: -30,
+              right: -20,
+              child: Material(
+                color: Colors.transparent,
+                child: IconButton(
+                  onPressed: widget.onDismiss,
+                  icon: const Icon(
+                    Icons.close,
+                    size: 20,
+                    color: Colors.black54,
+                  ),
+                  padding: const EdgeInsets.all(6),
+                  constraints: const BoxConstraints(
+                    minWidth: 32,
+                    minHeight: 32,
+                  ),
+                  style: IconButton.styleFrom(
+                    backgroundColor: Colors.white,
+                    elevation: 1,
+                    shadowColor: Colors.black26,
+                  ),
+                ),
+              ),
+            ),
         ],
       ),
     );
@@ -540,56 +606,28 @@ class _AlertEventCardState extends State<AlertEventCard>
       ),
       child: Column(
         children: [
-          // Hàng 2 nút chính
-          Row(
-            children: [
-              Expanded(
-                child: ElevatedButton.icon(
-                  onPressed: _handleEmergencyCall,
-                  icon: const Icon(Icons.phone, color: Colors.white),
-                  label: Text(
-                    'GỌI KHẨN CẤP',
-                    style: const TextStyle(
-                      fontWeight: FontWeight.bold,
-                      color: Colors.white,
-                    ).copyWith(fontSize: 13),
-                  ),
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: const Color(0xFFE53E3E),
-                    foregroundColor: Colors.white,
-                    padding: const EdgeInsets.symmetric(vertical: 12),
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(8),
-                    ),
-                    elevation: 2,
-                  ),
-                ),
+          SizedBox(
+            width: double.infinity,
+            child: ElevatedButton.icon(
+              onPressed: _handleEmergencyCall,
+              icon: const Icon(Icons.phone, color: Colors.white),
+              label: Text(
+                'GỌI KHẨN CẤP',
+                style: const TextStyle(
+                  fontWeight: FontWeight.bold,
+                  color: Colors.white,
+                ).copyWith(fontSize: 13),
               ),
-              const SizedBox(width: 12),
-              Expanded(
-                child: ElevatedButton.icon(
-                  onPressed: _handleMarkAsHandled,
-                  icon: const Icon(Icons.check),
-                  label: Text(
-                    'ĐÃ XỬ LÝ',
-                    style: const TextStyle(
-                      fontWeight: FontWeight.bold,
-                      color: Colors.white,
-                    ).copyWith(fontSize: 13),
-                  ),
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: const Color(0xFF48BB78),
-                    foregroundColor: Colors.white,
-                    padding: const EdgeInsets.symmetric(vertical: 12),
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(10),
-                    ),
-                    elevation: 3,
-                    minimumSize: const Size.fromHeight(48),
-                  ),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: const Color(0xFFE53E3E),
+                foregroundColor: Colors.white,
+                padding: const EdgeInsets.symmetric(vertical: 12),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(8),
                 ),
+                elevation: 2,
               ),
-            ],
+            ),
           ),
 
           const SizedBox(height: 8),
@@ -622,14 +660,14 @@ class _AlertEventCardState extends State<AlertEventCard>
 
           const SizedBox(height: 8),
 
-          // Hàng nút phụ: Chi tiết / Bỏ qua
+          // Hàng nút phụ: Chi tiết / Đã xử lý
           Row(
             children: [
               Expanded(
                 child: TextButton.icon(
-                  onPressed: widget.onViewDetails,
+                  onPressed: () => _showImagesModal(context),
                   icon: const Icon(Icons.info_outline),
-                  label: const Text('Chi tiết'),
+                  label: const Text('Xem ảnh'),
                   style: TextButton.styleFrom(
                     foregroundColor: _getSeverityColor(),
                   ),
@@ -637,17 +675,76 @@ class _AlertEventCardState extends State<AlertEventCard>
               ),
               Expanded(
                 child: TextButton.icon(
-                  onPressed: widget.onDismiss,
-                  icon: const Icon(Icons.close),
-                  label: const Text('Bỏ qua'),
+                  onPressed: _handleMarkAsHandled,
+                  icon: const Icon(Icons.check),
+                  label: const Text('ĐÃ XỬ LÝ'),
                   style: TextButton.styleFrom(
-                    foregroundColor: const Color(0xFF718096),
+                    foregroundColor: const Color(0xFF48BB78),
                   ),
                 ),
               ),
             ],
           ),
         ],
+      ),
+    );
+  }
+
+  void _showImagesModal(BuildContext context) {
+    showDialog(
+      context: context,
+      builder: (ctx) => Dialog(
+        backgroundColor: Colors.white,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        child: Container(
+          width: MediaQuery.of(ctx).size.width * 0.9,
+          height: MediaQuery.of(ctx).size.height * 0.6,
+          padding: const EdgeInsets.all(20),
+          child: Column(
+            children: [
+              Row(
+                children: [
+                  const Expanded(
+                    child: Text(
+                      'Ảnh sự kiện',
+                      style: TextStyle(
+                        fontWeight: FontWeight.w700,
+                        fontSize: 18,
+                      ),
+                    ),
+                  ),
+                  IconButton(
+                    onPressed: () => Navigator.of(ctx).pop(),
+                    icon: const Icon(Icons.close),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 12),
+              Expanded(
+                child: widget.imageUrl != null
+                    ? ClipRRect(
+                        borderRadius: BorderRadius.circular(12),
+                        child: Image.network(
+                          widget.imageUrl!,
+                          fit: BoxFit.contain,
+                          errorBuilder: (c, e, s) => Center(
+                            child: Icon(
+                              Icons.broken_image_outlined,
+                              color: Colors.grey.shade400,
+                            ),
+                          ),
+                        ),
+                      )
+                    : Center(
+                        child: Text(
+                          'Không có ảnh cho sự kiện này.',
+                          style: TextStyle(color: Colors.grey.shade600),
+                        ),
+                      ),
+              ),
+            ],
+          ),
+        ),
       ),
     );
   }

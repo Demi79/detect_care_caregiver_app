@@ -1,7 +1,6 @@
 import 'package:intl/intl.dart';
 
 class AppDateUtils {
-.
   static String formatDobForDisplay(String isoOrRaw) {
     if (isoOrRaw.isEmpty) return '';
 

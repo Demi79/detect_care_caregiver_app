@@ -80,10 +80,9 @@ class _PhoneLoginScreenState extends State<PhoneLoginScreen>
 
                     const SizedBox(height: 40),
 
-                    // Bottom Actions
-                    _buildBottomActions(),
-
-                    const SizedBox(height: 30),
+                    // // Bottom Actions
+                    // _buildBottomActions(),
+                    // const SizedBox(height: 30),
                   ],
                 ),
               ),
@@ -263,30 +262,35 @@ class _PhoneLoginScreenState extends State<PhoneLoginScreen>
                 border: Border.all(color: const Color(0xFFD1D5DB), width: 1.5),
                 color: const Color(0xFFFAFBFC),
               ),
-              child: TextFormField(
-                controller: phoneController,
-                keyboardType: TextInputType.phone,
-                validator: Validators.validatePhone,
-                style: const TextStyle(
-                  color: Color(0xFF374151),
-                  fontSize: 16,
-                  fontWeight: FontWeight.w400,
-                ),
-                decoration: InputDecoration(
-                  hintText: 'Nhập số điện thoại của bạn',
-                  hintStyle: TextStyle(
-                    color: const Color(0xFF9CA3AF),
-                    fontSize: 15,
+              child: ClipRRect(
+                borderRadius: BorderRadius.circular(12),
+                child: TextFormField(
+                  controller: phoneController,
+                  keyboardType: TextInputType.phone,
+                  validator: Validators.validatePhone,
+                  style: const TextStyle(
+                    color: Color(0xFF374151),
+                    fontSize: 16,
                     fontWeight: FontWeight.w400,
                   ),
-                  border: InputBorder.none,
-                  contentPadding: const EdgeInsets.all(16),
-                  prefixIcon: Container(
-                    padding: const EdgeInsets.all(16),
-                    child: const Icon(
-                      Icons.phone,
-                      color: Color(0xFF2E7BF0),
-                      size: 20,
+                  decoration: InputDecoration(
+                    hintText: 'Nhập số điện thoại của bạn',
+                    hintStyle: TextStyle(
+                      color: const Color(0xFF9CA3AF),
+                      fontSize: 15,
+                      fontWeight: FontWeight.w400,
+                    ),
+                    border: InputBorder.none,
+                    enabledBorder: InputBorder.none,
+                    focusedBorder: InputBorder.none,
+                    contentPadding: const EdgeInsets.all(16),
+                    prefixIcon: Container(
+                      padding: const EdgeInsets.all(16),
+                      child: const Icon(
+                        Icons.phone,
+                        color: Color(0xFF2E7BF0),
+                        size: 20,
+                      ),
                     ),
                   ),
                 ),
@@ -432,7 +436,7 @@ class _PhoneLoginScreenState extends State<PhoneLoginScreen>
 
             // Google Login Button
             Container(
-              height: 50,
+              height: 60,
               decoration: BoxDecoration(
                 borderRadius: BorderRadius.circular(12),
                 border: Border.all(color: const Color(0xFFD1D5DB), width: 1),
@@ -449,6 +453,8 @@ class _PhoneLoginScreenState extends State<PhoneLoginScreen>
                   backgroundColor: Colors.white,
                   foregroundColor: const Color(0xFF374151),
                   shadowColor: Colors.transparent,
+                  padding: const EdgeInsets.symmetric(horizontal: 12),
+                  minimumSize: const Size.fromHeight(60),
                   shape: RoundedRectangleBorder(
                     borderRadius: BorderRadius.circular(12),
                   ),
@@ -516,70 +522,70 @@ class _PhoneLoginScreenState extends State<PhoneLoginScreen>
     );
   }
 
-  Widget _buildBottomActions() {
-    return Column(
-      children: [
-        Row(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Text(
-              'Chưa có tài khoản? ',
-              style: TextStyle(
-                color: const Color(0xFF6B7280),
-                fontSize: 14,
-                fontWeight: FontWeight.w400,
-              ),
-            ),
-            TextButton(
-              onPressed: () {
-                Navigator.push(
-                  context,
-                  MaterialPageRoute(builder: (_) => RegisterCaregiverScreen()),
-                );
-              },
-              child: const Text(
-                'Đăng ký ngay',
-                style: TextStyle(
-                  color: Color(0xFF2E7BF0),
-                  fontSize: 14,
-                  fontWeight: FontWeight.w600,
-                ),
-              ),
-            ),
-          ],
-        ),
+  // Widget _buildBottomActions() {
+  //   return Column(
+  //     children: [
+  //       Row(
+  //         mainAxisAlignment: MainAxisAlignment.center,
+  //         children: [
+  //           Text(
+  //             'Chưa có tài khoản? ',
+  //             style: TextStyle(
+  //               color: const Color(0xFF6B7280),
+  //               fontSize: 14,
+  //               fontWeight: FontWeight.w400,
+  //             ),
+  //           ),
+  //           TextButton(
+  //             onPressed: () {
+  //               Navigator.push(
+  //                 context,
+  //                 MaterialPageRoute(builder: (_) => RegisterCaregiverScreen()),
+  //               );
+  //             },
+  //             child: const Text(
+  //               'Đăng ký ngay',
+  //               style: TextStyle(
+  //                 color: Color(0xFF2E7BF0),
+  //                 fontSize: 14,
+  //                 fontWeight: FontWeight.w600,
+  //               ),
+  //             ),
+  //           ),
+  //         ],
+  //       ),
 
-        const SizedBox(height: 24),
+  //       const SizedBox(height: 24),
 
-        // Security note
-        // Container(
-        //   padding: const EdgeInsets.all(16),
-        //   decoration: BoxDecoration(
-        //     color: const Color(0xFF10B981).withOpacity(0.05),
-        //     borderRadius: BorderRadius.circular(12),
-        //     border: Border.all(
-        //       color: const Color(0xFF10B981).withOpacity(0.1),
-        //       width: 1,
-        //     ),
-        //   ),
-        //   child: Row(
-        //     children: [
-        //       const Icon(Icons.shield, color: Color(0xFF10B981), size: 16),
-        //       const SizedBox(width: 8),
-        //       Expanded(
-        //         child: Text(
-        //           'Thông tin của bạn được bảo vệ bởi mã hóa SSL 256-bit',
-        //           style: TextStyle(
-        //             color: const Color(0xFF065F46),
-        //             fontSize: 12,
-        //             fontWeight: FontWeight.w400,
-        //           ),
-        //         ),
-        //       ),
-        //     ],
-        //   ),
-        // ),
-      ],
-    );
-  }
+  //       // Security note
+  //       // Container(
+  //       //   padding: const EdgeInsets.all(16),
+  //       //   decoration: BoxDecoration(
+  //       //     color: const Color(0xFF10B981).withOpacity(0.05),
+  //       //     borderRadius: BorderRadius.circular(12),
+  //       //     border: Border.all(
+  //       //       color: const Color(0xFF10B981).withOpacity(0.1),
+  //       //       width: 1,
+  //       //     ),
+  //       //   ),
+  //       //   child: Row(
+  //       //     children: [
+  //       //       const Icon(Icons.shield, color: Color(0xFF10B981), size: 16),
+  //       //       const SizedBox(width: 8),
+  //       //       Expanded(
+  //       //         child: Text(
+  //       //           'Thông tin của bạn được bảo vệ bởi mã hóa SSL 256-bit',
+  //       //           style: TextStyle(
+  //       //             color: const Color(0xFF065F46),
+  //       //             fontSize: 12,
+  //       //             fontWeight: FontWeight.w400,
+  //       //           ),
+  //       //         ),
+  //       //       ),
+  //       //     ],
+  //       //   ),
+  //       // ),
+  //     ],
+  //   );
+  // }
 }
