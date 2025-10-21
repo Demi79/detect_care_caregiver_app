@@ -395,8 +395,12 @@ class ActionLogCard extends StatelessWidget {
     if (dt == null) return '';
     final local = dt.toLocal();
     String two(int n) => n.toString().padLeft(2, '0');
-    return '${local.year}-${two(local.month)}-${two(local.day)} '
-        '${two(local.hour)}:${two(local.minute)}';
+    final hh = two(local.hour);
+    final mm = two(local.minute);
+    final dd = two(local.day);
+    final MM = two(local.month);
+    final yy = (local.year % 100).toString().padLeft(2, '0');
+    return '$hh:$mm $dd/$MM/$yy';
   }
 
   String _titleFromType(String t) {
@@ -649,7 +653,7 @@ class ActionLogCard extends StatelessWidget {
                               Icons.flag_outlined,
                             ),
                             _kvRow(
-                              'Kiểu sự kiện',
+                              'Sự kiện',
                               data.eventType,
                               typeColor,
                               Icons.category_outlined,
@@ -680,6 +684,173 @@ class ActionLogCard extends StatelessWidget {
                                 Icons.schedule_outlined,
                               ),
                           ]),
+
+                          Builder(
+                            builder: (ctx) {
+                              final eventForImages = EventLog(
+                                eventId: data.eventId,
+                                eventType: data.eventType,
+                                detectedAt: data.detectedAt,
+                                eventDescription: data.eventDescription,
+                                confidenceScore: data.confidenceScore,
+                                status: data.status,
+                                detectionData: data.detectionData,
+                                aiAnalysisResult: data.aiAnalysisResult,
+                                contextData: data.contextData,
+                                boundingBoxes: data.boundingBoxes,
+                                confirmStatus: data.confirmStatus,
+                                createdAt: data.createdAt,
+                              );
+
+                              return FutureBuilder<List<String>>(
+                                future: loadEventImageUrls(eventForImages),
+                                builder: (context, snap) {
+                                  if (snap.connectionState !=
+                                      ConnectionState.done) {
+                                    return const SizedBox();
+                                  }
+                                  if (snap.hasError) {
+                                    return Padding(
+                                      padding: const EdgeInsets.only(top: 12.0),
+                                      child: Text(
+                                        'Lỗi tải ảnh: ${snap.error}',
+                                        style: TextStyle(
+                                          color: Colors.red.shade600,
+                                        ),
+                                      ),
+                                    );
+                                  }
+                                  final urls = snap.data ?? const [];
+                                  if (urls.isEmpty) {
+                                    return const SizedBox();
+                                  }
+
+                                  return Column(
+                                    crossAxisAlignment:
+                                        CrossAxisAlignment.start,
+                                    children: [
+                                      const SizedBox(height: 24),
+                                      _sectionTitle('Ảnh sự kiện'),
+                                      const SizedBox(height: 12),
+                                      SizedBox(
+                                        height: 220,
+                                        child: GridView.builder(
+                                          physics:
+                                              const BouncingScrollPhysics(),
+                                          gridDelegate:
+                                              const SliverGridDelegateWithFixedCrossAxisCount(
+                                                crossAxisCount: 2,
+                                                crossAxisSpacing: 12,
+                                                mainAxisSpacing: 12,
+                                                childAspectRatio: 1.3,
+                                              ),
+                                          itemCount: urls.length,
+                                          itemBuilder: (context, index) {
+                                            final url = urls[index];
+                                            return GestureDetector(
+                                              onTap: () => _showFullImage(
+                                                context,
+                                                url,
+                                                index,
+                                              ),
+                                              child: Container(
+                                                decoration: BoxDecoration(
+                                                  borderRadius:
+                                                      BorderRadius.circular(12),
+                                                  border: Border.all(
+                                                    color: Colors.grey.shade200,
+                                                  ),
+                                                ),
+                                                child: ClipRRect(
+                                                  borderRadius:
+                                                      BorderRadius.circular(12),
+                                                  child: Stack(
+                                                    children: [
+                                                      Positioned.fill(
+                                                        child: Image.network(
+                                                          url,
+                                                          fit: BoxFit.cover,
+                                                          loadingBuilder:
+                                                              (
+                                                                c,
+                                                                w,
+                                                                progress,
+                                                              ) => progress == null
+                                                              ? w
+                                                              : const Center(
+                                                                  child:
+                                                                      CircularProgressIndicator(),
+                                                                ),
+                                                          errorBuilder:
+                                                              (
+                                                                c,
+                                                                err,
+                                                                st,
+                                                              ) => Container(
+                                                                color: Colors
+                                                                    .grey
+                                                                    .shade100,
+                                                                alignment:
+                                                                    Alignment
+                                                                        .center,
+                                                                child: Icon(
+                                                                  Icons
+                                                                      .broken_image_outlined,
+                                                                  size: 32,
+                                                                  color: Colors
+                                                                      .grey
+                                                                      .shade400,
+                                                                ),
+                                                              ),
+                                                        ),
+                                                      ),
+                                                      Positioned(
+                                                        bottom: 6,
+                                                        left: 6,
+                                                        child: Container(
+                                                          padding:
+                                                              const EdgeInsets.symmetric(
+                                                                horizontal: 8,
+                                                                vertical: 4,
+                                                              ),
+                                                          decoration: BoxDecoration(
+                                                            color: Colors.black
+                                                                .withOpacity(
+                                                                  0.45,
+                                                                ),
+                                                            borderRadius:
+                                                                BorderRadius.circular(
+                                                                  8,
+                                                                ),
+                                                          ),
+                                                          child: Text(
+                                                            'Ảnh ${index + 1}',
+                                                            style:
+                                                                const TextStyle(
+                                                                  color: Colors
+                                                                      .white,
+                                                                  fontSize: 12,
+                                                                  fontWeight:
+                                                                      FontWeight
+                                                                          .w600,
+                                                                ),
+                                                          ),
+                                                        ),
+                                                      ),
+                                                    ],
+                                                  ),
+                                                ),
+                                              ),
+                                            );
+                                          },
+                                        ),
+                                      ),
+                                    ],
+                                  );
+                                },
+                              );
+                            },
+                          ),
 
                           if (data.contextData.isNotEmpty) ...[
                             const SizedBox(height: 24),

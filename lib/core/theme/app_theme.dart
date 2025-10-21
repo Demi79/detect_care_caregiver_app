@@ -327,6 +327,45 @@ class AppTheme {
     );
   }
 
+  static ThemeData get darkTheme {
+    return ThemeData(
+      colorScheme: ColorScheme.fromSeed(
+        seedColor: primaryBlue,
+        brightness: Brightness.dark,
+        primary: primaryBlueLight,
+        secondary: activityColorLight,
+        surface: const Color(0xFF111216),
+        error: dangerColor,
+      ),
+      useMaterial3: true,
+      fontFamily: 'SF Pro Text',
+      appBarTheme: const AppBarTheme(
+        backgroundColor: Color(0xFF111216),
+        elevation: 0,
+        scrolledUnderElevation: 4,
+        shadowColor: shadowColor,
+        surfaceTintColor: Colors.transparent,
+        titleTextStyle: TextStyle(
+          color: selectedTextColor,
+          fontSize: 20,
+          fontWeight: FontWeight.w600,
+          letterSpacing: -0.5,
+        ),
+        iconTheme: IconThemeData(color: selectedTextColor, size: 24),
+      ),
+      cardTheme: CardThemeData(
+        color: const Color(0xFF0F1316),
+        elevation: 0,
+        shadowColor: shadowColor,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(borderRadiusLarge),
+        ),
+      ),
+    );
+  }
+
+  static ThemeData themeFor(bool isDark) => isDark ? darkTheme : lightTheme;
+
   // Utility methods for getting colors
   static Color getStatusColor(String status) {
     return statusColors[status] ?? primaryBlue;

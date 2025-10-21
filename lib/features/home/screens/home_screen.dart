@@ -6,6 +6,7 @@ import 'package:detect_care_caregiver_app/core/theme/app_theme.dart';
 import 'package:detect_care_caregiver_app/core/widgets/custom_bottom_nav_bar.dart';
 import 'package:detect_care_caregiver_app/features/activity_logs/screens/activity_logs_screen.dart';
 import 'package:detect_care_caregiver_app/features/assignments/screens/assignments_screen.dart';
+import 'package:detect_care_caregiver_app/features/home/screens/pending_assignment_screen.dart';
 import 'package:detect_care_caregiver_app/features/auth/data/auth_storage.dart';
 import 'package:detect_care_caregiver_app/features/auth/providers/auth_provider.dart';
 import 'package:detect_care_caregiver_app/features/camera/screens/live_camera_home_screen.dart';
@@ -43,7 +44,7 @@ class HomeScreen extends StatefulWidget {
 class _HomeScreenState extends State<HomeScreen>
     with SingleTickerProviderStateMixin, WidgetsBindingObserver {
   int _selectedIndex = 4; // Home screen index
-  String _selectedTab = 'Warning';
+  String _selectedTab = 'warning';
   String _selectedStatus = HomeFilters.defaultStatus;
   String _selectedPeriod = HomeFilters.defaultPeriod;
 
@@ -61,6 +62,8 @@ class _HomeScreenState extends State<HomeScreen>
   Timer? _searchDebounce;
   Timer? _notificationRefreshTimer;
   StreamSubscription<void>? _eventsChangedSub;
+  StreamSubscription<void>? _appEventsSub;
+  VoidCallback? _authListener;
   @override
   void initState() {
     super.initState();
@@ -86,6 +89,24 @@ class _HomeScreenState extends State<HomeScreen>
     _eventsChangedSub = AppEvents.instance.eventsChanged.listen((_) {
       if (mounted) _refreshLogs();
     });
+
+    // Listen for auth changes and global app events to redirect to pending
+    // assignments when the current user no longer has an active assignment.
+    try {
+      final auth = context.read<AuthProvider>();
+      _authListener = () => _maybeRedirectToPending();
+      auth.addListener(_authListener!);
+    } catch (_) {}
+
+    _appEventsSub = AppEvents.instance.eventsChanged.listen((_) {
+      if (!mounted) return;
+      _maybeRedirectToPending();
+    });
+
+    // Run one-time check on startup
+    WidgetsBinding.instance.addPostFrameCallback(
+      (_) => _maybeRedirectToPending(),
+    );
 
     _notificationRefreshTimer = Timer.periodic(
       const Duration(minutes: 5),
@@ -131,7 +152,29 @@ class _HomeScreenState extends State<HomeScreen>
     _searchController.dispose();
     _supa.dispose();
     _eventsChangedSub?.cancel();
+    try {
+      final auth = context.read<AuthProvider>();
+      if (_authListener != null) auth.removeListener(_authListener!);
+    } catch (_) {}
+    _appEventsSub?.cancel();
     super.dispose();
+  }
+
+  void _maybeRedirectToPending() {
+    try {
+      final auth = context.read<AuthProvider>();
+      // If user is logged in but does not have an active assignment,
+      // redirect to PendingAssignmentsScreen so they complete assignment flow.
+      if (auth.status == AuthStatus.assignVerified) {
+        if (!mounted) return;
+        Navigator.of(context).pushAndRemoveUntil(
+          MaterialPageRoute(builder: (_) => const PendingAssignmentsScreen()),
+          (route) => false,
+        );
+      }
+    } catch (e) {
+      debugPrint('[Home] _maybeRedirectToPending error: $e');
+    }
   }
 
   Future<void> _refreshLogs() async {

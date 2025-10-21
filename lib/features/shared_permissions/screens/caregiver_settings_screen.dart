@@ -1,477 +1,10 @@
-// import 'package:flutter/material.dart';
-// import 'package:provider/provider.dart';
-
-// import 'package:detect_care_caregiver_app/features/auth/data/auth_storage.dart';
-// import 'package:detect_care_caregiver_app/features/shared_permissions/data/shared_permissions_remote_data_source.dart';
-// import 'package:detect_care_caregiver_app/features/shared_permissions/models/shared_permissions.dart';
-// import 'package:detect_care_caregiver_app/features/auth/providers/auth_provider.dart';
-// import 'package:detect_care_caregiver_app/features/assignments/data/assignments_remote_data_source.dart';
-
-// class CaregiverSettingsScreen extends StatefulWidget {
-//   final String caregiverId;
-//   final String caregiverDisplay;
-
-//   final String customerId;
-
-//   const CaregiverSettingsScreen({
-//     super.key,
-//     required this.caregiverId,
-//     required this.caregiverDisplay,
-//     required this.customerId,
-//   });
-
-//   @override
-//   State<CaregiverSettingsScreen> createState() =>
-//       _CaregiverSettingsScreenState();
-// }
-
-// class _CaregiverSettingsScreenState extends State<CaregiverSettingsScreen> {
-//   late final SharedPermissionsRemoteDataSource _ds;
-//   late final AssignmentsRemoteDataSource _assignmentsDs;
-
-//   Future<SharedPermissions>? _future;
-//   SharedPermissions? _value;
-
-//   @override
-//   void initState() {
-//     super.initState();
-//     _ds = SharedPermissionsRemoteDataSource();
-//     _assignmentsDs = AssignmentsRemoteDataSource();
-//     _future = _load();
-//   }
-
-//   Future<String> _resolveCustomerId() async {
-//     if (widget.customerId.isNotEmpty) return widget.customerId;
-
-//     final assignments = await _assignmentsDs.listPending();
-//     final acceptedCustomers = assignments
-//         .where((a) => a.status.toLowerCase() == 'accepted' && a.isActive)
-//         .map((a) => a.customerId)
-//         .where((id) => id.isNotEmpty)
-//         .toSet()
-//         .toList();
-
-//     if (acceptedCustomers.isEmpty) {
-//       throw Exception(
-//         'Không tìm thấy khách hàng nào đã được chấp nhận (accepted & active).',
-//       );
-//     }
-
-//     return acceptedCustomers.first;
-//   }
-
-//   Future<SharedPermissions> _load() async {
-//     final auth = context.read<AuthProvider>();
-//     final caregiverId = widget.caregiverId.isNotEmpty
-//         ? widget.caregiverId
-//         : (auth.currentUserId ?? '');
-//     if (caregiverId.isEmpty) {
-//       throw Exception('Thiếu caregiverId (userId).');
-//     }
-
-//     final customerId = await _resolveCustomerId();
-//     final data = await _ds.getSharedPermissions(
-//       customerId: customerId,
-//       caregiverId: caregiverId,
-//     );
-//     _value = data;
-//     return data;
-//   }
-
-//   @override
-//   Widget build(BuildContext context) {
-//     return Scaffold(
-//       backgroundColor: const Color(0xFFF8FAFC),
-//       appBar: AppBar(
-//         title: Column(
-//           crossAxisAlignment: CrossAxisAlignment.start,
-//           children: [
-//             const Text(
-//               'Thiết lập của bạn',
-//               style: TextStyle(
-//                 fontSize: 18,
-//                 fontWeight: FontWeight.w600,
-//                 color: Color(0xFF1E293B),
-//               ),
-//             ),
-//             Text(
-//               widget.caregiverDisplay,
-//               style: const TextStyle(
-//                 fontSize: 14,
-//                 color: Color(0xFF64748B),
-//                 fontWeight: FontWeight.w400,
-//               ),
-//             ),
-//           ],
-//         ),
-//         backgroundColor: Colors.white,
-//         elevation: 0,
-//         surfaceTintColor: Colors.transparent,
-//         iconTheme: const IconThemeData(color: Color(0xFF64748B)),
-//         bottom: const PreferredSize(
-//           preferredSize: Size.fromHeight(1),
-//           child: SizedBox(
-//             height: 1,
-//             child: ColoredBox(color: Color(0xFFE2E8F0)),
-//           ),
-//         ),
-//       ),
-//       body: FutureBuilder<SharedPermissions>(
-//         future: _future,
-//         builder: (context, snap) {
-//           if (snap.connectionState != ConnectionState.done) {
-//             return const Center(
-//               child: CircularProgressIndicator(
-//                 strokeWidth: 3,
-//                 color: Color(0xFF3B82F6),
-//               ),
-//             );
-//           }
-//           if (snap.hasError) {
-//             return Center(
-//               child: Padding(
-//                 padding: const EdgeInsets.symmetric(horizontal: 24),
-//                 child: Column(
-//                   mainAxisAlignment: MainAxisAlignment.center,
-//                   children: [
-//                     Icon(Icons.error_outline, size: 48, color: Colors.red[400]),
-//                     const SizedBox(height: 16),
-//                     Text(
-//                       'Lỗi: ${snap.error}',
-//                       style: TextStyle(color: Colors.red[600], fontSize: 16),
-//                       textAlign: TextAlign.center,
-//                     ),
-//                   ],
-//                 ),
-//               ),
-//             );
-//           }
-
-//           final v = _value!;
-//           return SingleChildScrollView(
-//             padding: const EdgeInsets.all(16),
-//             child: Column(
-//               crossAxisAlignment: CrossAxisAlignment.start,
-//               children: [
-//                 _buildSection(
-//                   title: 'Quyền truy cập',
-//                   icon: Icons.security_outlined,
-//                   children: [
-//                     _buildSwitchTile(
-//                       title: 'Xem live stream',
-//                       subtitle: 'Cho phép xem camera trực tiếp',
-//                       icon: Icons.videocam_outlined,
-//                       value: v.streamView,
-//                     ),
-//                     _buildSwitchTile(
-//                       title: 'Xem hồ sơ bệnh nhân',
-//                       subtitle: 'Truy cập thông tin cá nhân',
-//                       icon: Icons.person_outline,
-//                       value: v.profileView,
-//                     ),
-//                   ],
-//                 ),
-//                 const SizedBox(height: 20),
-//                 _buildSection(
-//                   title: 'Cảnh báo',
-//                   icon: Icons.notifications_outlined,
-//                   children: [
-//                     _buildSwitchTile(
-//                       title: 'Xem cảnh báo',
-//                       subtitle: 'Có thể đọc các thông báo cảnh báo',
-//                       icon: Icons.visibility_outlined,
-//                       value: v.alertRead,
-//                     ),
-//                     _buildSwitchTile(
-//                       title: 'Cập nhật cảnh báo',
-//                       subtitle: 'Có thể xác nhận và cập nhật cảnh báo',
-//                       icon: Icons.edit_notifications_outlined,
-//                       value: v.alertAck,
-//                     ),
-//                   ],
-//                 ),
-//                 const SizedBox(height: 20),
-//                 _buildSection(
-//                   title: 'Truy cập dữ liệu',
-//                   icon: Icons.data_usage_outlined,
-//                   children: [
-//                     _buildNumberTile(
-//                       title: 'Số ngày xem logs',
-//                       subtitle: 'Thời gian truy cập lịch sử hoạt động',
-//                       icon: Icons.history,
-//                       value: v.logAccessDays,
-//                     ),
-//                     _buildNumberTile(
-//                       title: 'Số ngày xem báo cáo',
-//                       subtitle: 'Thời gian truy cập báo cáo tổng hợp',
-//                       icon: Icons.assessment_outlined,
-//                       value: v.reportAccessDays,
-//                     ),
-//                   ],
-//                 ),
-//                 const SizedBox(height: 20),
-//                 _buildSection(
-//                   title: 'Kênh thông báo',
-//                   icon: Icons.send_outlined,
-//                   children: [
-//                     Container(
-//                       padding: const EdgeInsets.all(16),
-//                       child: Column(
-//                         crossAxisAlignment: CrossAxisAlignment.start,
-//                         children: [
-//                           const Text(
-//                             'Chọn cách thức nhận thông báo',
-//                             style: TextStyle(
-//                               color: Color(0xFF64748B),
-//                               fontSize: 14,
-//                             ),
-//                           ),
-//                           const SizedBox(height: 12),
-//                           Wrap(
-//                             spacing: 8,
-//                             runSpacing: 8,
-//                             children: [
-//                               _buildChannelChip(
-//                                 'push',
-//                                 'Push',
-//                                 Icons.notifications_active,
-//                                 v.notificationChannel.contains('push'),
-//                               ),
-//                               _buildChannelChip(
-//                                 'sms',
-//                                 'SMS',
-//                                 Icons.sms_outlined,
-//                                 v.notificationChannel.contains('sms'),
-//                               ),
-//                               _buildChannelChip(
-//                                 'email',
-//                                 'Email',
-//                                 Icons.email_outlined,
-//                                 v.notificationChannel.contains('email'),
-//                               ),
-//                             ],
-//                           ),
-//                         ],
-//                       ),
-//                     ),
-//                   ],
-//                 ),
-//                 const SizedBox(height: 8),
-//                 const Text(
-//                   'Ghi chú: Bạn không thể chỉnh sửa các thiết lập.',
-//                   style: TextStyle(fontSize: 12, color: Color(0xFF64748B)),
-//                 ),
-//               ],
-//             ),
-//           );
-//         },
-//       ),
-//     );
-//   }
-
-//   Widget _buildSection({
-//     required String title,
-//     required IconData icon,
-//     required List<Widget> children,
-//   }) {
-//     return Container(
-//       decoration: BoxDecoration(
-//         color: Colors.white,
-//         borderRadius: BorderRadius.circular(16),
-//         boxShadow: [
-//           BoxShadow(
-//             color: const Color(0xFF64748B).withOpacity(0.08),
-//             blurRadius: 8,
-//             offset: const Offset(0, 2),
-//           ),
-//         ],
-//       ),
-//       child: Column(
-//         crossAxisAlignment: CrossAxisAlignment.start,
-//         children: [
-//           Container(
-//             padding: const EdgeInsets.all(16),
-//             decoration: const BoxDecoration(
-//               border: Border(
-//                 bottom: BorderSide(color: Color(0xFFF1F5F9), width: 1),
-//               ),
-//             ),
-//             child: Row(
-//               children: [
-//                 Container(
-//                   padding: const EdgeInsets.all(8),
-//                   decoration: BoxDecoration(
-//                     color: const Color(0xFF3B82F6).withOpacity(0.1),
-//                     borderRadius: BorderRadius.circular(8),
-//                   ),
-//                   child: Icon(icon, size: 20, color: const Color(0xFF3B82F6)),
-//                 ),
-//                 const SizedBox(width: 12),
-//                 Text(
-//                   title,
-//                   style: const TextStyle(
-//                     fontSize: 16,
-//                     fontWeight: FontWeight.w600,
-//                     color: Color(0xFF1E293B),
-//                   ),
-//                 ),
-//               ],
-//             ),
-//           ),
-//           ...children,
-//         ],
-//       ),
-//     );
-//   }
-
-//   Widget _buildSwitchTile({
-//     required String title,
-//     required String subtitle,
-//     required IconData icon,
-//     required bool value,
-//   }) {
-//     return Container(
-//       padding: const EdgeInsets.all(16),
-//       child: Row(
-//         children: [
-//           Icon(icon, size: 20, color: const Color(0xFF64748B)),
-//           const SizedBox(width: 12),
-//           Expanded(
-//             child: Column(
-//               crossAxisAlignment: CrossAxisAlignment.start,
-//               children: [
-//                 Text(
-//                   title,
-//                   style: const TextStyle(
-//                     fontSize: 15,
-//                     fontWeight: FontWeight.w500,
-//                     color: Color(0xFF1E293B),
-//                   ),
-//                 ),
-//                 Text(
-//                   subtitle,
-//                   style: const TextStyle(
-//                     fontSize: 13,
-//                     color: Color(0xFF64748B),
-//                   ),
-//                 ),
-//               ],
-//             ),
-//           ),
-//           Switch(
-//             value: value,
-//             onChanged: null,
-//             activeColor: const Color(0xFF2E7BF0),
-//             inactiveThumbColor: const Color(0xFF94A3B8),
-//             inactiveTrackColor: const Color(0xFFE2E8F0),
-//           ),
-//         ],
-//       ),
-//     );
-//   }
-
-//   Widget _buildNumberTile({
-//     required String title,
-//     required String subtitle,
-//     required IconData icon,
-//     required int value,
-//   }) {
-//     return Container(
-//       padding: const EdgeInsets.all(16),
-//       child: Row(
-//         children: [
-//           Icon(icon, size: 20, color: const Color(0xFF64748B)),
-//           const SizedBox(width: 12),
-//           Expanded(
-//             child: Column(
-//               crossAxisAlignment: CrossAxisAlignment.start,
-//               children: [
-//                 Text(
-//                   title,
-//                   style: const TextStyle(
-//                     fontSize: 15,
-//                     fontWeight: FontWeight.w500,
-//                     color: Color(0xFF1E293B),
-//                   ),
-//                 ),
-//                 Text(
-//                   subtitle,
-//                   style: const TextStyle(
-//                     fontSize: 13,
-//                     color: Color(0xFF64748B),
-//                   ),
-//                 ),
-//               ],
-//             ),
-//           ),
-//           Container(
-//             width: 48,
-//             alignment: Alignment.center,
-//             padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 6),
-//             decoration: BoxDecoration(
-//               color: const Color(0xFFF1F5F9),
-//               borderRadius: BorderRadius.circular(8),
-//             ),
-//             child: Text(
-//               '$value',
-//               style: const TextStyle(
-//                 fontSize: 16,
-//                 fontWeight: FontWeight.w600,
-//                 color: Color(0xFF1E293B),
-//               ),
-//             ),
-//           ),
-//         ],
-//       ),
-//     );
-//   }
-
-//   Widget _buildChannelChip(
-//     String value,
-//     String label,
-//     IconData icon,
-//     bool selected,
-//   ) {
-//     return FilterChip(
-//       label: Row(
-//         mainAxisSize: MainAxisSize.min,
-//         children: [
-//           Icon(
-//             icon,
-//             size: 16,
-//             color: selected ? const Color(0xFF3B82F6) : const Color(0xFF64748B),
-//           ),
-//           const SizedBox(width: 4),
-//           Text(
-//             label,
-//             style: TextStyle(
-//               fontSize: 14,
-//               fontWeight: FontWeight.w500,
-//               color: selected
-//                   ? const Color(0xFF3B82F6)
-//                   : const Color(0xFF64748B),
-//             ),
-//           ),
-//         ],
-//       ),
-//       selected: selected,
-//       onSelected: null,
-//       backgroundColor: Colors.white,
-//       selectedColor: const Color(0xFF3B82F6).withOpacity(0.1),
-//       checkmarkColor: const Color(0xFF3B82F6),
-//       side: BorderSide(
-//         color: selected ? const Color(0xFF3B82F6) : const Color(0xFFE2E8F0),
-//         width: 1.5,
-//       ),
-//       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-//     );
-//   }
-// }
-
 import 'package:detect_care_caregiver_app/features/auth/data/auth_storage.dart';
 import 'package:detect_care_caregiver_app/features/shared_permissions/data/shared_permissions_remote_data_source.dart';
 import 'package:detect_care_caregiver_app/features/shared_permissions/models/shared_permissions.dart';
+import 'package:detect_care_caregiver_app/features/assignments/data/assignments_remote_data_source.dart';
+import 'dart:async';
 import 'package:flutter/material.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 
 class CaregiverSettingsScreen extends StatefulWidget {
   const CaregiverSettingsScreen({super.key});
@@ -485,6 +18,9 @@ class _CaregiverSettingsScreenState extends State<CaregiverSettingsScreen> {
   final _repo = SharedPermissionsRemoteDataSource();
   List<SharedPermissions> _permissions = [];
   bool _loading = true;
+  dynamic _permSub;
+  dynamic _inviteSub;
+  Timer? _debounceReloadTimer;
 
   static const primaryBlue = Color(0xFF007AFF);
   static const bgColor = Color(0xFFF8FAFC);
@@ -494,22 +30,335 @@ class _CaregiverSettingsScreenState extends State<CaregiverSettingsScreen> {
   void initState() {
     super.initState();
     _loadPermissions();
+    _setupRealtimeSubscriptions();
+  }
+
+  @override
+  void dispose() {
+    _debounceReloadTimer?.cancel();
+    try {
+      _permSub?.unsubscribe?.call();
+    } catch (_) {}
+    try {
+      _inviteSub?.unsubscribe?.call();
+    } catch (_) {}
+    super.dispose();
   }
 
   Future<void> _loadPermissions() async {
     try {
       final caregiverId = await AuthStorage.getUserId();
-      if (caregiverId == null) {
-        throw Exception('Missing caregiver_id');
-      }
+      if (caregiverId == null) throw Exception('Missing caregiver_id');
       final perms = await _repo.getByCaregiverId(caregiverId);
       setState(() {
         _permissions = perms;
         _loading = false;
       });
     } catch (e) {
-      debugPrint('❌ Load permissions error: $e');
+      print('❌ Load permissions error: $e');
       setState(() => _loading = false);
+    }
+  }
+
+  Future<String?> _getLinkedCustomerId(String caregiverId) async {
+    final assignmentsDs = AssignmentsRemoteDataSource();
+    final assignments = await assignmentsDs.listPending(status: 'accepted');
+    final active = assignments
+        .where((a) => a.isActive && (a.status.toLowerCase() == 'accepted'))
+        .toList();
+    return active.isNotEmpty ? active.first.customerId : null;
+  }
+
+  Future<void> _setupRealtimeSubscriptions() async {
+    try {
+      final caregiverId = await AuthStorage.getUserId();
+      if (caregiverId == null) return;
+
+      final client = Supabase.instance.client as dynamic;
+
+      try {
+        _permSub = client
+            .from('permissions')
+            .on('INSERT', (payload) => _onRealtimePayload(payload, caregiverId))
+            .on('UPDATE', (payload) => _onRealtimePayload(payload, caregiverId))
+            .on('DELETE', (payload) => _onRealtimePayload(payload, caregiverId))
+            .subscribe();
+      } catch (_) {
+        // older/newer supabase client variants may have different APIs; ignore
+      }
+
+      try {
+        _inviteSub = client
+            .from('caregiver_invitations')
+            .on('INSERT', (payload) => _onRealtimePayload(payload, caregiverId))
+            .on('UPDATE', (payload) => _onRealtimePayload(payload, caregiverId))
+            .on('DELETE', (payload) => _onRealtimePayload(payload, caregiverId))
+            .subscribe();
+      } catch (_) {}
+    } catch (e) {
+      debugPrint('Realtime subscription setup failed: $e');
+    }
+  }
+
+  void _onRealtimePayload(dynamic payload, String caregiverId) {
+    try {
+      dynamic data;
+      if (payload is Map) {
+        data =
+            payload['new'] ??
+            payload['new_record'] ??
+            payload['newRecord'] ??
+            payload['old'] ??
+            payload['old_record'] ??
+            payload['record'] ??
+            payload['payload'];
+      } else {
+        // payload shape unknown, try accessing common fields
+        try {
+          data = payload.newRecord ?? payload.record ?? null;
+        } catch (_) {
+          data = null;
+        }
+      }
+
+      final eventCaregiverId = (data is Map)
+          ? (data['caregiver_id']?.toString() ??
+                data['caregiverId']?.toString())
+          : null;
+
+      if (eventCaregiverId == null || eventCaregiverId == caregiverId) {
+        _scheduleReload();
+      }
+    } catch (_) {
+      _scheduleReload();
+    }
+  }
+
+  void _scheduleReload() {
+    _debounceReloadTimer?.cancel();
+    _debounceReloadTimer = Timer(const Duration(milliseconds: 600), () {
+      if (mounted) _loadPermissions();
+    });
+  }
+
+  // Popup nhập lý do + số ngày
+  Future<void> _showRequestDialog({
+    required String type,
+    required String displayName,
+    bool isDaysType = false,
+    int maxValue = 0,
+  }) async {
+    final TextEditingController reasonController = TextEditingController();
+    final TextEditingController daysController = TextEditingController();
+
+    await showDialog(
+      context: context,
+      builder: (context) {
+        return AlertDialog(
+          backgroundColor: const Color(0xFFF8FAFC),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(16),
+          ),
+          titlePadding: const EdgeInsets.only(top: 8, right: 8, left: 12),
+          title: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Align(
+                alignment: Alignment.topRight,
+                child: IconButton(
+                  padding: EdgeInsets.zero,
+                  constraints: const BoxConstraints(),
+                  icon: const Icon(Icons.close, color: primaryBlue),
+                  onPressed: () => Navigator.pop(context),
+                  tooltip: 'Đóng',
+                ),
+              ),
+              const SizedBox(height: 4),
+              Text(
+                'Yêu cầu quyền: $displayName',
+                textAlign: TextAlign.center,
+                style: const TextStyle(
+                  fontWeight: FontWeight.bold,
+                  color: primaryBlue,
+                ),
+              ),
+            ],
+          ),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.center,
+            children: [
+              if (isDaysType)
+                Padding(
+                  padding: const EdgeInsets.only(bottom: 8),
+                  child: Text(
+                    'Tối đa được $maxValue ngày',
+                    style: const TextStyle(fontSize: 13, color: Colors.grey),
+                    textAlign: TextAlign.center,
+                  ),
+                ),
+              if (isDaysType)
+                TextField(
+                  controller: daysController,
+                  textAlign: TextAlign.center,
+                  keyboardType: TextInputType.number,
+                  decoration: InputDecoration(
+                    labelText: 'Số ngày muốn yêu cầu',
+                    filled: true,
+                    fillColor: Colors.white,
+                    border: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(10),
+                    ),
+                  ),
+                ),
+              const SizedBox(height: 12),
+              TextField(
+                controller: reasonController,
+                textAlign: TextAlign.center,
+                decoration: InputDecoration(
+                  labelText: 'Lý do yêu cầu',
+                  filled: true,
+                  fillColor: Colors.white,
+                  border: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(10),
+                  ),
+                ),
+                maxLines: 2,
+              ),
+            ],
+          ),
+          actionsAlignment: MainAxisAlignment.center,
+          actions: [
+            ElevatedButton.icon(
+              icon: const Icon(Icons.send),
+              label: const Text('Gửi yêu cầu'),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: primaryBlue,
+                foregroundColor: Colors.white,
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(8),
+                ),
+              ),
+              onPressed: () {
+                final reason = reasonController.text.trim();
+                if (reason.isEmpty) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(
+                      content: Text('❌ Vui lòng nhập lý do!'),
+                      backgroundColor: Colors.redAccent,
+                    ),
+                  );
+                  return;
+                }
+
+                if (isDaysType) {
+                  final days = int.tryParse(daysController.text);
+                  if (days == null || days <= 0 || days > maxValue) {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      const SnackBar(
+                        content: Text('❌ Số ngày không hợp lệ!'),
+                        backgroundColor: Colors.redAccent,
+                      ),
+                    );
+                    return;
+                  }
+                  Navigator.pop(context);
+                  _submitDaysRequest(type, days, reason);
+                } else {
+                  Navigator.pop(context);
+                  _submitPermissionRequest(type, reason);
+                }
+              },
+            ),
+          ],
+        );
+      },
+    );
+  }
+
+  Future<void> _submitPermissionRequest(String type, String reason) async {
+    try {
+      final caregiverId = await AuthStorage.getUserId();
+      if (caregiverId == null) throw Exception('Missing caregiverId');
+      final customerId = await _getLinkedCustomerId(caregiverId);
+      if (customerId == null || customerId.isEmpty) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Không tìm thấy khách hàng được liên kết.'),
+            backgroundColor: Colors.orange,
+          ),
+        );
+        return;
+      }
+
+      final res = await _repo.createPermissionRequest(
+        customerId: customerId,
+        caregiverId: caregiverId,
+        type: type,
+        requestedBool: true,
+        scope: 'read',
+        reason: reason,
+      );
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('✅ Đã gửi yêu cầu quyền $type'),
+          backgroundColor: Colors.green,
+        ),
+      );
+      debugPrint('✅ Response: $res');
+      _loadPermissions();
+    } catch (e) {
+      debugPrint('❌ Request permission failed: $e');
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Gửi yêu cầu thất bại: $e'),
+          backgroundColor: Colors.redAccent,
+        ),
+      );
+    }
+  }
+
+  Future<void> _submitDaysRequest(String type, int days, String reason) async {
+    try {
+      final caregiverId = await AuthStorage.getUserId();
+      if (caregiverId == null) throw Exception('Missing caregiverId');
+      final customerId = await _getLinkedCustomerId(caregiverId);
+      if (customerId == null || customerId.isEmpty) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Không tìm thấy khách hàng được liên kết.'),
+            backgroundColor: Colors.orange,
+          ),
+        );
+        return;
+      }
+
+      final res = await _repo.requestDaysPermission(
+        customerId: customerId,
+        caregiverId: caregiverId,
+        type: type,
+        requestedDays: days,
+        reason: reason,
+      );
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('✅ Đã gửi yêu cầu $type ($days ngày)'),
+          backgroundColor: Colors.green,
+        ),
+      );
+      debugPrint('✅ Response: $res');
+      _loadPermissions();
+    } catch (e) {
+      debugPrint('❌ Request days permission failed: $e');
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Gửi yêu cầu thất bại: $e'),
+          backgroundColor: Colors.redAccent,
+        ),
+      );
     }
   }
 
@@ -517,15 +366,6 @@ class _CaregiverSettingsScreenState extends State<CaregiverSettingsScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: bgColor,
-      // appBar: AppBar(
-      //   elevation: 0,
-      //   title: const Text(
-      //     'Quyền được chia sẻ',
-      //     style: TextStyle(fontWeight: FontWeight.w600, fontSize: 20),
-      //   ),
-      //   backgroundColor: primaryBlue,
-      //   foregroundColor: Colors.white,
-      // ),
       body: _loading
           ? const Center(
               child: CircularProgressIndicator(
@@ -539,41 +379,39 @@ class _CaregiverSettingsScreenState extends State<CaregiverSettingsScreen> {
               itemCount: _permissions.length,
               itemBuilder: (context, index) {
                 final p = _permissions[index];
-                return _buildPermissionCard(p, index);
+                return _buildPermissionCard(p);
               },
             ),
     );
   }
 
-  Widget _buildEmptyState() {
-    return Center(
-      child: Column(
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          Container(
-            width: 80,
-            height: 80,
-            decoration: BoxDecoration(
-              color: primaryBlue.withValues(alpha: 0.1),
-              shape: BoxShape.circle,
-            ),
-            child: const Icon(Icons.lock_outline, size: 40, color: primaryBlue),
+  Widget _buildEmptyState() => Center(
+    child: Column(
+      mainAxisAlignment: MainAxisAlignment.center,
+      children: [
+        Container(
+          width: 80,
+          height: 80,
+          decoration: BoxDecoration(
+            color: primaryBlue.withValues(alpha: 0.1),
+            shape: BoxShape.circle,
           ),
-          const SizedBox(height: 24),
-          const Text(
-            'Chưa có quyền nào được chia sẻ',
-            style: TextStyle(
-              fontSize: 16,
-              color: Colors.grey,
-              fontWeight: FontWeight.w500,
-            ),
+          child: const Icon(Icons.lock_outline, size: 40, color: primaryBlue),
+        ),
+        const SizedBox(height: 24),
+        const Text(
+          'Chưa có quyền nào được chia sẻ',
+          style: TextStyle(
+            fontSize: 16,
+            color: Colors.grey,
+            fontWeight: FontWeight.w500,
           ),
-        ],
-      ),
-    );
-  }
+        ),
+      ],
+    ),
+  );
 
-  Widget _buildPermissionCard(SharedPermissions p, int index) {
+  Widget _buildPermissionCard(SharedPermissions p) {
     return Container(
       margin: const EdgeInsets.only(bottom: 16),
       decoration: BoxDecoration(
@@ -587,150 +425,72 @@ class _CaregiverSettingsScreenState extends State<CaregiverSettingsScreen> {
           ),
         ],
       ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          // Header
-          Container(
-            width: double.infinity,
-            padding: const EdgeInsets.all(16),
-            decoration: BoxDecoration(
-              color: primaryBlue.withValues(alpha: 0.05),
-              borderRadius: const BorderRadius.only(
-                topLeft: Radius.circular(16),
-                topRight: Radius.circular(16),
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Text(
+              'Quyền truy cập',
+              style: TextStyle(
+                fontSize: 14,
+                fontWeight: FontWeight.w600,
+                color: Colors.black87,
               ),
             ),
-            child: Row(
-              children: [
-                Container(
-                  width: 40,
-                  height: 40,
-                  decoration: BoxDecoration(
-                    color: primaryBlue,
-                    borderRadius: BorderRadius.circular(10),
-                  ),
-                  child: const Icon(
-                    Icons.verified_user_outlined,
-                    color: Colors.white,
-                    size: 24,
-                  ),
-                ),
-                const SizedBox(width: 12),
-                Text(
-                  // 'Quyền chia sẻ #${index + 1}',
-                  'Quyền được chia sẻ ',
-                  style: const TextStyle(
-                    color: primaryBlue,
-                    fontWeight: FontWeight.bold,
-                    fontSize: 18,
-                  ),
-                ),
-              ],
+            const SizedBox(height: 12),
+            _buildPermissionGrid([
+              _PermissionItem('Xem camera', p.streamView, Icons.stream),
+              _PermissionItem(
+                'Đọc thông báo',
+                p.alertRead,
+                Icons.notifications_outlined,
+              ),
+              _PermissionItem(
+                'Cập nhật thông báo',
+                p.alertAck,
+                Icons.check_circle_outline,
+              ),
+              _PermissionItem(
+                'Xem hồ sơ bệnh nhân',
+                p.profileView,
+                Icons.person_outline,
+              ),
+            ]),
+            const SizedBox(height: 20),
+            _buildInfoBox(
+              icon: Icons.history,
+              title: 'Log',
+              value: '${p.logAccessDays} ngày',
+              type: 'log_access_days',
+              currentValue: p.logAccessDays,
+              maxValue: 7,
             ),
-          ),
-
-          // Permissions Grid
-          Padding(
-            padding: const EdgeInsets.all(16),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                const Text(
-                  'Quyền truy cập',
-                  style: TextStyle(
-                    fontSize: 14,
-                    fontWeight: FontWeight.w600,
-                    color: Colors.black87,
-                  ),
-                ),
-                const SizedBox(height: 12),
-                _buildPermissionGrid([
-                  _PermissionItem('Xem luồng', p.streamView, Icons.stream),
-                  _PermissionItem(
-                    'Đọc thông báo',
-                    p.alertRead,
-                    Icons.notifications_outlined,
-                  ),
-                  _PermissionItem(
-                    'Xác nhận thông báo',
-                    p.alertAck,
-                    Icons.check_circle_outline,
-                  ),
-                  _PermissionItem(
-                    'Xem hồ sơ',
-                    p.profileView,
-                    Icons.person_outline,
-                  ),
-                ]),
-
-                const SizedBox(height: 20),
-
-                // Access Days
-                Row(
-                  children: [
-                    Expanded(
-                      child: _buildInfoBox(
-                        icon: Icons.history,
-                        title: 'Log',
-                        value: '${p.logAccessDays ?? 0} ngày',
-                      ),
-                    ),
-                    const SizedBox(width: 12),
-                    Expanded(
-                      child: _buildInfoBox(
-                        icon: Icons.assessment_outlined,
-                        title: 'Báo cáo',
-                        value: '${p.reportAccessDays ?? 0} ngày',
-                      ),
-                    ),
-                  ],
-                ),
-
-                const SizedBox(height: 20),
-
-                // Notification Channels
-                const Text(
-                  'Kênh nhận thông báo',
-                  style: TextStyle(
-                    fontSize: 14,
-                    fontWeight: FontWeight.w600,
-                    color: Colors.black87,
-                  ),
-                ),
-                const SizedBox(height: 12),
-                Wrap(
-                  spacing: 8,
-                  runSpacing: 8,
-                  children: [
-                    for (final ch in p.notificationChannel ?? <String>[])
-                      _buildChannelChip(ch),
-                  ],
-                ),
-              ],
+            const SizedBox(height: 12),
+            _buildInfoBox(
+              icon: Icons.assessment_outlined,
+              title: 'Báo cáo',
+              value: '${p.reportAccessDays} ngày',
+              type: 'report_access_days',
+              currentValue: p.reportAccessDays,
+              maxValue: 30,
             ),
-          ),
-        ],
+          ],
+        ),
       ),
     );
   }
 
   Widget _buildPermissionGrid(List<_PermissionItem> items) {
-    return GridView.builder(
-      shrinkWrap: true,
-      physics: const NeverScrollableScrollPhysics(),
-      gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-        crossAxisCount: 2,
-        crossAxisSpacing: 12,
-        mainAxisSpacing: 12,
-        childAspectRatio: 2.5,
-      ),
-      itemCount: items.length,
-      itemBuilder: (context, index) {
-        final item = items[index];
+    return Column(
+      children: items.map((item) {
         final isEnabled = item.value == true;
+        final icon = isEnabled
+            ? Icons.lock_open_rounded
+            : Icons.lock_outline_rounded;
         return Container(
-          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+          margin: const EdgeInsets.only(bottom: 12),
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 14),
           decoration: BoxDecoration(
             color: isEnabled
                 ? primaryBlue.withValues(alpha: 0.08)
@@ -740,37 +500,65 @@ class _CaregiverSettingsScreenState extends State<CaregiverSettingsScreen> {
               color: isEnabled
                   ? primaryBlue.withValues(alpha: 0.3)
                   : Colors.grey.withValues(alpha: 0.2),
-              width: 1,
             ),
           ),
           child: Row(
             children: [
               Icon(
                 item.icon,
-                size: 20,
+                size: 22,
                 color: isEnabled ? primaryBlue : Colors.grey,
               ),
-              const SizedBox(width: 8),
+              const SizedBox(width: 10),
               Expanded(
                 child: Text(
                   item.title,
                   style: TextStyle(
-                    fontSize: 13,
-                    color: isEnabled ? Colors.black87 : Colors.grey,
+                    fontSize: 14,
+                    color: isEnabled ? Colors.black87 : Colors.grey[700],
                     fontWeight: isEnabled ? FontWeight.w600 : FontWeight.normal,
                   ),
-                  overflow: TextOverflow.ellipsis,
                 ),
               ),
               Icon(
-                isEnabled ? Icons.check_circle : Icons.cancel,
-                size: 16,
+                icon,
+                size: 22,
                 color: isEnabled ? primaryBlue : Colors.grey,
               ),
+              if (!isEnabled)
+                IconButton(
+                  icon: const Icon(Icons.add_circle_outline, size: 20),
+                  color: primaryBlue,
+                  tooltip: 'Yêu cầu quyền truy cập',
+                  onPressed: () {
+                    String type;
+                    switch (item.title) {
+                      case 'Xem camera':
+                        type = 'stream_view';
+                        break;
+                      case 'Đọc thông báo':
+                        type = 'alert_read';
+                        break;
+                      case 'Cập nhật thông báo':
+                        type = 'alert_ack';
+                        break;
+                      case 'Xem hồ sơ bệnh nhân':
+                        type = 'profile_view';
+                        break;
+                      default:
+                        type = 'unknown';
+                    }
+                    _showRequestDialog(
+                      type: type,
+                      displayName: item.title,
+                      isDaysType: false,
+                    );
+                  },
+                ),
             ],
           ),
         );
-      },
+      }).toList(),
     );
   }
 
@@ -778,13 +566,18 @@ class _CaregiverSettingsScreenState extends State<CaregiverSettingsScreen> {
     required IconData icon,
     required String title,
     required String value,
+    required String type,
+    required int currentValue,
+    required int maxValue,
   }) {
+    final canRequest = currentValue < maxValue;
+
     return Container(
       padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
         color: primaryBlue.withValues(alpha: 0.05),
         borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: primaryBlue.withValues(alpha: 0.1), width: 1),
+        border: Border.all(color: primaryBlue.withValues(alpha: 0.1)),
       ),
       child: Row(
         children: [
@@ -822,47 +615,17 @@ class _CaregiverSettingsScreenState extends State<CaregiverSettingsScreen> {
               ],
             ),
           ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildChannelChip(String channel) {
-    IconData icon;
-    switch (channel.toLowerCase()) {
-      case 'push':
-        icon = Icons.notifications_active;
-        break;
-      case 'sms':
-        icon = Icons.sms_outlined;
-        break;
-      case 'email':
-        icon = Icons.email_outlined;
-        break;
-      default:
-        icon = Icons.circle_notifications;
-    }
-
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
-      decoration: BoxDecoration(
-        color: primaryBlue.withValues(alpha: 0.1),
-        borderRadius: BorderRadius.circular(20),
-        border: Border.all(color: primaryBlue.withValues(alpha: 0.3), width: 1),
-      ),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Icon(icon, size: 16, color: primaryBlue),
-          const SizedBox(width: 6),
-          Text(
-            channel.toUpperCase(),
-            style: const TextStyle(
-              color: primaryBlue,
-              fontWeight: FontWeight.w600,
-              fontSize: 12,
+          if (canRequest)
+            IconButton(
+              icon: const Icon(Icons.add_circle_outline, color: primaryBlue),
+              tooltip: 'Yêu cầu thêm quyền',
+              onPressed: () => _showRequestDialog(
+                type: type,
+                displayName: title,
+                isDaysType: true,
+                maxValue: maxValue,
+              ),
             ),
-          ),
         ],
       ),
     );
@@ -873,6 +636,5 @@ class _PermissionItem {
   final String title;
   final bool? value;
   final IconData icon;
-
   _PermissionItem(this.title, this.value, this.icon);
 }

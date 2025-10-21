@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-import 'package:detect_care_caregiver_app/features/patient/screens/update_patient_info_screen.dart';
 import '../theme/app_theme.dart';
 
 class CustomBottomNavBar extends StatelessWidget {
@@ -136,14 +135,9 @@ class CustomBottomNavBar extends StatelessWidget {
         child: InkWell(
           borderRadius: BorderRadius.circular(12),
           onTap: () {
-            if (spec.item == BottomNavItem.patient) {
-              Navigator.of(context).push(
-                MaterialPageRoute(
-                  builder: (_) => const UpdatePatientInfoScreen(readOnly: true),
-                ),
-              );
-              return;
-            }
+            // Keep navigation consistent: notify parent to switch tab
+            // instead of pushing a standalone screen which breaks the
+            // app's global header/bottom layout.
             onTap(spec.index);
           },
           child: SizedBox(

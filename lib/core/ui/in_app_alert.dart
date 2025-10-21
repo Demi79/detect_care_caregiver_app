@@ -105,7 +105,17 @@ class InAppAlert {
                           } catch (_) {}
                         }
 
-                        final uri = Uri.parse('tel:$phone');
+                        String normalized = phone.replaceAll(
+                          RegExp(r'[\s\-\(\)]'),
+                          '',
+                        );
+                        if (normalized.startsWith('+84')) {
+                          normalized = '0' + normalized.substring(3);
+                        } else if (normalized.startsWith('84')) {
+                          normalized = '0' + normalized.substring(2);
+                        }
+
+                        final uri = Uri.parse('tel:$normalized');
                         await launchUrl(uri);
                       } catch (err) {
                         ScaffoldMessenger.of(ctx).showSnackBar(

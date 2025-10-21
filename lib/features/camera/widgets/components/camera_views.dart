@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 
-import 'add_camera_button.dart';
 import 'empty_state_icon.dart';
 
 class LoadingView extends StatelessWidget {
@@ -42,9 +41,7 @@ class LoadingView extends StatelessWidget {
 }
 
 class EmptyView extends StatefulWidget {
-  final VoidCallback onAddCamera;
-
-  const EmptyView({super.key, required this.onAddCamera});
+  const EmptyView({super.key});
 
   @override
   State<EmptyView> createState() => _EmptyViewState();
@@ -127,20 +124,16 @@ class _EmptyViewState extends State<EmptyView>
                 ),
               ),
               const SizedBox(height: 12),
-              const Text(
-                'Bắt đầu bằng cách thêm camera đầu tiên của bạn để giám sát và bảo vệ ngôi nhà',
-                style: TextStyle(
-                  color: Colors.black54,
-                  fontSize: 16,
-                  height: 1.5,
-                ),
-                textAlign: TextAlign.center,
-              ),
-              const SizedBox(height: 32),
-              AddCameraButton(
-                onPressed: widget.onAddCamera,
-                label: 'Thêm camera đầu tiên',
-              ),
+              // const Text(
+              //   'Bắt đầu bằng cách thêm camera đầu tiên của bạn để giám sát và bảo vệ ngôi nhà',
+              //   style: TextStyle(
+              //     color: Colors.black54,
+              //     fontSize: 16,
+              //     height: 1.5,
+              //   ),
+              //   textAlign: TextAlign.center,
+              // ),
+              // const SizedBox(height: 32),
             ],
           ),
         ),

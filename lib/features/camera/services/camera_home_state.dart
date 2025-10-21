@@ -54,12 +54,17 @@ class CameraHomeState extends ChangeNotifier {
     _loading = true;
     notifyListeners();
 
-    // 1) Quick: load cached/seeded cameras to show UI immediately
     try {
-      final cached = await CameraStorage.loadOrSeed();
-      debugPrint('[CameraHomeState] cached cameras: ${cached.length}');
-      if (cached.isNotEmpty && !_isDisposed) {
-        _cameras = cached;
+      final cached = await CameraStorage.load();
+      debugPrint('[CameraHomeState] cached cameras (raw): ${cached.length}');
+      final visibleCached = cached
+          .where((c) => !c.id.startsWith('demo-'))
+          .toList();
+      debugPrint(
+        '[CameraHomeState] cached cameras (filtered): ${visibleCached.length}',
+      );
+      if (visibleCached.isNotEmpty && !_isDisposed) {
+        _cameras = visibleCached;
         _loading = false;
         notifyListeners();
       }

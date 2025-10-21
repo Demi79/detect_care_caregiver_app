@@ -49,9 +49,9 @@ class CameraStorage {
     );
   }
 
-  static Future<List<CameraEntry>> loadOrSeed() async {
+  static Future<List<CameraEntry>> loadOrSeed({bool seedDemo = false}) async {
     var list = await load();
-    if (list.isEmpty) {
+    if (seedDemo && list.isEmpty) {
       list = List.of(defaultCameras);
       await save(list);
     }

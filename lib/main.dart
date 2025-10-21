@@ -35,6 +35,8 @@ import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:provider/provider.dart';
+import 'package:detect_care_caregiver_app/core/theme/theme_provider.dart';
+import 'package:detect_care_caregiver_app/core/theme/app_theme.dart';
 
 @pragma('vm:entry-point')
 Future<void> firebaseBackgroundHandler(RemoteMessage message) async {
@@ -204,6 +206,7 @@ Future<void> main() async {
   runApp(
     MultiProvider(
       providers: [
+        ChangeNotifierProvider(create: (_) => ThemeProvider()),
         ChangeNotifierProvider(create: (_) => AuthProvider(authRepo)),
         ChangeNotifierProvider(create: (_) => HealthOverviewProvider(hoRepo)),
 
@@ -345,10 +348,13 @@ class MyApp extends StatelessWidget {
   const MyApp({super.key});
   @override
   Widget build(BuildContext context) {
+    final theme = Provider.of<ThemeProvider>(context);
     return MaterialApp(
       title: 'Detect Care App',
       navigatorKey: NavigatorKey.navigatorKey,
-      theme: ThemeData(useMaterial3: true),
+      theme: AppTheme.lightTheme,
+      darkTheme: AppTheme.darkTheme,
+      themeMode: theme.isDark ? ThemeMode.dark : ThemeMode.light,
       home: const AuthGate(),
       routes: {
         '/settings': (_) => const SettingsScreen(),
