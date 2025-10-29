@@ -107,12 +107,14 @@ class CustomBottomNavBar extends StatelessWidget {
               borderRadius: borderRadius,
             ),
           ),
+
           Padding(
             padding: padding,
             child: Row(
-              mainAxisAlignment: alignment,
+              mainAxisAlignment: MainAxisAlignment.spaceEvenly,
               children: [
                 ...leftSpecs.map((s) => _buildItemButton(context, s)),
+
                 SizedBox(width: centerGap),
                 ...rightSpecs.map((s) => _buildItemButton(context, s)),
               ],
@@ -141,7 +143,7 @@ class CustomBottomNavBar extends StatelessWidget {
             onTap(spec.index);
           },
           child: SizedBox(
-            width: 64,
+            width: 62,
             height: 56,
             child: Stack(
               alignment: Alignment.center,
@@ -156,15 +158,15 @@ class CustomBottomNavBar extends StatelessWidget {
                       size: isSelected ? iconSize + 2 : iconSize,
                     ),
                     const SizedBox(height: 3),
-                    Text(
-                      spec.tooltip,
-                      style: TextStyle(
-                        fontSize: 10,
-                        color: isSelected ? AppTheme.primaryBlue : Colors.grey,
-                      ),
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                    ),
+                    // Text(
+                    //   spec.tooltip,
+                    //   style: TextStyle(
+                    //     fontSize: 10,
+                    //     color: isSelected ? AppTheme.primaryBlue : Colors.grey,
+                    //   ),
+                    //   maxLines: 1,
+                    //   overflow: TextOverflow.ellipsis,
+                    // ),
                   ],
                 ),
                 if (badgeCount > 0)

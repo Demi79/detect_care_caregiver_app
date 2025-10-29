@@ -33,35 +33,6 @@ class AuthProvider extends ChangeNotifier {
     _api = ApiClient(tokenProvider: () => AuthStorage.getAccessToken());
     _loadFromPrefs();
   }
-  // Future<void> saveFcmToken(String userId) async {
-  //   final token = await PushService.instance.getFcmToken();
-  //   if (token == null) return;
-
-  //   final payloads = [
-  //     {'userId': userId, 'token': token, 'type': 'device'},
-  //     {'userId': userId, 'token': token, 'type': 'caregiver'},
-  //   ];
-
-  //   // Gửi cả 2 request đồng thời
-  //   final results = await Future.wait(payloads.map((body) {
-  //     return _api.post(
-  //       '/fcm/token',
-  //       body: json.encode(body),
-  //     );
-  //   }));
-
-  //   for (var i = 0; i < results.length; i++) {
-  //     final res = results[i];
-  //     final type = payloads[i]['type'];
-  //     if (res.statusCode != 200) {
-  //       throw Exception(
-  //         'Failed to save FCM token ($type): ${res.statusCode} ${res.body}',
-  //       );
-  //     } else {
-  //       debugPrint('✅ Saved FCM token for type=$type');
-  //     }
-  //   }
-  // }
 
   Future<void> logout() async {
     await AuthStorage.clear();
@@ -90,12 +61,17 @@ class AuthProvider extends ChangeNotifier {
     try {
       await repo.remote.saveFcmToken(loginResult.user.id);
     } catch (e) {
-      debugPrint("⚠️ Save FCM token failed: $e");
+      print("⚠️ Save FCM token failed: $e");
     }
 
     final bool hasAssigned =
         user!.isAssigned || await _hasAcceptedAssignmentFor(user!.id);
-    if (hasAssigned) {
+
+    print(
+      '[Auth] caregiverLogin -> hasAssigned=$hasAssigned, isAssigned=${user!.isAssigned}',
+    );
+
+    if (hasAssigned || user!.isAssigned) {
       _set(AuthStatus.authenticated);
     } else {
       _set(AuthStatus.assignVerified);
@@ -105,14 +81,14 @@ class AuthProvider extends ChangeNotifier {
 
   Future<void> sendOtp(String phone) async {
     if (kDebugMode) {
-      debugPrint('[Auth] Sending OTP to phone: $phone');
+      print('[Auth] Sending OTP to phone: $phone');
     }
     final result = await repo.sendOtp(phone);
     lastOtpRequestMessage = result.message;
     lastOtpCallId = result.callId;
     _pendingPhone = phone;
     if (kDebugMode) {
-      debugPrint(
+      print(
         '[Auth] OTP sent successfully. Message: ${result.message}, CallId: ${result.callId}',
       );
     }
@@ -134,17 +110,22 @@ class AuthProvider extends ChangeNotifier {
       user = res.user;
       _cachedUserId = user!.id;
       if (kDebugMode) {
-        debugPrint('[Auth] OTP verified -> authenticated as ${user!.fullName}');
+        print('[Auth] OTP verified -> authenticated as ${user!.fullName}');
       }
       final bool hasAssigned =
           user!.isAssigned || await _hasAcceptedAssignmentFor(user!.id);
-      if (hasAssigned) {
+
+      print(
+        '[Auth] verifyOtp -> hasAssigned=$hasAssigned, isAssigned=${user!.isAssigned}',
+      );
+
+      if (hasAssigned || user!.isAssigned) {
         _set(AuthStatus.authenticated);
       } else {
         _set(AuthStatus.assignVerified);
       }
     } catch (err) {
-      if (kDebugMode) debugPrint('[Auth] verifyOtp failed: $err');
+      if (kDebugMode) print('[Auth] verifyOtp failed: $err');
       _set(AuthStatus.unauthenticated);
       rethrow;
     }
@@ -165,10 +146,8 @@ class AuthProvider extends ChangeNotifier {
   void _set(AuthStatus s) {
     if (kDebugMode) {
       final supaUser = Supabase.instance.client.auth.currentUser;
-      debugPrint('[Auth] status: ${status.name} -> ${s.name}');
-      debugPrint(
-        '[Auth] currentUser: ${user?.id}, supabaseUser: ${supaUser?.id}',
-      );
+      print('[Auth] status: ${status.name} -> ${s.name}');
+      print('[Auth] currentUser: ${user?.id}, supabaseUser: ${supaUser?.id}');
     }
     status = s;
     notifyListeners();
@@ -189,7 +168,12 @@ class AuthProvider extends ChangeNotifier {
       if (user != null) {
         final bool hasAssigned =
             user!.isAssigned || await _hasAcceptedAssignmentFor(user!.id);
-        if (hasAssigned) {
+
+        print(
+          '[Auth] _loadFromPrefs -> hasAssigned=$hasAssigned, isAssigned=${user!.isAssigned}',
+        );
+
+        if (hasAssigned || user!.isAssigned) {
           _set(AuthStatus.authenticated);
         } else {
           _set(AuthStatus.assignVerified);
@@ -218,24 +202,29 @@ class AuthProvider extends ChangeNotifier {
         final bool hasAssigned =
             user!.isAssigned || await _hasAcceptedAssignmentFor(user!.id);
 
+        print(
+          '[Auth] reloadUser -> hasAssigned=$hasAssigned, prevAssigned=$prevAssigned, isAssigned=${user!.isAssigned}',
+        );
+
         if (prevAssigned && !hasAssigned) {
           try {
             onAssignmentLost?.call();
           } catch (e) {
-            debugPrint('[Auth] onAssignmentLost handler failed: $e');
+            print('[Auth] onAssignmentLost handler failed: $e');
           }
+          _set(AuthStatus.assignVerified);
         }
 
         _wasAssigned = hasAssigned;
 
-        if (hasAssigned) {
+        if (hasAssigned || user!.isAssigned) {
           _set(AuthStatus.authenticated);
         } else {
           _set(AuthStatus.assignVerified);
         }
       }
     } catch (e) {
-      debugPrint("[Auth] reloadUser error: $e");
+      print("[Auth] reloadUser error: $e");
     }
   }
 
@@ -254,7 +243,12 @@ class AuthProvider extends ChangeNotifier {
 
       final bool hasAssigned =
           user!.isAssigned || await _hasAcceptedAssignmentFor(user!.id);
-      if (hasAssigned) {
+
+      print(
+        '[Auth] caregiverVerifyOtp -> hasAssigned=$hasAssigned, isAssigned=${user!.isAssigned}',
+      );
+
+      if (hasAssigned || user!.isAssigned) {
         _set(AuthStatus.authenticated);
       } else {
         _set(AuthStatus.assignVerified);
@@ -276,11 +270,49 @@ class AuthProvider extends ChangeNotifier {
       _disposeInvitationSubscription();
 
       final supa = Supabase.instance.client;
+      bool recordContainsUid(dynamic record, String uid) {
+        try {
+          if (record == null) return false;
+          if (record is String) return record == uid;
+          if (record is Map) {
+            final candidates = [
+              'caregiver_id',
+              'caregiverId',
+              'caregiver',
+              'caregiver_uuid',
+              'user_id',
+              'userId',
+              'owner_id',
+              'customer_id',
+            ];
+            for (final k in candidates) {
+              if (record.containsKey(k) && record[k] != null) {
+                if (record[k].toString() == uid) return true;
+              }
+            }
+            for (final v in record.values) {
+              if (v == null) continue;
+              if (v is String && v == uid) return true;
+              if (v is Map && recordContainsUid(v, uid)) return true;
+              if (v is List) {
+                for (final e in v) {
+                  if (e == null) continue;
+                  if (e is String && e == uid) return true;
+                  if (e is Map && recordContainsUid(e, uid)) return true;
+                }
+              }
+            }
+          }
+          return false;
+        } catch (_) {
+          return false;
+        }
+      }
+
       final name = 'caregiver_invitations_$uid';
       _invitationChannel =
           supa
               .channel(name)
-              // Insert
               .onPostgresChanges(
                 event: PostgresChangeEvent.insert,
                 schema: 'public',
@@ -288,18 +320,17 @@ class AuthProvider extends ChangeNotifier {
                 callback: (payload) async {
                   try {
                     final Map row = payload.newRecord;
-                    final cid = row['caregiver_id']?.toString();
-                    if (cid == uid) {
-                      if (kDebugMode)
-                        debugPrint('[Auth] invitation insert for me: $row');
+                    if (recordContainsUid(row, uid)) {
+                      print('[Auth] invitation insert for me: $row');
                       await reloadUser();
+                    } else {
+                      print('[Auth] invitation insert (not mine): $row');
                     }
                   } catch (e) {
-                    debugPrint('[Auth] invitation insert handler error: $e');
+                    print('[Auth] invitation insert handler error: $e');
                   }
                 },
               )
-              // Update
               .onPostgresChanges(
                 event: PostgresChangeEvent.update,
                 schema: 'public',
@@ -307,18 +338,17 @@ class AuthProvider extends ChangeNotifier {
                 callback: (payload) async {
                   try {
                     final Map row = payload.newRecord;
-                    final cid = row['caregiver_id']?.toString();
-                    if (cid == uid) {
-                      if (kDebugMode)
-                        debugPrint('[Auth] invitation update for me: $row');
+                    if (recordContainsUid(row, uid)) {
+                      print('[Auth] invitation update for me: $row');
                       await reloadUser();
+                    } else {
+                      print('[Auth] invitation update (not mine): $row');
                     }
                   } catch (e) {
-                    debugPrint('[Auth] invitation update handler error: $e');
+                    print('[Auth] invitation update handler error: $e');
                   }
                 },
               )
-              // Delete
               .onPostgresChanges(
                 event: PostgresChangeEvent.delete,
                 schema: 'public',
@@ -326,20 +356,54 @@ class AuthProvider extends ChangeNotifier {
                 callback: (payload) async {
                   try {
                     final Map row = payload.oldRecord;
-                    final cid = row['caregiver_id']?.toString();
-                    if (cid == uid) {
-                      if (kDebugMode)
-                        debugPrint('[Auth] invitation delete for me: $row');
+                    if (recordContainsUid(row, uid)) {
+                      print('[Auth] caregiver_invitations delete for me: $row');
                       await reloadUser();
                     }
                   } catch (e) {
-                    debugPrint('[Auth] invitation delete handler error: $e');
+                    print(
+                      '[Auth] caregiver_invitations delete handler error: $e',
+                    );
                   }
                 },
               )
+            // .onPostgresChanges(
+            //   event: PostgresChangeEvent.update,
+            //   schema: 'public',
+            //   table: 'caregiver_invitations',
+            //   callback: (payload) async {
+            //     try {
+            //       final Map row = payload.newRecord;
+            //       if (recordContainsUid(row, uid)) {
+            //         final status = row['status']?.toString()?.toLowerCase();
+            //         if (status == 'cancelled' ||
+            //             status == 'inactive' ||
+            //             status == 'revoked') {
+            //           print(
+            //             '[Auth] caregiver_invitations status=$status for me, reloading...',
+            //           );
+            //           await reloadUser();
+            //         }
+            //       }
+            //     } catch (e) {
+            //       print(
+            //         '[Auth] caregiver_invitations update handler error: $e',
+            //       );
+            //     }
+            //   },
+            // )
+            // .onPostgresChanges(
+            //   event: PostgresChangeEvent.truncate,
+            //   schema: 'public',
+            //   table: 'caregiver_invitations',
+            //   callback: (_) async {
+            //     await reloadUser();
+            //   },
+            // )
             ..subscribe((status, error) {
+              print('[Auth] invitation channel status: $status');
               if (error != null) {
-                debugPrint('[Auth] Supabase invitation channel error: $error');
+                print('[Auth] Supabase invitation channel error: $error');
                 Future.delayed(const Duration(seconds: 5), () {
                   if (_invitationChannel != null)
                     _invitationChannel!.subscribe();
@@ -347,22 +411,22 @@ class AuthProvider extends ChangeNotifier {
                 return;
               }
               if (kDebugMode)
-                debugPrint('[Auth] invitation channel status: $status');
+                print('[Auth] invitation channel status: $status');
             });
     } catch (e) {
-      debugPrint('[Auth] _ensureInvitationSubscription failed: $e');
+      print('[Auth] _ensureInvitationSubscription failed: $e');
     }
   }
 
   void _disposeInvitationSubscription() {
     try {
       if (_invitationChannel != null) {
-        if (kDebugMode) debugPrint('[Auth] disposing invitation channel');
+        if (kDebugMode) print('[Auth] disposing invitation channel');
         _invitationChannel!.unsubscribe();
         _invitationChannel = null;
       }
     } catch (e) {
-      debugPrint('[Auth] _disposeInvitationSubscription error: $e');
+      print('[Auth] _disposeInvitationSubscription error: $e');
     }
   }
 
@@ -372,7 +436,7 @@ class AuthProvider extends ChangeNotifier {
       final list = await ds.listPending(status: 'accepted');
       return list.any((a) => a.caregiverId == userId && a.isActive);
     } catch (e) {
-      if (kDebugMode) debugPrint('[Auth] _hasAcceptedAssignmentFor error: $e');
+      if (kDebugMode) print('[Auth] _hasAcceptedAssignmentFor error: $e');
       return false;
     }
   }
