@@ -11,6 +11,7 @@ import 'package:detect_care_caregiver_app/features/auth/repositories/auth_reposi
 
 import 'package:detect_care_caregiver_app/features/health_overview/data/health_overview_endpoints.dart';
 import 'package:detect_care_caregiver_app/features/health_overview/data/health_overview_remote_data_source.dart';
+import 'package:detect_care_caregiver_app/features/auth/data/auth_storage.dart';
 import 'package:detect_care_caregiver_app/features/health_overview/data/health_overview_repository_impl.dart';
 import 'package:detect_care_caregiver_app/features/health_overview/providers/health_overview_provider.dart';
 
@@ -187,7 +188,7 @@ Future<void> main() async {
 
   final hoRepo = HealthOverviewRepositoryImpl(
     HealthOverviewRemoteDataSource(
-      client: client,
+      api: ApiClient(client: client, tokenProvider: AuthStorage.getAccessToken),
       endpoints: HealthOverviewEndpoints(),
     ),
   );
@@ -287,24 +288,31 @@ Future<void> main() async {
       _unauthInProgress = false;
     }
   };
-  // Register assignment-lost handler on AuthProvider (if available)
   try {
     final navigator = NavigatorKey.navigatorKey.currentState;
     final ctx = navigator?.context;
+
     if (ctx != null) {
       try {
         final auth = Provider.of<AuthProvider>(ctx, listen: false);
+
         auth.onAssignmentLost = () async {
           try {
-            // Show alert dialog with the provided Vietnamese text
+            auth.status = AuthStatus.assignVerified;
+            auth.notifyListeners();
+
             WidgetsBinding.instance.addPostFrameCallback((_) {
               showDialog(
                 context: ctx,
                 barrierDismissible: false,
                 builder: (dCtx) => AlertDialog(
-                  title: const Text('Liên kết chăm sóc đã kết thúc'),
+                  title: const Text(
+                    'Liên kết chăm sóc đã kết thúc',
+                    style: TextStyle(fontWeight: FontWeight.bold),
+                  ),
                   content: const Text(
-                    'Bạn và khách hàng này không còn được kết nối trong hệ thống.\nMột số tính năng và dữ liệu liên quan sẽ không còn khả dụng.',
+                    'Bạn và khách hàng này không còn được kết nối trong hệ thống.\n'
+                    'Một số tính năng và dữ liệu liên quan sẽ không còn khả dụng.',
                   ),
                   actions: [
                     TextButton(
@@ -318,10 +326,8 @@ Future<void> main() async {
               );
             });
 
-            // Wait briefly for user to read then navigate to pending assignment screen
             await Future.delayed(const Duration(milliseconds: 1400));
 
-            // Navigate to PendingAssignmentsScreen and clear stack
             navigator?.pushAndRemoveUntil(
               MaterialPageRoute(
                 builder: (_) => const PendingAssignmentsScreen(),

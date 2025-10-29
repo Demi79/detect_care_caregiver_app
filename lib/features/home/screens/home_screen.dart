@@ -112,6 +112,10 @@ class _HomeScreenState extends State<HomeScreen>
       const Duration(minutes: 5),
       (_) => _loadNotificationCount(),
     );
+    Timer.periodic(const Duration(seconds: 15), (_) async {
+      if (!mounted) return;
+      await context.read<AuthProvider>().reloadUser();
+    });
   }
 
   void _loadNotifications() async {
@@ -215,6 +219,10 @@ class _HomeScreenState extends State<HomeScreen>
       dev.log(
         'UI got events=${events.length}, firstIds=${events.take(3).map((e) => e.eventId).toList()}',
         name: 'HomeScreen',
+      );
+      print(
+        'UI got events=${events.length}, '
+        'firstIds=${events.take(3).map((e) => e.eventId).toList()}',
       );
 
       if (!mounted) return;

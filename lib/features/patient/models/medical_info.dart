@@ -1,18 +1,15 @@
-import 'package:flutter/material.dart';
+import 'package:flutter/foundation.dart';
+import 'package:intl/intl.dart';
 
 class PatientInfo {
   final String name;
   final String dob;
-  // final String phone;
-  // final String address;
   final List<String>? allergies;
   final List<String>? chronicDiseases;
 
   const PatientInfo({
     required this.name,
     required this.dob,
-    // required this.phone,
-    // required this.address,
     this.allergies,
     this.chronicDiseases,
   });
@@ -20,8 +17,6 @@ class PatientInfo {
   factory PatientInfo.fromJson(Map<String, dynamic> json) => PatientInfo(
     name: json['name']?.toString() ?? '',
     dob: json['dob']?.toString() ?? '',
-    // phone: json['phone']?.toString() ?? '',
-    // address: json['address']?.toString() ?? '',
     allergies: (json['allergies'] as List?)?.map((e) => e.toString()).toList(),
     chronicDiseases: (json['chronicDiseases'] as List?)
         ?.map((e) => e.toString())
@@ -31,26 +26,37 @@ class PatientInfo {
   Map<String, dynamic> toJson() => {
     'name': name,
     'dob': dob,
-    // 'phone': phone,
-    // 'address': address,
     if (allergies != null) 'allergies': allergies,
     if (chronicDiseases != null) 'chronicDiseases': chronicDiseases,
   };
+
+  String get dobViFormat {
+    try {
+      final date = DateTime.parse(dob);
+      return DateFormat('dd/MM/yyyy', 'vi_VN').format(date);
+    } catch (_) {
+      return dob;
+    }
+  }
 }
 
+/// Hồ sơ bệnh án (record)
 class PatientRecord {
   final List<String> conditions;
   final List<String> medications;
   final List<String> history;
+
   const PatientRecord({
     required this.conditions,
     required this.medications,
     required this.history,
   });
+
   factory PatientRecord.fromJson(Map<String, dynamic> json) => PatientRecord(
-    conditions: (json['conditions'] as List? ?? const [])
-        .map((e) => e.toString())
-        .toList(),
+    conditions:
+        ((json['name'] as List?) ?? (json['conditions'] as List?) ?? const [])
+            .map((e) => e.toString())
+            .toList(),
     medications: (json['medications'] as List? ?? const [])
         .map((e) => e.toString())
         .toList(),
@@ -58,121 +64,15 @@ class PatientRecord {
         .map((e) => e.toString())
         .toList(),
   );
+
   Map<String, dynamic> toJson() => {
-    'conditions': conditions,
-    'medications': medications,
-    'history': history,
+    'name': conditions,
+    if (medications.isNotEmpty) 'medications': medications,
+    if (history.isNotEmpty) 'history': history,
   };
 }
 
-class MedicalInfoResponse {
-  final PatientInfo? patient;
-  final PatientRecord? record;
-  final List<Habit> habits;
-  final List<EmergencyContact> contacts;
-  const MedicalInfoResponse({
-    this.patient,
-    this.record,
-    required this.habits,
-    required this.contacts,
-  });
-  factory MedicalInfoResponse.fromJson(Map<String, dynamic> json) {
-    debugPrint(
-      '[MedicalInfoResponse.fromJson] incoming json keys: ${json.keys.toList()}',
-    );
-    debugPrint(
-      '[MedicalInfoResponse.fromJson] contacts raw: ${json['contacts']?.runtimeType}',
-    );
-    debugPrint(
-      '[MedicalInfoResponse.fromJson] habits raw: ${json['habits']?.runtimeType}',
-    );
-    try {
-      final rc = json['contacts'];
-      if (rc is List) {
-        debugPrint(
-          '[MedicalInfoResponse.fromJson] contacts preview: ${rc.isNotEmpty ? rc.take(3).toList() : []}',
-        );
-      }
-      if (rc is Map) {
-        debugPrint(
-          '[MedicalInfoResponse.fromJson] contacts keys: ${rc.keys.toList()}',
-        );
-      }
-    } catch (_) {}
-    try {
-      final rh = json['habits'];
-      if (rh is List) {
-        debugPrint(
-          '[MedicalInfoResponse.fromJson] habits preview: ${rh.isNotEmpty ? rh.take(3).toList() : []}',
-        );
-      }
-      if (rh is Map) {
-        debugPrint(
-          '[MedicalInfoResponse.fromJson] habits keys: ${rh.keys.toList()}',
-        );
-      }
-    } catch (_) {}
-
-    final dynamic rawContacts = json['contacts'];
-    final List<EmergencyContact> contacts = <EmergencyContact>[];
-    if (rawContacts is List) {
-      for (final e in rawContacts) {
-        if (e is EmergencyContact) {
-          contacts.add(e);
-        } else if (e is Map<String, dynamic>) {
-          contacts.add(EmergencyContact.fromJson(e));
-        } else if (e is Map) {
-          contacts.add(EmergencyContact.fromJson(e.cast<String, dynamic>()));
-        }
-      }
-    } else if (rawContacts is Map && rawContacts['items'] is List) {
-      for (final e in rawContacts['items'] as List) {
-        if (e is EmergencyContact) {
-          contacts.add(e);
-        } else if (e is Map<String, dynamic>) {
-          contacts.add(EmergencyContact.fromJson(e));
-        } else if (e is Map) {
-          contacts.add(EmergencyContact.fromJson(e.cast<String, dynamic>()));
-        }
-      }
-    }
-
-    final dynamic rawHabits = json['habits'];
-    final List<Habit> habits = <Habit>[];
-    if (rawHabits is List) {
-      for (final e in rawHabits) {
-        if (e is Habit) {
-          habits.add(e);
-        } else if (e is Map) {
-          habits.add(Habit.fromJson(e.cast<String, dynamic>()));
-        }
-      }
-    } else if (rawHabits is Map && rawHabits['items'] is List) {
-      for (final e in rawHabits['items'] as List) {
-        if (e is Habit) {
-          habits.add(e);
-        } else if (e is Map) {
-          habits.add(Habit.fromJson(e.cast<String, dynamic>()));
-        }
-      }
-    }
-    return MedicalInfoResponse(
-      patient: (json['patient'] is Map)
-          ? PatientInfo.fromJson(
-              (json['patient'] as Map).cast<String, dynamic>(),
-            )
-          : null,
-      record: (json['record'] is Map)
-          ? PatientRecord.fromJson(
-              (json['record'] as Map).cast<String, dynamic>(),
-            )
-          : null,
-      habits: habits,
-      contacts: contacts,
-    );
-  }
-}
-
+/// Contact khẩn cấp
 class EmergencyContact {
   final String? id;
   final String name;
@@ -198,6 +98,7 @@ class EmergencyContact {
             ? int.tryParse(json['alert_level'].toString()) ?? 1
             : 1,
       );
+
   Map<String, dynamic> toJson() => {
     if (id != null) 'id': id,
     'name': name,
@@ -207,28 +108,35 @@ class EmergencyContact {
   };
 }
 
+/// Thói quen sinh hoạt (habit)
 class Habit {
   final String habitType;
   final String habitName;
   final String? description;
+  final String? sleepStart; // HH:mm:ss
+  final String? sleepEnd; // HH:mm:ss
   final String? typicalTime;
   final int? durationMinutes;
   final String frequency;
   final List<String>? daysOfWeek;
   final String? location;
-  final String? notes;
+  final Map<String, dynamic>? notesMap;
+  final String? notesString;
   final bool isActive;
 
   const Habit({
     required this.habitType,
     required this.habitName,
     this.description,
+    this.sleepStart,
+    this.sleepEnd,
     this.typicalTime,
     this.durationMinutes,
     required this.frequency,
     this.daysOfWeek,
     this.location,
-    this.notes,
+    this.notesMap,
+    this.notesString,
     this.isActive = true,
   });
 
@@ -236,6 +144,8 @@ class Habit {
     habitType: json['habit_type']?.toString() ?? '',
     habitName: json['habit_name']?.toString() ?? '',
     description: json['description']?.toString(),
+    sleepStart: json['sleep_start']?.toString(),
+    sleepEnd: json['sleep_end']?.toString(),
     typicalTime: json['typical_time']?.toString(),
     durationMinutes: json['duration_minutes'] != null
         ? int.tryParse(json['duration_minutes'].toString())
@@ -245,7 +155,10 @@ class Habit {
         ?.map((e) => e.toString())
         .toList(),
     location: json['location']?.toString(),
-    notes: json['notes']?.toString(),
+    notesMap: json['notes'] is Map
+        ? (json['notes'] as Map).cast<String, dynamic>()
+        : null,
+    notesString: json['notes'] is String ? json['notes']?.toString() : null,
     isActive: json['is_active'] == null
         ? true
         : json['is_active'] == true || json['is_active'].toString() == 'true',
@@ -255,12 +168,79 @@ class Habit {
     'habit_type': habitType,
     'habit_name': habitName,
     if (description != null) 'description': description,
+    if (sleepStart != null) 'sleep_start': sleepStart,
+    if (sleepEnd != null) 'sleep_end': sleepEnd,
     if (typicalTime != null) 'typical_time': typicalTime,
     if (durationMinutes != null) 'duration_minutes': durationMinutes,
     'frequency': frequency,
     if (daysOfWeek != null) 'days_of_week': daysOfWeek,
     if (location != null) 'location': location,
-    if (notes != null) 'notes': notes,
+    if (notesMap != null)
+      'notes': notesMap
+    else if (notesString != null)
+      'notes': notesString,
     'is_active': isActive,
   };
+}
+
+/// Gộp toàn bộ dữ liệu phản hồi từ API
+class MedicalInfoResponse {
+  final PatientInfo? patient;
+  final PatientRecord? record;
+  final List<Habit> habits;
+  final List<EmergencyContact> contacts;
+
+  const MedicalInfoResponse({
+    this.patient,
+    this.record,
+    required this.habits,
+    required this.contacts,
+  });
+
+  factory MedicalInfoResponse.fromJson(Map<String, dynamic> json) {
+    debugPrint('[MedicalInfoResponse.fromJson] keys: ${json.keys.join(', ')}');
+
+    // Chuẩn hóa contacts
+    final List<EmergencyContact> contacts = [];
+    final rawContacts = json['contacts'];
+    if (rawContacts is List) {
+      for (final e in rawContacts) {
+        if (e is Map)
+          contacts.add(EmergencyContact.fromJson(e.cast<String, dynamic>()));
+      }
+    } else if (rawContacts is Map && rawContacts['items'] is List) {
+      for (final e in rawContacts['items'] as List) {
+        if (e is Map)
+          contacts.add(EmergencyContact.fromJson(e.cast<String, dynamic>()));
+      }
+    }
+
+    // Chuẩn hóa habits
+    final List<Habit> habits = [];
+    final rawHabits = json['habits'];
+    if (rawHabits is List) {
+      for (final e in rawHabits) {
+        if (e is Map) habits.add(Habit.fromJson(e.cast<String, dynamic>()));
+      }
+    } else if (rawHabits is Map && rawHabits['items'] is List) {
+      for (final e in rawHabits['items'] as List) {
+        if (e is Map) habits.add(Habit.fromJson(e.cast<String, dynamic>()));
+      }
+    }
+
+    return MedicalInfoResponse(
+      patient: json['patient'] is Map
+          ? PatientInfo.fromJson(
+              (json['patient'] as Map).cast<String, dynamic>(),
+            )
+          : null,
+      record: json['record'] is Map
+          ? PatientRecord.fromJson(
+              (json['record'] as Map).cast<String, dynamic>(),
+            )
+          : null,
+      habits: habits,
+      contacts: contacts,
+    );
+  }
 }

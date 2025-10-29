@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 import 'package:detect_care_caregiver_app/features/events/data/events_remote_data_source.dart';
+import '../../../core/utils/backend_enums.dart' as _be;
 
 class AlertEventCard extends StatefulWidget {
   final String eventId;
@@ -299,7 +300,9 @@ class _AlertEventCardState extends State<AlertEventCard>
                       runSpacing: 4,
                       children: [
                         Text(
-                          widget.eventType.toUpperCase(),
+                          _be.BackendEnums.eventTypeToVietnamese(
+                            widget.eventType.toLowerCase(),
+                          ),
                           style: TextStyle(
                             fontSize: 14,
                             fontWeight: FontWeight.w700,
@@ -486,9 +489,8 @@ class _AlertEventCardState extends State<AlertEventCard>
           const Divider(height: 1),
           const SizedBox(height: 12),
 
-          _buildInfoRow('Mã sự kiện', widget.eventId),
-          const SizedBox(height: 8),
-
+          // _buildInfoRow('Mã sự kiện', widget.eventId),
+          // const SizedBox(height: 8),
           _buildInfoRow(
             'Thời gian',
             '${widget.timestamp.day}/${widget.timestamp.month}/${widget.timestamp.year} ${widget.timestamp.hour.toString().padLeft(2, '0')}:${widget.timestamp.minute.toString().padLeft(2, '0')}',
@@ -496,22 +498,25 @@ class _AlertEventCardState extends State<AlertEventCard>
 
           const SizedBox(height: 8),
 
-          _buildInfoRow('Loại', widget.eventType),
+          _buildInfoRow(
+            'Loại',
+            _be.BackendEnums.eventTypeToVietnamese(widget.eventType),
+          ),
           const SizedBox(height: 8),
           _buildInfoRow(
             'Mô tả',
             widget.description.isNotEmpty ? widget.description : '-',
           ),
           const SizedBox(height: 8),
-          _buildInfoRow('Camera', widget.cameraId ?? '-'),
-          const SizedBox(height: 8),
-          _buildInfoRow(
-            'Độ tin cậy',
-            widget.confidence != null
-                ? widget.confidence!.toStringAsFixed(2)
-                : '-',
-          ),
+          _buildInfoRow('Camera', widget.cameraId ?? 'Phòng khách'),
 
+          // const SizedBox(height: 8),
+          // _buildInfoRow(
+          //   'Độ tin cậy',
+          //   widget.confidence != null
+          //       ? widget.confidence!.toStringAsFixed(2)
+          //       : '-',
+          // ),
           if (widget.imageUrl != null) ...[
             const SizedBox(height: 12),
             ClipRRect(

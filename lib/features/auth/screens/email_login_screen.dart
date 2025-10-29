@@ -8,7 +8,6 @@ import 'package:provider/provider.dart';
 import '../../../widgets/auth_gate.dart';
 import '../providers/auth_provider.dart';
 import '../utils/validators.dart';
-import 'register_caregiver_screen.dart';
 
 class EmailLoginScreen extends StatefulWidget {
   const EmailLoginScreen({super.key});

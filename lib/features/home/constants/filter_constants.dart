@@ -7,18 +7,18 @@ DateTimeRange todayRange() {
 }
 
 class HomeFilters {
-  static const statusOptions = ['All', 'danger', 'warning', 'normal'];
-
-  static const periodOptions = [
-    'All',
-    'Morning',
-    'Afternoon',
-    'Evening',
-    'Night',
+  static const statusOptions = [
+    'all',
+    'abnormal',
+    'danger',
+    'warning',
+    'normal',
   ];
 
-  static const String defaultStatus = 'All';
-  static const String defaultPeriod = 'All';
+  static const periodOptions = ['all', '00-06', '06-12', '12-18', '18-24'];
+
+  static const String defaultStatus = 'abnormal';
+  static const String defaultPeriod = 'all';
 
   static DateTimeRange get defaultDayRange => todayRange();
 }

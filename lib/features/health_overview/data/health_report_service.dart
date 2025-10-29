@@ -1,7 +1,9 @@
 import 'dart:convert';
 
 import 'package:detect_care_caregiver_app/core/network/api_client.dart';
+import 'package:flutter/foundation.dart';
 import 'package:detect_care_caregiver_app/features/auth/data/auth_storage.dart';
+import 'package:http/http.dart' as http;
 
 int _asInt(dynamic v) {
   if (v is num) return v.toInt();
@@ -19,7 +21,6 @@ class HealthReportOverviewDto {
   final HighRiskTimeDto highRiskTime;
   final String aiSummary;
 
-  // optional (nếu server có thể trả về trong tương lai)
   final StatusBreakdownDto? statusBreakdown;
   final List<TrendItemDto>? weeklyTrend;
 
@@ -293,23 +294,87 @@ class HealthReportRemoteDataSource {
   HealthReportRemoteDataSource({ApiClient? api})
     : _api = api ?? ApiClient(tokenProvider: AuthStorage.getAccessToken);
 
+  String _ymd(DateTime d) =>
+      '${d.year.toString().padLeft(4, '0')}-'
+      '${d.month.toString().padLeft(2, '0')}-'
+      '${d.day.toString().padLeft(2, '0')}';
+
+  Future<(String, Map<String, String>?)> _buildPathAndHeaders(
+    String basePath,
+    DateTime startDay,
+    DateTime endDay,
+  ) async {
+    var path = '$basePath?startDay=${_ymd(startDay)}&endDay=${_ymd(endDay)}';
+    String? userId = await AuthStorage.getUserId();
+
+    if (userId == null || userId.isEmpty) {
+      try {
+        final token = await AuthStorage.getAccessToken();
+        if (token != null && token.isNotEmpty) {
+          final decoded = _tryDecodeJwtPayload(token);
+          final candidate =
+              decoded['user_id'] as String? ?? decoded['sub'] as String?;
+          if (candidate != null && candidate.isNotEmpty) {
+            userId = candidate;
+          }
+        }
+      } catch (e) {
+        debugPrint('[DEBUG] health_report: JWT decode fallback failed: $e');
+      }
+    }
+
+    final headers = (userId != null && userId.isNotEmpty)
+        ? {'X-User-Id': userId}
+        : null;
+    if (userId != null && userId.isNotEmpty) {
+      path = '$path&userId=${Uri.encodeComponent(userId)}';
+    }
+    return (path, headers);
+  }
+
+  Map<String, dynamic> _tryDecodeJwtPayload(String token) {
+    try {
+      final parts = token.split('.');
+      if (parts.length < 2) return {};
+      final payload = parts[1];
+      String normalized = payload.replaceAll('-', '+').replaceAll('_', '/');
+      while (normalized.length % 4 != 0) {
+        normalized += '=';
+      }
+      final bytes = base64Url.decode(normalized);
+      final decoded = utf8.decode(bytes);
+      if (decoded.isEmpty) return {};
+      final map = Map<String, dynamic>.from(
+        json.decode(decoded) as Map<String, dynamic>,
+      );
+      return map;
+    } catch (_) {
+      return {};
+    }
+  }
+
   Future<HealthReportOverviewDto> overview({
     required DateTime startDay,
     required DateTime endDay,
   }) async {
-    String _ymd(DateTime d) =>
-        '${d.year.toString().padLeft(4, '0')}-'
-        '${d.month.toString().padLeft(2, '0')}-'
-        '${d.day.toString().padLeft(2, '0')}';
+    final tuple = await _buildPathAndHeaders(
+      '/health/reports/overview',
+      startDay,
+      endDay,
+    );
+    final path = tuple.$1;
+    final extraHeaders = tuple.$2;
 
-    final path =
-        '/health-report/overview?startDay=${_ymd(startDay)}&endDay=${_ymd(endDay)}';
-
-    final res = await _api.get(path);
+    final res = await _api.get(path, extraHeaders: extraHeaders);
     if (res.statusCode < 200 || res.statusCode >= 300) {
       throw Exception('Overview failed: ${res.statusCode} ${res.body}');
     }
-    final map = json.decode(res.body) as Map<String, dynamic>;
+    final map = _api.extractDataFromResponse(res) as Map<String, dynamic>;
+    try {
+      debugPrint(
+        '[DEBUG] health-report raw high_risk_time: ${map['high_risk_time']}',
+      );
+    } catch (_) {}
     return HealthReportOverviewDto.fromJson(map);
   }
 
@@ -317,19 +382,55 @@ class HealthReportRemoteDataSource {
     required DateTime startDay,
     required DateTime endDay,
   }) async {
-    String _ymd(DateTime d) =>
-        '${d.year.toString().padLeft(4, '0')}-'
-        '${d.month.toString().padLeft(2, '0')}-'
-        '${d.day.toString().padLeft(2, '0')}';
+    final tuple2 = await _buildPathAndHeaders(
+      '/health/reports/insights',
+      startDay,
+      endDay,
+    );
+    final path2 = tuple2.$1;
+    final extraHeaders2 = tuple2.$2;
 
-    final path =
-        '/health-report/insight?startDay=${_ymd(startDay)}&endDay=${_ymd(endDay)}';
-
-    final res = await _api.get(path);
+    final res = await _api.get(path2, extraHeaders: extraHeaders2);
     if (res.statusCode < 200 || res.statusCode >= 300) {
       throw Exception('Insight failed: ${res.statusCode} ${res.body}');
     }
-    final map = json.decode(res.body) as Map<String, dynamic>;
+    final map = _api.extractDataFromResponse(res) as Map<String, dynamic>;
     return HealthReportInsightDto.fromJson(map);
+  }
+
+  Future<dynamic> fetchAnalystUserJsonRange({
+    required String userId,
+    required String from,
+    required String to,
+    bool includeData = true,
+  }) async {
+    final q = {
+      'userId': userId,
+      'from': from,
+      'to': to,
+      'includeData': includeData.toString(),
+    };
+    final uri = Uri.https(
+      'analyst.cicca.dpdns.org',
+      '/file-manage/user-json-range',
+      q,
+    );
+
+    try {
+      final token = await AuthStorage.getAccessToken();
+      final headers = <String, String>{'Accept': 'application/json'};
+      if (token != null && token.isNotEmpty) {
+        headers['Authorization'] = 'Bearer $token';
+      }
+
+      final res = await http.get(uri, headers: headers);
+      if (res.statusCode < 200 || res.statusCode >= 300) {
+        throw Exception('Analyst fetch failed: ${res.statusCode} ${res.body}');
+      }
+      return json.decode(res.body);
+    } catch (e) {
+      debugPrint('[ANALYST] fetch error: $e');
+      rethrow;
+    }
   }
 }

@@ -11,20 +11,28 @@ class SectionHeader extends StatelessWidget {
   Widget build(BuildContext context) {
     return Row(
       children: [
-        Text(
-          title,
-          style: Theme.of(context).textTheme.titleMedium?.copyWith(
-            fontWeight: FontWeight.w600,
-            color: AppTheme.text,
+        Expanded(
+          child: Text(
+            title,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: Theme.of(context).textTheme.titleMedium?.copyWith(
+              fontWeight: FontWeight.w600,
+              color: AppTheme.text,
+            ),
           ),
         ),
-        const Spacer(),
-        if (onViewAll != null)
-          TextButton.icon(
-            onPressed: onViewAll,
-            icon: const Icon(Icons.open_in_new_rounded, size: 16),
-            label: const Text('Xem chi tiết'),
+        if (onViewAll != null) ...[
+          const SizedBox(width: 8),
+          ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: 140),
+            child: TextButton.icon(
+              onPressed: onViewAll,
+              icon: const Icon(Icons.open_in_new_rounded, size: 16),
+              label: const Text('Xem chi tiết'),
+            ),
           ),
+        ],
       ],
     );
   }

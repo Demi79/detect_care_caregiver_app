@@ -1,8 +1,8 @@
+import 'package:detect_care_caregiver_app/features/home/screens/warning_log_screen.dart';
 import 'package:flutter/material.dart';
 
 import '../../../features/health_overview/screens/health_overview_screen.dart';
 import '../widgets/tab_selector.dart';
-import 'warning_log_screen.dart';
 
 class ActivityScreen extends StatelessWidget {
   const ActivityScreen({super.key});
@@ -19,9 +19,7 @@ class ActivityScreen extends StatelessWidget {
             case 'warning':
               Navigator.pushReplacement(
                 context,
-                MaterialPageRoute(
-                  builder: (_) => WarningLogScreen.defaultScreen(),
-                ),
+                MaterialPageRoute(builder: (_) => WarningLogScreen()),
               );
               break;
             case 'report':

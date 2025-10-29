@@ -91,9 +91,28 @@ class AuthRemoteDataSource {
   Future<User> me() async {
     final map = await _authApi.me();
 
-    final raw = (map['user'] is Map)
-        ? (map['user'] as Map).cast<String, dynamic>()
-        : map.cast<String, dynamic>();
+    Map<String, dynamic>? locateUserMap(dynamic candidate) {
+      try {
+        if (candidate == null) return null;
+        if (candidate is Map) {
+          final m = candidate.cast<String, dynamic>();
+          if (m.containsKey('user') && m['user'] is Map) {
+            return (m['user'] as Map).cast<String, dynamic>();
+          }
+          if (m.containsKey('data') && m['data'] is Map) {
+            final data = (m['data'] as Map).cast<String, dynamic>();
+            if (data.containsKey('user') && data['user'] is Map) {
+              return (data['user'] as Map).cast<String, dynamic>();
+            }
+            return data;
+          }
+          return m;
+        }
+      } catch (_) {}
+      return null;
+    }
+
+    final raw = locateUserMap(map) ?? <String, dynamic>{};
 
     final serverKeyed = <String, dynamic>{
       'user_id': raw['user_id']?.toString() ?? raw['id']?.toString() ?? '',

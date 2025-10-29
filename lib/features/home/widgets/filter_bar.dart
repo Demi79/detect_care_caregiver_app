@@ -13,6 +13,13 @@ class FilterBar extends StatelessWidget {
   final ValueChanged<DateTimeRange?> onDayRangeChanged;
   final ValueChanged<String?> onPeriodChanged;
 
+  static const List<Map<String, String>> timeSlots = [
+    {'label': '00:00-06:00', 'value': '00-06'},
+    {'label': '06:00-12:00', 'value': '06-12'},
+    {'label': '12:00-18:00', 'value': '12-18'},
+    {'label': '18:00-24:00', 'value': '18-24'},
+  ];
+
   const FilterBar({
     super.key,
     required this.statusOptions,
@@ -31,24 +38,41 @@ class FilterBar extends StatelessWidget {
     final defaultRange = HomeFilters.defaultDayRange;
 
     final bool hasCustomStatus =
-        _normalize(selectedStatus) != _normalize(HomeFilters.defaultStatus);
+        _normalize(selectedStatus) != _normalize('abnormal');
     final bool hasCustomPeriod =
-        _normalize(selectedPeriod) != _normalize(HomeFilters.defaultPeriod);
+        _normalize(selectedPeriod) != _normalize('all');
     final bool hasCustomDayRange =
         selectedDayRange != null &&
         !_isSameRange(selectedDayRange, defaultRange);
-    final bool hasActiveFilters =
-        hasCustomStatus || hasCustomPeriod || hasCustomDayRange;
 
-    final appliedParts = <String>[];
+    String summary = '';
     if (hasCustomDayRange && selectedDayRange != null) {
-      appliedParts.add('Ngày = ${_formatRange(selectedDayRange!)}');
+      final sameDay = _isSameDay(
+        selectedDayRange!.start,
+        selectedDayRange!.end,
+      );
+      final dayStr = _formatDateVN(selectedDayRange!.start);
+      final endDayStr = _formatDateVN(selectedDayRange!.end);
+      if (sameDay) {
+        summary = dayStr;
+      } else {
+        summary = '$dayStr → $endDayStr';
+      }
+    }
+    if (hasCustomPeriod && selectedPeriod != 'all') {
+      final slot = timeSlots.firstWhere(
+        (e) => e['value'] == selectedPeriod,
+        orElse: () => {'label': selectedPeriod, 'value': selectedPeriod},
+      );
+      summary =
+          '${slot['label']} ${summary.isNotEmpty ? summary : _formatDateVN(selectedDayRange?.start ?? DateTime.now())}';
     }
     if (hasCustomStatus) {
-      appliedParts.add('Trạng thái = ${_translateStatus(selectedStatus)}');
+      summary =
+          'Trạng thái = ${_translateStatus(selectedStatus)}${summary.isNotEmpty ? ' • $summary' : ''}';
     }
-    if (hasCustomPeriod) {
-      appliedParts.add('Giai đoạn = ${_translatePeriod(selectedPeriod)}');
+    if (summary.isNotEmpty) {
+      summary = 'Đang áp dụng: $summary';
     }
 
     return Card(
@@ -66,20 +90,16 @@ class FilterBar extends StatelessWidget {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             _buildHeader(context, defaultRange),
-            if (hasActiveFilters) ...[
-              const SizedBox(height: 12),
-              _buildAppliedSummary(
-                context,
-                appliedParts.join(' • '),
-                defaultRange,
-              ),
-            ],
+            // if (hasActiveFilters && summary.isNotEmpty) ...[
+            //   const SizedBox(height: 12),
+            //   _buildAppliedSummary(context, summary, defaultRange),
+            // ],
             const SizedBox(height: 16),
             _LabeledPill(
               icon: Icons.schedule_rounded,
               accentColor: AppTheme.successColor,
               label: 'Ngày',
-              value: _formatRange(
+              value: _formatRangeVN(
                 selectedDayRange ?? HomeFilters.defaultDayRange,
               ),
               highlight: hasCustomDayRange,
@@ -90,30 +110,22 @@ class FilterBar extends StatelessWidget {
               ),
             ),
             const SizedBox(height: 16),
-            Row(
-              children: [
-                Expanded(
-                  child: _LabeledPill(
-                    icon: Icons.place_outlined,
-                    accentColor: AppTheme.primaryBlue,
-                    label: 'Trạng thái',
-                    value: _translateStatus(selectedStatus),
-                    highlight: hasCustomStatus,
-                    onTap: () => _selectStatus(context),
-                  ),
-                ),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: _LabeledPill(
-                    icon: Icons.auto_awesome_rounded,
-                    accentColor: _Palette.stageAccent,
-                    label: 'Giai đoạn',
-                    value: _translatePeriod(selectedPeriod),
-                    highlight: hasCustomPeriod,
-                    onTap: () => _selectPeriod(context),
-                  ),
-                ),
-              ],
+            _LabeledPill(
+              icon: Icons.place_outlined,
+              accentColor: AppTheme.primaryBlue,
+              label: 'Trạng thái',
+              value: _translateStatus(selectedStatus),
+              highlight: hasCustomStatus,
+              onTap: () => _selectStatus(context),
+            ),
+            const SizedBox(height: 16),
+            _LabeledPill(
+              icon: Icons.auto_awesome_rounded,
+              accentColor: _Palette.stageAccent,
+              label: 'Khung giờ',
+              value: _getTimeSlotLabel(selectedPeriod),
+              highlight: hasCustomPeriod,
+              onTap: () => _selectPeriod(context),
             ),
           ],
         ),
@@ -149,43 +161,43 @@ class FilterBar extends StatelessWidget {
     );
   }
 
-  Widget _buildAppliedSummary(
-    BuildContext context,
-    String summary,
-    DateTimeRange defaultRange,
-  ) {
-    final colorScheme = Theme.of(context).colorScheme;
-    final textTheme = Theme.of(context).textTheme;
-    final Color chipColor = Color.lerp(colorScheme.primary, Colors.white, 0.9)!;
+  // Widget _buildAppliedSummary(
+  //   BuildContext context,
+  //   String summary,
+  //   DateTimeRange defaultRange,
+  // ) {
+  //   final colorScheme = Theme.of(context).colorScheme;
+  //   final textTheme = Theme.of(context).textTheme;
+  //   final Color chipColor = Color.lerp(colorScheme.primary, Colors.white, 0.9)!;
 
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-      decoration: BoxDecoration(
-        color: chipColor,
-        borderRadius: BorderRadius.circular(12),
-      ),
-      child: Row(
-        children: [
-          Icon(Icons.filter_alt_outlined, size: 18, color: colorScheme.primary),
-          const SizedBox(width: 8),
-          Expanded(
-            child: Text(
-              'Đang áp dụng: $summary',
-              style: textTheme.bodyMedium?.copyWith(
-                fontWeight: FontWeight.w500,
-                color: colorScheme.primary,
-                height: 1.3,
-              ),
-            ),
-          ),
-          TextButton(
-            onPressed: () => _reset(defaultRange),
-            child: const Text('Bỏ hết'),
-          ),
-        ],
-      ),
-    );
-  }
+  //   return Container(
+  //     padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+  //     decoration: BoxDecoration(
+  //       color: chipColor,
+  //       borderRadius: BorderRadius.circular(12),
+  //     ),
+  //     child: Row(
+  //       children: [
+  //         Icon(Icons.filter_alt_outlined, size: 18, color: colorScheme.primary),
+  //         const SizedBox(width: 8),
+  //         Expanded(
+  //           child: Text(
+  //             'Đang áp dụng: $summary',
+  //             style: textTheme.bodyMedium?.copyWith(
+  //               fontWeight: FontWeight.w500,
+  //               color: colorScheme.primary,
+  //               height: 1.3,
+  //             ),
+  //           ),
+  //         ),
+  //         TextButton(
+  //           onPressed: () => _reset(defaultRange),
+  //           child: const Text('Bỏ hết'),
+  //         ),
+  //       ],
+  //     ),
+  //   );
+  // }
 
   Future<void> _pickDateRange(
     BuildContext context,
@@ -219,7 +231,8 @@ class FilterBar extends StatelessWidget {
     final result = await showDialog<String>(
       context: context,
       builder: (_) => SimpleDialog(
-        title: const Text('Chọn trạng thái'),
+        backgroundColor: const Color(0xFFF8FAFC),
+        title: Center(child: const Text('Chọn trạng thái')),
         children: statusOptions
             .map(
               (status) => SimpleDialogOption(
@@ -239,15 +252,20 @@ class FilterBar extends StatelessWidget {
     final result = await showDialog<String>(
       context: context,
       builder: (_) => SimpleDialog(
-        title: const Text('Chọn giai đoạn'),
-        children: periodOptions
-            .map(
-              (period) => SimpleDialogOption(
-                onPressed: () => Navigator.pop(context, period),
-                child: Text(_translatePeriod(period)),
-              ),
-            )
-            .toList(),
+        backgroundColor: const Color(0xFFF8FAFC),
+        title: Center(child: const Text('Chọn khung giờ')),
+        children: [
+          SimpleDialogOption(
+            onPressed: () => Navigator.pop(context, 'all'),
+            child: const Text('Tất cả khung giờ'),
+          ),
+          ...timeSlots.map(
+            (slot) => SimpleDialogOption(
+              onPressed: () => Navigator.pop(context, slot['value']),
+              child: Text(slot['label']!),
+            ),
+          ),
+        ],
       ),
     );
     if (result != null) {
@@ -269,11 +287,7 @@ class FilterBar extends StatelessWidget {
     return _isSameDay(a.start, b.start) && _isSameDay(a.end, b.end);
   }
 
-  static String _formatRange(DateTimeRange range) =>
-      '${_formatDate(range.start)} → ${_formatDate(range.end)}';
-
-  static String _formatDate(DateTime dt) =>
-      '${dt.year.toString().padLeft(4, '0')}-${dt.month.toString().padLeft(2, '0')}-${dt.day.toString().padLeft(2, '0')}';
+  // Removed unused _formatRange and _formatDate
 
   static String _normalize(String value) => value.toLowerCase();
 
@@ -281,6 +295,8 @@ class FilterBar extends StatelessWidget {
     switch (status.toLowerCase()) {
       case 'all':
         return 'Tất cả trạng thái';
+      case 'abnormal':
+        return 'Bất thường';
       case 'danger':
       case 'critical':
         return 'Nguy hiểm';
@@ -293,21 +309,23 @@ class FilterBar extends StatelessWidget {
     }
   }
 
-  String _translatePeriod(String period) {
-    switch (period.toLowerCase()) {
-      case 'all':
-        return 'Tất cả giai đoạn';
-      case 'morning':
-        return 'Buổi sáng';
-      case 'afternoon':
-        return 'Buổi chiều';
-      case 'evening':
-        return 'Buổi tối';
-      case 'night':
-        return 'Ban đêm';
-      default:
-        return period;
-    }
+  String _getTimeSlotLabel(String slotValue) {
+    if (slotValue.toLowerCase() == 'all') return 'Tất cả khung giờ';
+    final slot = timeSlots.firstWhere(
+      (e) => e['value'] == slotValue,
+      orElse: () => {'label': slotValue, 'value': slotValue},
+    );
+    return slot['label']!;
+  }
+
+  String _formatDateVN(DateTime dt) =>
+      '${dt.day.toString().padLeft(2, '0')}-${dt.month.toString().padLeft(2, '0')}-${dt.year}';
+
+  String _formatRangeVN(DateTimeRange range) {
+    final sameDay = _isSameDay(range.start, range.end);
+    final start = _formatDateVN(range.start);
+    final end = _formatDateVN(range.end);
+    return sameDay ? start : '$start → $end';
   }
 }
 
