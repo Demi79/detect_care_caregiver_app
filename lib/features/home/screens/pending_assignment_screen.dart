@@ -6,6 +6,7 @@ import 'package:detect_care_caregiver_app/features/assignments/data/assignments_
 import 'package:detect_care_caregiver_app/features/auth/providers/auth_provider.dart';
 import 'package:detect_care_caregiver_app/features/auth/data/auth_storage.dart';
 import 'package:detect_care_caregiver_app/widgets/auth_gate.dart';
+import 'package:detect_care_caregiver_app/core/utils/backend_enums.dart';
 import 'package:detect_care_caregiver_app/core/events/app_events.dart';
 
 class PendingAssignmentsScreen extends StatefulWidget {
@@ -41,139 +42,262 @@ class _PendingAssignmentsScreenState extends State<PendingAssignmentsScreen> {
 
   Future<void> _handleAction(String id, bool accept) async {
     try {
+      // if (accept) {
+      //   try {
+      //     final beforeToken = await AuthStorage.getAccessToken();
+      //     final beforeUid = await AuthStorage.getUserId();
+      //     print(
+      //       '[PendingAssignments] BEFORE accept: token=$beforeToken userId=$beforeUid',
+      //     );
+      //   } catch (e) {
+      //     print(
+      //       '[PendingAssignments] BEFORE accept: failed to read AuthStorage: $e',
+      //     );
+      //   }
+
+      //   final accepted = await _dataSource.accept(id);
+      //   print('[PendingAssignments] accept returned: ${accepted.assignmentId}');
+
+      //   // If server returned the accepted assignment already active, navigate
+      //   // immediately to Home — avoid waiting for user record propagation.
+      //   if (accepted.isActive) {
+      //     try {
+      //       AppEvents.instance.notifyEventsChanged();
+      //     } catch (_) {}
+      //     if (!mounted) return;
+      //     Navigator.of(context).pushAndRemoveUntil(
+      //       MaterialPageRoute(builder: (_) => const HomeScreen()),
+      //       (route) => false,
+      //     );
+      //     return;
+      //   }
+
+      //   // Diagnostic: print accepted assignment details to help debug activation timing
+      //   try {
+      //     print(
+      //       '[PendingAssignments] accepted details: status=${accepted.status} isActive=${accepted.isActive} assignedAt=${accepted.assignedAt}',
+      //     );
+      //   } catch (e) {
+      //     print('[PendingAssignments] failed to print accepted details: $e');
+      //   }
+
+      //   try {
+      //     final afterToken = await AuthStorage.getAccessToken();
+      //     final afterUid = await AuthStorage.getUserId();
+      //     print(
+      //       '[PendingAssignments] AFTER accept: token=$afterToken userId=$afterUid',
+      //     );
+      //   } catch (e) {
+      //     print(
+      //       '[PendingAssignments] AFTER accept: failed to read AuthStorage: $e',
+      //     );
+      //   }
+
+      //   final auth = context.read<AuthProvider>();
+
+      //   bool becameAuthenticated = false;
+      //   final currentUserId = context.read<AuthProvider>().currentUserId;
+      //   try {
+      //     for (var attempt = 0; attempt < 8; attempt++) {
+      //       print('[PendingAssignments] reloadUser attempt #$attempt');
+      //       try {
+      //         await auth.reloadUser();
+      //       } catch (e) {
+      //         print('[PendingAssignments] reloadUser failed: $e');
+      //       }
+      //       // Diagnostic: log auth status and user assignment flag after each reload
+      //       try {
+      //         print(
+      //           '[PendingAssignments] post-reload auth.status=${auth.status} userId=${auth.currentUserId} user.isAssigned=${auth.user?.isAssigned}',
+      //         );
+      //       } catch (_) {}
+
+      //       if (auth.status == AuthStatus.authenticated) {
+      //         becameAuthenticated = true;
+      //         break;
+      //       }
+      //       // If reload didn't flip the auth flag, also query assignments
+      //       // endpoint directly to see if the accepted assignment became active.
+      //       try {
+      //         if (currentUserId != null && currentUserId.isNotEmpty) {
+      //           final assignDs = AssignmentsRemoteDataSource();
+      //           // Ask for active accepted assignments specifically to detect
+      //           // whether the accepted assignment has been activated on the server.
+      //           final acceptedList = await assignDs.listPending(
+      //             status: 'accepted',
+      //             isActive: true,
+      //           );
+
+      //           // First try matching by caregiver id + active flag
+      //           var mine = acceptedList.any(
+      //             (a) => a.caregiverId == currentUserId && a.isActive,
+      //           );
+
+      //           // If not found, also try to match by the assignment id we just
+      //           // received from the accept() call (some backends return the
+      //           // assignment but without caregiver mapping until propagation).
+      //           if (!mine) {
+      //             mine = acceptedList.any(
+      //               (a) => a.assignmentId == accepted.assignmentId,
+      //             );
+      //           }
+
+      //           print(
+      //             '[PendingAssignments] direct assignments check -> mineActive=$mine (count=${acceptedList.length})',
+      //           );
+      //           if (mine) {
+      //             becameAuthenticated = true;
+      //             break;
+      //           }
+      //         }
+      //       } catch (e) {
+      //         print('[PendingAssignments] assignments direct check failed: $e');
+      //       }
+
+      //       await Future.delayed(const Duration(milliseconds: 700));
+      //     }
+      //   } catch (e) {
+      //     print('[PendingAssignments] reload loop error: $e');
+      //   }
+
+      //   try {
+      //     AppEvents.instance.notifyEventsChanged();
+      //   } catch (_) {}
+
+      //   if (!mounted) return;
+
+      //   if (becameAuthenticated) {
+      //     ScaffoldMessenger.of(context).showSnackBar(
+      //       SnackBar(
+      //         content: const Text("Yêu cầu đã được chấp nhận"),
+      //         backgroundColor: Colors.green[600],
+      //         behavior: SnackBarBehavior.floating,
+      //         shape: RoundedRectangleBorder(
+      //           borderRadius: BorderRadius.circular(12),
+      //         ),
+      //       ),
+      //     );
+
+      //     Navigator.of(context).pushAndRemoveUntil(
+      //       MaterialPageRoute(builder: (_) => const HomeScreen()),
+      //       (route) => false,
+      //     );
+      //   } else {
+      //     ScaffoldMessenger.of(context).showSnackBar(
+      //       SnackBar(
+      //         content: const Text(
+      //           "Yêu cầu đã được chấp nhận (đang chờ kích hoạt). Vui lòng chờ hoặc thử làm mới.",
+      //         ),
+      //         backgroundColor: Colors.green[600],
+      //         behavior: SnackBarBehavior.floating,
+      //         shape: RoundedRectangleBorder(
+      //           borderRadius: BorderRadius.circular(12),
+      //         ),
+      //       ),
+      //     );
+      //     _reload();
+      //   }
+      // } else {
+      //   try {
+      //     final beforeToken = await AuthStorage.getAccessToken();
+      //     final beforeUid = await AuthStorage.getUserId();
+      //     print(
+      //       '[PendingAssignments] BEFORE reject: token=$beforeToken userId=$beforeUid',
+      //     );
+      //   } catch (e) {
+      //     print(
+      //       '[PendingAssignments] BEFORE reject: failed to read AuthStorage: $e',
+      //     );
+      //   }
+
+      //   final rejected = await _dataSource.reject(id);
+      //   print('[PendingAssignments] reject returned: ${rejected.assignmentId}');
+
+      //   try {
+      //     final afterToken = await AuthStorage.getAccessToken();
+      //     final afterUid = await AuthStorage.getUserId();
+      //     print(
+      //       '[PendingAssignments] AFTER reject: token=$afterToken userId=$afterUid',
+      //     );
+      //   } catch (e) {
+      //     print(
+      //       '[PendingAssignments] AFTER reject: failed to read AuthStorage: $e',
+      //     );
+      //   }
+      //   if (mounted) {
+      //     ScaffoldMessenger.of(context).showSnackBar(
+      //       SnackBar(
+      //         content: const Text("Yêu cầu đã bị từ chối"),
+      //         backgroundColor: Colors.orange[600],
+      //         behavior: SnackBarBehavior.floating,
+      //         shape: RoundedRectangleBorder(
+      //           borderRadius: BorderRadius.circular(12),
+      //         ),
+      //       ),
+      //     );
+      //     _reload();
+      //   }
+      // }
       if (accept) {
-        try {
-          final beforeToken = await AuthStorage.getAccessToken();
-          final beforeUid = await AuthStorage.getUserId();
-          debugPrint(
-            '[PendingAssignments] BEFORE accept: token=$beforeToken userId=$beforeUid',
-          );
-        } catch (e) {
-          debugPrint(
-            '[PendingAssignments] BEFORE accept: failed to read AuthStorage: $e',
-          );
-        }
-
         final accepted = await _dataSource.accept(id);
-        debugPrint(
-          '[PendingAssignments] accept returned: ${accepted.assignmentId}',
+        print('[PendingAssignments] accept returned: ${accepted.assignmentId}');
+        print(
+          '[PendingAssignments] accepted status=${accepted.status} isActive=${accepted.isActive}',
         );
-
-        try {
-          final afterToken = await AuthStorage.getAccessToken();
-          final afterUid = await AuthStorage.getUserId();
-          debugPrint(
-            '[PendingAssignments] AFTER accept: token=$afterToken userId=$afterUid',
-          );
-        } catch (e) {
-          debugPrint(
-            '[PendingAssignments] AFTER accept: failed to read AuthStorage: $e',
-          );
-        }
 
         final auth = context.read<AuthProvider>();
 
-        bool becameAuthenticated = false;
-        try {
-          for (var attempt = 0; attempt < 6; attempt++) {
-            debugPrint('[PendingAssignments] reloadUser attempt #$attempt');
-            try {
-              await auth.reloadUser();
-            } catch (e) {
-              debugPrint('[PendingAssignments] reloadUser failed: $e');
-            }
-            if (auth.status == AuthStatus.authenticated) {
-              becameAuthenticated = true;
-              break;
-            }
-            await Future.delayed(const Duration(milliseconds: 500));
-          }
-        } catch (e) {
-          debugPrint('[PendingAssignments] reload loop error: $e');
+        if (accepted.isActive || accepted.status.toLowerCase() == 'active') {
+          await auth.reloadUser();
+          if (!mounted) return;
+          Navigator.of(context).pushAndRemoveUntil(
+            MaterialPageRoute(builder: (_) => const HomeScreen()),
+            (route) => false,
+          );
+          return;
         }
 
-        try {
-          AppEvents.instance.notifyEventsChanged();
-        } catch (_) {}
+        bool becameActive = false;
+        for (int attempt = 0; attempt < 6; attempt++) {
+          await Future.delayed(const Duration(milliseconds: 700));
+          await auth.reloadUser();
+          print(
+            '[PendingAssignments] reloadUser attempt #$attempt: ${auth.user?.isAssigned}',
+          );
+          if (auth.status == AuthStatus.authenticated ||
+              auth.user?.isAssigned == true) {
+            becameActive = true;
+            break;
+          }
+        }
 
-        if (!mounted) return;
-
-        if (becameAuthenticated) {
+        if (becameActive) {
+          if (!mounted) return;
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(
-              content: const Text("Yêu cầu đã được chấp nhận"),
+              content: const Text('Lời mời đã được chấp nhận thành công 🎉'),
               backgroundColor: Colors.green[600],
-              behavior: SnackBarBehavior.floating,
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(12),
-              ),
             ),
           );
-
           Navigator.of(context).pushAndRemoveUntil(
             MaterialPageRoute(builder: (_) => const HomeScreen()),
             (route) => false,
           );
         } else {
+          if (!mounted) return;
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(
               content: const Text(
-                "Yêu cầu đã được chấp nhận (đang chờ kích hoạt). Vui lòng chờ hoặc thử làm mới.",
+                'Yêu cầu đã được chấp nhận, đang chờ kích hoạt...',
               ),
-              backgroundColor: Colors.green[600],
-              behavior: SnackBarBehavior.floating,
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(12),
-              ),
-            ),
-          );
-          _reload();
-        }
-      } else {
-        try {
-          final beforeToken = await AuthStorage.getAccessToken();
-          final beforeUid = await AuthStorage.getUserId();
-          debugPrint(
-            '[PendingAssignments] BEFORE reject: token=$beforeToken userId=$beforeUid',
-          );
-        } catch (e) {
-          debugPrint(
-            '[PendingAssignments] BEFORE reject: failed to read AuthStorage: $e',
-          );
-        }
-
-        final rejected = await _dataSource.reject(id);
-        debugPrint(
-          '[PendingAssignments] reject returned: ${rejected.assignmentId}',
-        );
-
-        try {
-          final afterToken = await AuthStorage.getAccessToken();
-          final afterUid = await AuthStorage.getUserId();
-          debugPrint(
-            '[PendingAssignments] AFTER reject: token=$afterToken userId=$afterUid',
-          );
-        } catch (e) {
-          debugPrint(
-            '[PendingAssignments] AFTER reject: failed to read AuthStorage: $e',
-          );
-        }
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: const Text("Yêu cầu đã bị từ chối"),
               backgroundColor: Colors.orange[600],
-              behavior: SnackBarBehavior.floating,
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(12),
-              ),
             ),
           );
           _reload();
         }
       }
     } catch (e, st) {
-      debugPrint('[PendingAssignments] _handleAction error: $e\n$st');
+      print('[PendingAssignments] _handleAction error: $e\n$st');
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
@@ -409,7 +533,7 @@ class _PendingAssignmentsScreenState extends State<PendingAssignmentsScreen> {
                               ),
                               const SizedBox(height: 16),
                               Text(
-                                "Bạn hiện chưa có yêu cầu đang chờ xử lý.",
+                                "Bạn hiện chưa có lời mời nào.",
                                 style: TextStyle(
                                   fontSize: 16,
                                   color: Colors.grey.shade700,
@@ -631,7 +755,8 @@ class _PendingAssignmentsScreenState extends State<PendingAssignmentsScreen> {
       case 'inactive':
         return 'Không hoạt động';
       default:
-        return status[0].toUpperCase() + status.substring(1);
+        // fallback to BackendEnums mapping for danger/warning/normal
+        return BackendEnums.statusToVietnamese(status);
     }
   }
 

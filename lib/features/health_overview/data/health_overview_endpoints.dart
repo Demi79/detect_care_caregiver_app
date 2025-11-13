@@ -11,12 +11,12 @@ class HealthOverviewEndpoints {
     String? endDate,
   }) {
     final params = <String, String>{};
-    if (patientId != null) params['patientId'] = patientId;
+    if (patientId != null) params['userId'] = patientId;
     if (startDate != null) params['startDate'] = startDate;
     if (endDate != null) params['endDate'] = endDate;
 
     return Uri.parse(
-      '$base/health-overview',
+      '$base/health/reports/overview',
     ).replace(queryParameters: params.isEmpty ? null : params);
   }
 }

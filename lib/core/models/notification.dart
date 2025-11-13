@@ -1,4 +1,4 @@
-import 'package:flutter/foundation.dart';
+import 'package:intl/intl.dart';
 
 enum NotificationType {
   warning('warning', 'Cảnh báo'),
@@ -11,7 +11,8 @@ enum NotificationType {
   final String value;
   final String displayName;
 
-  static NotificationType fromString(String value) {
+  static NotificationType fromString(String? value) {
+    if (value == null) return NotificationType.system;
     return NotificationType.values.firstWhere(
       (type) => type.value == value,
       orElse: () => NotificationType.system,
@@ -30,7 +31,11 @@ class NotificationModel {
   final String? patientName;
   final Map<String, dynamic>? metadata;
   final String? actionUrl;
+  final String? businessType;
   final int? priority;
+  final DateTime? createdAt;
+  final DateTime? updatedAt;
+  final DateTime? readAt;
 
   const NotificationModel({
     required this.id,
@@ -43,26 +48,79 @@ class NotificationModel {
     this.patientName,
     this.metadata,
     this.actionUrl,
+    this.businessType,
     this.priority = 0,
+    this.createdAt,
+    this.updatedAt,
+    this.readAt,
   });
 
   factory NotificationModel.fromJson(Map<String, dynamic> json) {
-    debugPrint('🔔 Parsing notification: $json');
     return NotificationModel(
-      id: json['id']?.toString() ?? '',
-      title: json['title'] ?? '',
-      message: json['message'] ?? '',
-      type: NotificationType.fromString(json['type'] ?? 'system'),
-      timestamp: json['timestamp'] != null
-          ? DateTime.parse(json['timestamp'])
-          : DateTime.now(),
-      isRead: json['is_read'] ?? false,
+      id:
+          json['id']?.toString() ??
+          json['notification_id']?.toString() ??
+          json['uuid']?.toString() ??
+          '',
+      title:
+          json['title'] ??
+          (json['delivery_data'] is Map
+              ? json['delivery_data']['title']
+              : null) ??
+          '',
+      message: json['message'] ?? json['body'] ?? '',
+      type: NotificationType.fromString(
+        json['type'] ?? json['severity'] ?? 'system',
+      ),
+      timestamp: (() {
+        final t =
+            json['timestamp'] ??
+            json['created_at'] ??
+            json['sent_at'] ??
+            json['updated_at'];
+        if (t is String) {
+          try {
+            return DateTime.parse(t);
+          } catch (_) {
+            return DateTime.now();
+          }
+        }
+        return DateTime.now();
+      })(),
+      isRead: json['is_read'] ?? (json['read_at'] != null),
       patientId: json['patient_id']?.toString(),
-      patientName: json['patient_name'],
-      metadata: json['metadata'],
-      actionUrl: json['action_url'],
-      priority: json['priority'] ?? 0,
+      patientName: json['patient_name']?.toString(),
+      metadata:
+          json['metadata'] ??
+          (json['delivery_data'] is Map
+              ? Map<String, dynamic>.from(json['delivery_data'])
+              : null),
+      actionUrl: json['action_url'] ?? json['actionUrl'],
+      businessType:
+          json['business_type'] ??
+          json['businessType'] ??
+          json['channel'] ??
+          'system_update',
+      priority: json['priority'] is int
+          ? json['priority']
+          : int.tryParse(json['priority']?.toString() ?? '0') ?? 0,
+      createdAt: _parseDate(json['created_at']),
+      updatedAt: _parseDate(json['updated_at']),
+      readAt: _parseDate(json['read_at']),
     );
+  }
+
+  static DateTime? _parseDate(dynamic value) {
+    if (value == null) return null;
+    if (value is DateTime) return value;
+    if (value is String) {
+      try {
+        return DateTime.parse(value);
+      } catch (_) {
+        return null;
+      }
+    }
+    return null;
   }
 
   Map<String, dynamic> toJson() {
@@ -77,7 +135,11 @@ class NotificationModel {
       'patient_name': patientName,
       'metadata': metadata,
       'action_url': actionUrl,
+      'business_type': businessType,
       'priority': priority,
+      'created_at': createdAt?.toIso8601String(),
+      'updated_at': updatedAt?.toIso8601String(),
+      'read_at': readAt?.toIso8601String(),
     };
   }
 
@@ -92,7 +154,11 @@ class NotificationModel {
     String? patientName,
     Map<String, dynamic>? metadata,
     String? actionUrl,
+    String? businessType,
     int? priority,
+    DateTime? createdAt,
+    DateTime? updatedAt,
+    DateTime? readAt,
   }) {
     return NotificationModel(
       id: id ?? this.id,
@@ -105,62 +171,34 @@ class NotificationModel {
       patientName: patientName ?? this.patientName,
       metadata: metadata ?? this.metadata,
       actionUrl: actionUrl ?? this.actionUrl,
+      businessType: businessType ?? this.businessType,
       priority: priority ?? this.priority,
+      createdAt: createdAt ?? this.createdAt,
+      updatedAt: updatedAt ?? this.updatedAt,
+      readAt: readAt ?? this.readAt,
     );
   }
 
-  /// Kiểm tra xem notification có phải là khẩn cấp không
   bool get isEmergency => type == NotificationType.emergency;
-
-  /// Kiểm tra xem notification có phải là cảnh báo không
   bool get isWarning => type == NotificationType.warning;
+  bool get hasBeenRead => isRead || readAt != null;
 
-  String get iconName {
-    switch (type) {
-      case NotificationType.warning:
-        return 'warning';
-      case NotificationType.reminder:
-        return 'medication';
-      case NotificationType.update:
-        return 'update';
-      case NotificationType.emergency:
-        return 'emergency';
-      case NotificationType.system:
-        return 'notifications';
-    }
-  }
-
-  String get colorHex {
-    switch (type) {
-      case NotificationType.warning:
-        return '#FF6B35';
-      case NotificationType.reminder:
-        return '#4CAF50';
-      case NotificationType.update:
-        return '#2196F3';
-      case NotificationType.emergency:
-        return '#F44336';
-      case NotificationType.system:
-        return '#9E9E9E';
-    }
-  }
+  String get createdAtFormatted => createdAt != null
+      ? DateFormat('HH:mm dd/MM/yyyy').format(createdAt!)
+      : '';
 
   @override
-  bool operator ==(Object other) {
-    if (identical(this, other)) return true;
-    return other is NotificationModel && other.id == id;
-  }
+  bool operator ==(Object other) =>
+      identical(this, other) || other is NotificationModel && other.id == id;
 
   @override
   int get hashCode => id.hashCode;
 
   @override
-  String toString() {
-    return 'NotificationModel(id: $id, title: $title, type: $type, isRead: $isRead, timestamp: $timestamp)';
-  }
+  String toString() =>
+      'Notification(id: $id, title: $title, type: ${type.value}, read: $isRead)';
 }
 
-/// Model cho danh sách notifications với pagination
 class NotificationListResponse {
   final List<NotificationModel> notifications;
   final int totalCount;
@@ -179,39 +217,26 @@ class NotificationListResponse {
   });
 
   factory NotificationListResponse.fromJson(Map<String, dynamic> json) {
-    final actualData =
-        json.containsKey('data') && json['data'] is Map<String, dynamic>
-        ? json['data'] as Map<String, dynamic>
-        : json;
+    final data = json['data'] is Map<String, dynamic> ? json['data'] : json;
+    final rawList = data['data'] ?? data['notifications'] ?? [];
+    final list = <NotificationModel>[];
 
-    final notifications =
-        (actualData['data'] as List<dynamic>?)
-            ?.map(
-              (item) =>
-                  NotificationModel.fromJson(item as Map<String, dynamic>),
-            )
-            .toList() ??
-        [];
+    if (rawList is List) {
+      for (final item in rawList) {
+        if (item is Map<String, dynamic>) {
+          list.add(NotificationModel.fromJson(item));
+        }
+      }
+    }
 
     return NotificationListResponse(
-      notifications: notifications,
-      totalCount: actualData['total'] ?? actualData['total_count'] ?? 0,
-      page: actualData['page'] ?? 1,
-      pageSize: actualData['limit'] ?? actualData['page_size'] ?? 20,
-      hasNextPage: actualData['has_next_page'] ?? false,
-      hasPreviousPage: actualData['has_previous_page'] ?? false,
+      notifications: list,
+      totalCount: data['total'] ?? data['total_count'] ?? list.length,
+      page: data['page'] ?? 1,
+      pageSize: data['page_size'] ?? 20,
+      hasNextPage: data['has_next_page'] ?? false,
+      hasPreviousPage: data['has_previous_page'] ?? false,
     );
-  }
-
-  Map<String, dynamic> toJson() {
-    return {
-      'notifications': notifications.map((n) => n.toJson()).toList(),
-      'total_count': totalCount,
-      'page': page,
-      'page_size': pageSize,
-      'has_next_page': hasNextPage,
-      'has_previous_page': hasPreviousPage,
-    };
   }
 }
 
@@ -233,15 +258,13 @@ class NotificationFilter {
   });
 
   Map<String, dynamic> toQueryParams() {
-    final params = <String, dynamic>{};
-
-    if (type != null) params['type'] = type!.value;
-    if (isRead != null) params['is_read'] = isRead!;
-    if (startDate != null) params['start_date'] = startDate!.toIso8601String();
-    if (endDate != null) params['end_date'] = endDate!.toIso8601String();
-    if (patientId != null) params['patient_id'] = patientId!;
-    if (priority != null) params['priority'] = priority!;
-
-    return params;
+    return {
+      if (type != null) 'type': type!.value,
+      if (isRead != null) 'is_read': isRead,
+      if (startDate != null) 'start_date': startDate!.toIso8601String(),
+      if (endDate != null) 'end_date': endDate!.toIso8601String(),
+      if (patientId != null) 'patient_id': patientId,
+      if (priority != null) 'priority': priority,
+    };
   }
 }

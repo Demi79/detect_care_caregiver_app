@@ -69,6 +69,7 @@ class EventRepository {
       if (eventId.trim().isEmpty) {
         throw Exception('Không tìm thấy ID sự kiện. Không thể gửi đề xuất.');
       }
+
       return await _service.proposeEventStatus(
         eventId: eventId,
         proposedStatus: proposedStatus,

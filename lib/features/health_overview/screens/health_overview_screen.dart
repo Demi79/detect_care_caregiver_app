@@ -1,17 +1,17 @@
 import 'package:detect_care_caregiver_app/features/health_overview/data/health_report_service.dart';
-import 'package:detect_care_caregiver_app/features/home/service/event_service.dart';
-import 'package:flutter/foundation.dart';
-import 'package:detect_care_caregiver_app/features/health_overview/widgets/section_header.dart';
 import 'package:detect_care_caregiver_app/features/home/constants/filter_constants.dart';
 import 'package:detect_care_caregiver_app/features/home/widgets/filter_bar.dart';
 import 'package:flutter/material.dart';
 import 'package:detect_care_caregiver_app/features/health_overview/widgets/high_risk_time_table.dart';
+import 'package:intl/intl.dart';
+import 'package:detect_care_caregiver_app/features/auth/data/auth_storage.dart';
 
 import '../../../core/theme/app_theme.dart';
 import '../../../core/widgets/error_widget.dart';
 import '../../../core/widgets/loading_widget.dart';
 import '../widgets/overview_widgets.dart';
 import 'health_insights_screen.dart';
+import 'analyst_data_screen.dart';
 
 class HealthOverviewScreen extends StatefulWidget {
   final String? patientId;
@@ -31,12 +31,14 @@ class _HealthOverviewScreenState extends State<HealthOverviewScreen> {
   bool _loading = false;
   String? _error;
   HealthReportOverviewDto? _data;
+  bool _analystLoading = false;
+  String? _analystError;
+  List<dynamic>? _analystEntries;
 
   @override
   void initState() {
     super.initState();
     _fetch();
-
     WidgetsBinding.instance.addPostFrameCallback((_) {
       // if (kDebugMode) {
       //   Future.delayed(const Duration(milliseconds: 400), () {
@@ -63,7 +65,9 @@ class _HealthOverviewScreenState extends State<HealthOverviewScreen> {
       setState(() {
         _data = dto;
       });
+      await _fetchAnalystSummaries(r);
     } catch (e) {
+      debugPrint('[HEALTH_OVERVIEW] fetch error: $e');
       setState(() {
         _error = e.toString();
       });
@@ -74,47 +78,76 @@ class _HealthOverviewScreenState extends State<HealthOverviewScreen> {
     }
   }
 
-  String _fmtDate(DateTime dt) =>
-      '${dt.year.toString().padLeft(4, '0')}-'
-      '${dt.month.toString().padLeft(2, '0')}-'
-      '${dt.day.toString().padLeft(2, '0')}';
+  String _fmtDdMmY(DateTime d) => DateFormat('dd-MM-yyyy').format(d);
+
+  Future<void> _fetchAnalystSummaries(DateTimeRange range) async {
+    setState(() {
+      _analystLoading = true;
+      _analystError = null;
+      _analystEntries = null;
+    });
+
+    try {
+      final userId = widget.patientId ?? await AuthStorage.getUserId();
+      if (userId == null) throw Exception('User id not available');
+      final from = _fmtDdMmY(range.start);
+      final to = _fmtDdMmY(range.end);
+
+      final res = await _remote.fetchAnalystUserJsonRange(
+        userId: userId,
+        from: from,
+        to: to,
+        includeData: true,
+      );
+
+      if (res is Map && res['data'] is List) {
+        setState(() => _analystEntries = List.from(res['data'] as List));
+      } else {
+        setState(() => _analystEntries = []);
+      }
+    } catch (e) {
+      setState(() => _analystError = e.toString());
+    } finally {
+      setState(() => _analystLoading = false);
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
-    final rangeText = (_selectedDayRange == null)
-        ? 'Hôm nay'
-        : '${_fmtDate(_selectedDayRange!.start)} → ${_fmtDate(_selectedDayRange!.end)}';
-
     return Scaffold(
       backgroundColor: AppTheme.scaffoldBackground,
-      appBar: AppBar(
-        title: Text('Tổng quan sức khỏe • $rangeText'),
-        backgroundColor: Colors.white,
-        foregroundColor: AppTheme.text,
-        elevation: 0.5,
-        // actions: [
-        //   if (kDebugMode)
-        //     IconButton(
-        //       tooltip: 'Debug: compare events',
-        //       icon: const Icon(Icons.bug_report),
-        //       onPressed: _debugCompareEvents,
-        //     ),
-        // ],
-      ),
+      // appBar: AppBar(
+      //   title: Text('Tổng quan sức khỏe • $rangeText'),
+      //   backgroundColor: Colors.white,
+      //   foregroundColor: AppTheme.text,
+      //   elevation: 0.5,
+      //   actions: [
+      //     if (kDebugMode)
+      //       IconButton(
+      //         tooltip: 'Debug: compare events',
+      //         icon: const Icon(Icons.bug_report),
+      //         onPressed: _debugCompareEvents,
+      //       ),
+      //   ],
+      // ),
       body: SafeArea(
         child: RefreshIndicator(
           onRefresh: _fetch,
-          child: _loading
-              ? const LoadingWidget()
-              : (_error != null)
-              ? ErrorDisplay(error: _error!, onRetry: _fetch)
-              : (_data == null)
-              ? const Center(child: Text('Không có dữ liệu'))
-              : SingleChildScrollView(
-                  physics: const AlwaysScrollableScrollPhysics(),
-                  padding: const EdgeInsets.all(AppTheme.spacingL),
-                  child: _buildContent(context, _data!),
-                ),
+          child: ListView(
+            physics: const AlwaysScrollableScrollPhysics(),
+            padding: const EdgeInsets.symmetric(
+              horizontal: AppTheme.spacingXS,
+              vertical: AppTheme.spacingL,
+            ),
+            children: [
+              if (_loading) const LoadingWidget(),
+              if (!_loading && _error != null)
+                ErrorDisplay(error: _error!, onRetry: _fetch),
+              if (!_loading && _error == null && _data == null)
+                const Center(child: Text('Không có dữ liệu')),
+              if (!_loading && _data != null) _buildContent(context, _data!),
+            ],
+          ),
         ),
       ),
     );
@@ -128,7 +161,7 @@ class _HealthOverviewScreenState extends State<HealthOverviewScreen> {
   //     return;
   //   }
   //   final r = _selectedDayRange ?? _todayRange();
-  //   // final svc = EventService(EventService.withDefaultClient());
+  //   final svc = EventService.withDefaultClient();
   //   try {
   //     debugPrint(
   //       '[DEBUG] Requesting events for ${r.start}..${r.end} (period=Afternoon)',
@@ -303,21 +336,263 @@ class _HealthOverviewScreenState extends State<HealthOverviewScreen> {
             style: Theme.of(context).textTheme.bodyMedium,
           ),
         ),
-        const SizedBox(height: AppTheme.spacingXL),
+        const SizedBox(height: AppTheme.spacingM),
 
-        SectionHeader(
-          title: 'AI & Thông tin hoạt động',
-          onViewAll: () {
-            Navigator.of(context).push(
-              MaterialPageRoute(
-                builder: (_) => HealthInsightsScreen(
-                  dayRange: _selectedDayRange,
-                  patientId: widget.patientId,
-                ),
+        // --- KẾT LUẬN TỪNG NGÀY (daily conclusions) ---
+        Container(
+          padding: const EdgeInsets.all(AppTheme.spacingM),
+          margin: const EdgeInsets.only(top: AppTheme.spacingM),
+          decoration: BoxDecoration(
+            color: Colors.white,
+            borderRadius: BorderRadius.circular(AppTheme.borderRadiusMedium),
+            boxShadow: AppTheme.cardShadow,
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Row(
+                children: [
+                  Expanded(
+                    child: Text(
+                      'Phân tích hoạt động',
+                      style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
+                  ),
+                  // TextButton(
+                  //   onPressed: () async {
+                  //     // open date range picker and refresh both overview & analyst
+                  //     final picked = await showDateRangePicker(
+                  //       context: context,
+                  //       firstDate: DateTime(2020),
+                  //       lastDate: DateTime.now(),
+                  //       initialDateRange: _selectedDayRange ?? _todayRange(),
+                  //       builder: (context, child) => Theme(
+                  //         data: Theme.of(context).copyWith(
+                  //           colorScheme: ColorScheme.light(
+                  //             primary: AppTheme.primaryBlue,
+                  //           ),
+                  //         ),
+                  //         child: child!,
+                  //       ),
+                  //     );
+                  //     if (picked != null) {
+                  //       setState(() {
+                  //         _selectedDayRange = picked;
+                  //       });
+                  //       await _fetch();
+                  //     }
+                  //   },
+                  //   child: const Text('Chọn khoảng'),
+                  // ),
+                  TextButton(
+                    onPressed: () {
+                      Navigator.of(context).push(
+                        MaterialPageRoute(
+                          builder: (_) => AnalystDataScreen(
+                            dayRange: _selectedDayRange,
+                            userId: widget.patientId,
+                          ),
+                        ),
+                      );
+                    },
+                    child: const Text('Xem đầy đủ'),
+                  ),
+                ],
               ),
-            );
-          },
+              const SizedBox(height: AppTheme.spacingS),
+              if (_analystLoading)
+                const Center(child: CircularProgressIndicator())
+              else if (_analystError != null)
+                Text('Lỗi tải kết luận: $_analystError')
+              else if (_analystEntries == null || _analystEntries!.isEmpty)
+                const Text('Không có kết luận cho khoảng thời gian này')
+              else
+                Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: _analystEntries!.map((e) {
+                    final m = (e as Map<String, dynamic>);
+                    final data = m['data'];
+                    String summary = '';
+                    if (data != null && data['analyses'] is List) {
+                      try {
+                        final analyses = (data['analyses'] as List).firstWhere(
+                          (a) =>
+                              a is Map<String, dynamic> &&
+                              a['suggest_summary_daily'] != null,
+                          orElse: () => null,
+                        );
+                        if (analyses != null &&
+                            analyses is Map<String, dynamic>) {
+                          summary =
+                              analyses['suggest_summary_daily']?.toString() ??
+                              '';
+                        }
+                      } catch (_) {}
+                    }
+
+                    final date = m['date']?.toString() ?? '';
+                    return Container(
+                      margin: const EdgeInsets.only(top: AppTheme.spacingS),
+                      padding: const EdgeInsets.all(AppTheme.spacingS),
+                      decoration: BoxDecoration(
+                        color: AppTheme.primaryBlue.withAlpha(
+                          (0.03 * 255).round(),
+                        ),
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                      child: Row(
+                        children: [
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  date,
+                                  style: Theme.of(context).textTheme.bodySmall
+                                      ?.copyWith(color: AppTheme.textSecondary),
+                                ),
+                                const SizedBox(height: 6),
+                                Text(
+                                  summary.isEmpty
+                                      ? 'Không có kết luận'
+                                      : summary,
+                                  style: Theme.of(context).textTheme.bodyMedium,
+                                ),
+                              ],
+                            ),
+                          ),
+                        ],
+                      ),
+                    );
+                  }).toList(),
+                ),
+            ],
+          ),
         ),
+
+        const SizedBox(height: AppTheme.spacingXL),
+        Container(
+          padding: const EdgeInsets.all(AppTheme.spacingM),
+          margin: const EdgeInsets.only(top: AppTheme.spacingM),
+          decoration: BoxDecoration(
+            color: Colors.white,
+            borderRadius: BorderRadius.circular(AppTheme.borderRadiusMedium),
+            boxShadow: AppTheme.cardShadow,
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Row(
+                children: [
+                  Expanded(
+                    child: Text(
+                      'Báo cáo chi tiết',
+                      style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
+                  ),
+
+                  TextButton(
+                    onPressed: () {
+                      Navigator.of(context).push(
+                        MaterialPageRoute(
+                          builder: (_) => HealthInsightsScreen(
+                            dayRange: _selectedDayRange,
+                            patientId: widget.patientId,
+                          ),
+                        ),
+                      );
+                    },
+                    child: const Text('Xem chi tiết'),
+                  ),
+                ],
+              ),
+
+              // const SizedBox(height: AppTheme.spacingS),
+              // if (_analystLoading)
+              //   const Center(child: CircularProgressIndicator())
+              // else if (_analystError != null)
+              //   Text('Lỗi tải kết luận: $_analystError')
+              // else if (_analystEntries == null || _analystEntries!.isEmpty)
+              //   const Text('Không có kết luận cho khoảng thời gian này')
+              // else
+              //   Column(
+              //     crossAxisAlignment: CrossAxisAlignment.stretch,
+              //     children: _analystEntries!.map((e) {
+              //       final m = (e as Map<String, dynamic>);
+              //       final data = m['data'];
+              //       String summary = '';
+              //       if (data != null && data['analyses'] is List) {
+              //         try {
+              //           final analyses = (data['analyses'] as List).firstWhere(
+              //             (a) =>
+              //                 a is Map<String, dynamic> &&
+              //                 a['suggest_summary_daily'] != null,
+              //             orElse: () => null,
+              //           );
+              //           if (analyses != null &&
+              //               analyses is Map<String, dynamic>) {
+              //             summary =
+              //                 analyses['suggest_summary_daily']?.toString() ??
+              //                 '';
+              //           }
+              //         } catch (_) {}
+              //       }
+
+              //       final date = m['date']?.toString() ?? '';
+              //       return Container(
+              //         margin: const EdgeInsets.only(top: AppTheme.spacingS),
+              //         padding: const EdgeInsets.all(AppTheme.spacingS),
+              //         decoration: BoxDecoration(
+              //           color: AppTheme.primaryBlue.withOpacity(0.03),
+              //           borderRadius: BorderRadius.circular(8),
+              //         ),
+              //         child: Row(
+              //           children: [
+              //             Expanded(
+              //               child: Column(
+              //                 crossAxisAlignment: CrossAxisAlignment.start,
+              //                 children: [
+              //                   Text(
+              //                     date,
+              //                     style: Theme.of(context).textTheme.bodySmall
+              //                         ?.copyWith(color: AppTheme.textSecondary),
+              //                   ),
+              //                   const SizedBox(height: 6),
+              //                   Text(
+              //                     summary.isEmpty
+              //                         ? 'Không có kết luận'
+              //                         : summary,
+              //                     style: Theme.of(context).textTheme.bodyMedium,
+              //                   ),
+              //                 ],
+              //               ),
+              //             ),
+              //           ],
+              //         ),
+              //       );
+              //     }).toList(),
+              //   ),
+            ],
+          ),
+        ),
+
+        // SectionHeader(
+        //   title: 'Báo cáo chi tiết',
+        //   onViewAll: () {
+        //     Navigator.of(context).push(
+        //       MaterialPageRoute(
+        //         builder: (_) => HealthInsightsScreen(
+        //           dayRange: _selectedDayRange,
+        //           patientId: widget.patientId,
+        //         ),
+        //       ),
+        //     );
+        //   },
+        // ),
         const SizedBox(height: AppTheme.spacingS),
       ],
     );

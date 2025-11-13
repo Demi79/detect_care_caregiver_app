@@ -1,16 +1,13 @@
 import 'dart:convert';
-import 'package:http/http.dart' as http;
+import 'package:detect_care_caregiver_app/core/network/api_client.dart';
 import '../models/health_overview_models.dart';
 import 'health_overview_endpoints.dart';
 
 class HealthOverviewRemoteDataSource {
-  final http.Client client;
+  final ApiProvider api;
   final HealthOverviewEndpoints endpoints;
 
-  HealthOverviewRemoteDataSource({
-    required this.client,
-    required this.endpoints,
-  });
+  HealthOverviewRemoteDataSource({required this.api, required this.endpoints});
 
   Future<HealthOverviewData> fetchOverview({
     String? patientId,
@@ -23,8 +20,8 @@ class HealthOverviewRemoteDataSource {
       endDate: endDate,
     );
 
-    final response = await client
-        .get(uri, headers: {'Content-Type': 'application/json'})
+    final response = await api
+        .get(uri.path, extraHeaders: {'Content-Type': 'application/json'})
         .timeout(const Duration(seconds: 10));
 
     if (response.statusCode != 200) {
@@ -33,10 +30,19 @@ class HealthOverviewRemoteDataSource {
       );
     }
 
-    final Map<String, dynamic> jsonData = json.decode(response.body);
-    final payload = (jsonData['data'] is Map)
+    dynamic jsonData;
+    try {
+      if (response.body.isEmpty) {
+        throw Exception('Empty response body');
+      }
+      jsonData = json.decode(response.body);
+    } catch (e) {
+      throw Exception('Failed to parse response: $e');
+    }
+
+    final payload = (jsonData is Map && jsonData['data'] is Map)
         ? jsonData['data'] as Map<String, dynamic>
-        : jsonData;
+        : jsonData as Map<String, dynamic>;
 
     return HealthOverviewData.fromJson(payload);
   }

@@ -6,6 +6,7 @@ import 'package:detect_care_caregiver_app/core/ui/overlay_toast.dart';
 import 'package:detect_care_caregiver_app/features/home/service/event_service.dart';
 import 'package:flutter/material.dart';
 import '../../../core/theme/app_theme.dart';
+import '../../../core/utils/backend_enums.dart' as _be;
 import 'package:detect_care_caregiver_app/features/home/models/event_log.dart';
 import 'package:detect_care_caregiver_app/features/home/service/event_images_loader.dart';
 import 'package:detect_care_caregiver_app/features/home/models/log_entry.dart';
@@ -124,7 +125,12 @@ class ActionLogCard extends StatelessWidget {
                             ),
                           ),
                           const SizedBox(height: 4),
-                          _eventTypeChip(data.eventType, typeColor),
+                          _eventTypeChip(
+                            _be.BackendEnums.eventTypeToVietnamese(
+                              data.eventType,
+                            ),
+                            typeColor,
+                          ),
 
                           const SizedBox(height: 4),
                           Row(
@@ -136,7 +142,7 @@ class ActionLogCard extends StatelessWidget {
                               ),
                               const SizedBox(width: 4),
                               Text(
-                                _formatDateTime(data.detectedAt),
+                                _formatDateTime(data.createdAt),
                                 style: TextStyle(
                                   color: Colors.grey.shade700,
                                   fontSize: 12,
@@ -243,7 +249,7 @@ class ActionLogCard extends StatelessWidget {
           ),
           const SizedBox(width: 6),
           Text(
-            status.toUpperCase(),
+            _be.BackendEnums.statusToVietnamese(status),
             style: const TextStyle(
               color: Colors.white,
               fontSize: 11,
@@ -406,15 +412,15 @@ class ActionLogCard extends StatelessWidget {
   String _titleFromType(String t) {
     switch (t.toLowerCase()) {
       case 'fall':
-        return 'Fall Detection Alert';
+        return 'Phát hiện ngã';
       case 'abnormal_behavior':
-        return 'Abnormal Behavior Detected';
+        return 'Phát hiện hành vi bất thường';
       case 'visitor_detected':
-        return 'Visitor Presence Detected';
+        return 'Phát hiện khách';
       case 'seizure':
-        return 'Seizure Activity Alert';
+        return 'Phát hiện co giật';
       default:
-        return t;
+        return _be.BackendEnums.eventTypeToVietnamese(t);
     }
   }
 
@@ -434,6 +440,48 @@ class ActionLogCard extends StatelessWidget {
   }
 
   void _showDetails(BuildContext context) async {
+    try {
+      debugPrint(
+        '[ActionLogCard DEBUG] Opening details for event: ${data.eventId}',
+      );
+      debugPrint('[ActionLogCard DEBUG] data.toString(): ${data.toString()}');
+
+      final found = <String, dynamic>{};
+
+      void _scanMap(Map? m, String prefix) {
+        if (m == null || m.isEmpty) return;
+        for (final k in m.keys) {
+          final lk = k.toString().toLowerCase();
+          if (lk.contains('image') ||
+              lk.contains('media') ||
+              lk.contains('photo') ||
+              lk.contains('file') ||
+              lk.contains('url')) {
+            found['$prefix.$k'] = m[k];
+          }
+        }
+      }
+
+      _scanMap(data.detectionData, 'detectionData');
+      _scanMap(data.contextData, 'contextData');
+      _scanMap(data.aiAnalysisResult, 'aiAnalysisResult');
+      if (data.boundingBoxes.isNotEmpty) {
+        found['boundingBoxes'] = data.boundingBoxes;
+      }
+
+      if (found.isNotEmpty) {
+        print('[ActionLogCard DEBUG] candidate image fields found:');
+        found.forEach((k, v) => print('  - $k: ${v.toString()}'));
+      } else {
+        print(
+          '[ActionLogCard DEBUG] no obvious image fields found in data maps',
+        );
+      }
+    } catch (e, st) {
+      print('[ActionLogCard DEBUG] error while inspecting data: $e');
+      print('$st');
+    }
+
     final Color statusColor = AppTheme.getStatusColor(data.status);
     final Color typeColor = _eventTypeColor(data.eventType);
 
@@ -499,62 +547,81 @@ class ActionLogCard extends StatelessWidget {
                         end: Alignment.bottomRight,
                       ),
                     ),
-                    child: Row(
+                    child: Stack(
+                      clipBehavior: Clip.none,
                       children: [
-                        Container(
-                          padding: const EdgeInsets.all(12),
-                          decoration: BoxDecoration(
-                            color: typeColor.withValues(
-                              alpha: 0.1,
-                              red: typeColor.r * 255.0,
-                              green: typeColor.g * 255.0,
-                              blue: typeColor.b * 255.0,
-                            ),
-                            borderRadius: BorderRadius.circular(16),
-                          ),
-                          child: Icon(
-                            _getEventIcon(data.eventType),
-                            color: typeColor,
-                            size: 28,
-                          ),
-                        ),
-                        const SizedBox(width: 16),
-                        Expanded(
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Text(
-                                overflow: TextOverflow.ellipsis,
-                                data.eventDescription?.trim().isNotEmpty == true
-                                    ? data.eventDescription!.trim()
-                                    : _titleFromType(data.eventType),
-                                style: const TextStyle(
-                                  fontSize: 20,
-                                  fontWeight: FontWeight.w700,
-                                  color: Color(0xFF1A1A1A),
-                                  height: 1.2,
+                        Row(
+                          children: [
+                            Container(
+                              padding: const EdgeInsets.all(8),
+                              decoration: BoxDecoration(
+                                color: typeColor.withValues(
+                                  alpha: 0.1,
+                                  red: typeColor.r * 255.0,
+                                  green: typeColor.g * 255.0,
+                                  blue: typeColor.b * 255.0,
                                 ),
+                                borderRadius: BorderRadius.circular(12),
                               ),
-                              const SizedBox(height: 4),
-                              Row(
+                              child: Icon(
+                                _getEventIcon(data.eventType),
+                                color: typeColor,
+                                size: 20,
+                              ),
+                            ),
+                            const SizedBox(width: 12),
+                            Expanded(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
                                 children: [
-                                  _statusChip(data.status, statusColor),
-                                  const SizedBox(width: 8),
-                                  _eventTypeChip(data.eventType, typeColor),
+                                  Text(
+                                    overflow: TextOverflow.ellipsis,
+                                    data.eventDescription?.trim().isNotEmpty ==
+                                            true
+                                        ? data.eventDescription!.trim()
+                                        : _titleFromType(data.eventType),
+                                    style: const TextStyle(
+                                      fontSize: 16,
+                                      fontWeight: FontWeight.w700,
+                                      color: Color(0xFF1A1A1A),
+                                      height: 1.2,
+                                    ),
+                                  ),
+                                  const SizedBox(height: 4),
+                                  Row(
+                                    children: [
+                                      _statusChip(data.status, statusColor),
+                                      const SizedBox(width: 6),
+                                      _eventTypeChip(
+                                        _be.BackendEnums.eventTypeToVietnamese(
+                                          data.eventType,
+                                        ),
+                                        typeColor,
+                                      ),
+                                    ],
+                                  ),
                                 ],
                               ),
-                            ],
-                          ),
+                            ),
+                          ],
                         ),
-                        IconButton(
-                          onPressed: () => Navigator.of(context).pop(),
-                          icon: const Icon(Icons.close),
-                          style: IconButton.styleFrom(
-                            backgroundColor: Colors.white.withValues(
-                              alpha: 0.3,
-                              red: Colors.white.r * 255.0,
-                              green: Colors.white.g * 255.0,
-                              blue: Colors.white.b * 255.0,
+
+                        Positioned(
+                          top: 4,
+                          right: 4,
+                          child: IconButton(
+                            onPressed: () => Navigator.of(context).pop(),
+                            icon: const Icon(Icons.close, size: 16),
+                            padding: const EdgeInsets.all(4),
+                            style: IconButton.styleFrom(
+                              backgroundColor: Colors.white.withValues(
+                                alpha: 0.18,
+                                red: Colors.white.r * 255.0,
+                                green: Colors.white.g * 255.0,
+                                blue: Colors.white.b * 255.0,
+                              ),
+                              minimumSize: const Size(36, 36),
+                              tapTargetSize: MaterialTapTargetSize.shrinkWrap,
                             ),
                           ),
                         ),
@@ -572,7 +639,7 @@ class ActionLogCard extends StatelessWidget {
                       children: [
                         Expanded(
                           child: ElevatedButton.icon(
-                            onPressed: () => _showUpdateModal(context),
+                            onPressed: () => _showProposeModal(context),
                             icon: const Icon(Icons.edit_outlined, size: 18),
                             label: const Text('Đề xuất'),
                             style: ElevatedButton.styleFrom(
@@ -637,7 +704,9 @@ class ActionLogCard extends StatelessWidget {
                           _detailCard([
                             _kvRow(
                               'Trạng thái xử lý',
-                              data.confirmStatus ? 'Rồi' : 'Chưa',
+                              _be.BackendEnums.confirmStatusToVietnamese(
+                                data.confirmStatus,
+                              ),
                               data.confirmStatus
                                   ? Colors.green.shade600
                                   : Colors.grey.shade600,
@@ -648,13 +717,23 @@ class ActionLogCard extends StatelessWidget {
 
                             _kvRow(
                               'Trạng thái',
-                              data.status,
+                              _be.BackendEnums.statusToVietnamese(data.status),
                               statusColor,
                               Icons.flag_outlined,
                             ),
                             _kvRow(
                               'Sự kiện',
-                              data.eventType,
+                              _be.BackendEnums.eventTypeToVietnamese(
+                                data.eventType,
+                              ),
+                              typeColor,
+                              Icons.category_outlined,
+                            ),
+                            _kvRow(
+                              'Mô tả',
+                              data.eventDescription?.trim().isNotEmpty == true
+                                  ? data.eventDescription!.trim()
+                                  : '-',
                               typeColor,
                               Icons.category_outlined,
                             ),
@@ -670,19 +749,25 @@ class ActionLogCard extends StatelessWidget {
                               Colors.grey.shade600,
                               Icons.fingerprint_outlined,
                             ),
+                            // _kvRow(
+                            //   'Thời gian phát hiện',
+                            //   _formatDateTime(data.detectedAt),
+                            //   Colors.grey.shade600,
+                            //   Icons.access_time_outlined,
+                            // ),
+                            // if (data.createdAt != null)
+                            //   _kvRow(
+                            //     'Thời gian tạo',
+                            //     _formatDateTime(data.createdAt),
+                            //     Colors.grey.shade600,
+                            //     Icons.schedule_outlined,
+                            //   ),
                             _kvRow(
                               'Thời gian phát hiện',
-                              _formatDateTime(data.detectedAt),
+                              _formatDateTime(data.createdAt),
                               Colors.grey.shade600,
-                              Icons.access_time_outlined,
+                              Icons.schedule_outlined,
                             ),
-                            if (data.createdAt != null)
-                              _kvRow(
-                                'Thời gian tạo',
-                                _formatDateTime(data.createdAt),
-                                Colors.grey.shade600,
-                                Icons.schedule_outlined,
-                              ),
                           ]),
 
                           Builder(
@@ -854,21 +939,21 @@ class ActionLogCard extends StatelessWidget {
 
                           if (data.contextData.isNotEmpty) ...[
                             const SizedBox(height: 24),
-                            _sectionTitle('Context Data'),
+                            _sectionTitle('Dữ liệu ngữ cảnh'),
                             const SizedBox(height: 12),
                             _jsonPreview(data.contextData),
                           ],
 
                           if (data.aiAnalysisResult.isNotEmpty) ...[
                             const SizedBox(height: 24),
-                            _sectionTitle('AI Analysis Result'),
+                            _sectionTitle('Kết quả phân tích AI'),
                             const SizedBox(height: 12),
                             _jsonPreview(data.aiAnalysisResult),
                           ],
 
                           if (data.detectionData.isNotEmpty) ...[
                             const SizedBox(height: 24),
-                            _sectionTitle('Detection Data'),
+                            _sectionTitle('Dữ liệu phát hiện'),
                             const SizedBox(height: 12),
                             _jsonPreview(data.detectionData),
                           ],
@@ -956,6 +1041,8 @@ class ActionLogCard extends StatelessWidget {
                               style: TextStyle(color: Colors.grey.shade600),
                             ),
                             activeColor: Colors.green.shade600,
+                            activeTrackColor: Colors.green.shade200,
+                            inactiveTrackColor: Colors.grey.shade300,
                             contentPadding: EdgeInsets.zero,
                           ),
                         );
@@ -978,7 +1065,7 @@ class ActionLogCard extends StatelessWidget {
 
   Widget _confirmChip(bool confirmed) {
     final Color c = confirmed ? Colors.green.shade600 : Colors.red.shade500;
-    final String label = confirmed ? 'CONFIRMED' : 'UNCONFIRMED';
+    final String label = _be.BackendEnums.confirmStatusToVietnamese(confirmed);
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
       decoration: BoxDecoration(
@@ -1095,26 +1182,33 @@ class ActionLogCard extends StatelessWidget {
     );
   }
 
-  void _showUpdateModal(BuildContext pageContext) {
+  void _showProposeModal(BuildContext pageContext) {
     final allStatusOptions = ['danger', 'warning', 'normal'];
     final statusLabels = {
       'danger': 'Nguy hiểm',
       'warning': 'Cảnh báo',
       'normal': 'Bình thường',
     };
-    final statusIcons = {
-      'danger': Icons.priority_high_rounded,
-      'warning': Icons.warning_amber_rounded,
-      'normal': Icons.check_circle_rounded,
-    };
 
-    // Hide the current status from the selectable options.
+    final allEventTypes = [
+      'fall',
+      'abnormal_behavior',
+      'emergency',
+      'normal_activity',
+      'sleep',
+    ];
+
+    final availableEventTypes = allEventTypes
+        .where((t) => t != data.eventType)
+        .toList();
+
     final currentLower = data.status.toLowerCase();
     final statusOptions = allStatusOptions
         .where((s) => s != currentLower)
         .toList();
 
     String? selectedStatus;
+    String? selectedEventType;
     String note = '';
 
     showDialog(
@@ -1131,192 +1225,255 @@ class ActionLogCard extends StatelessWidget {
           ),
           child: ConstrainedBox(
             constraints: const BoxConstraints(maxWidth: 560),
-            child: SingleChildScrollView(
-              padding: const EdgeInsets.fromLTRB(20, 20, 20, 8),
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Row(
-                    children: [
-                      Container(
-                        padding: const EdgeInsets.all(10),
-                        decoration: BoxDecoration(
-                          color: Colors.blue.shade50,
-                          borderRadius: BorderRadius.circular(12),
-                        ),
-                        child: Icon(
-                          Icons.edit_note_rounded,
-                          color: Colors.blue.shade600,
-                          size: 24,
-                        ),
-                      ),
-                      const SizedBox(width: 12),
-                      const Expanded(
-                        child: Text(
-                          'Đề xuất cập nhật sự kiện',
-                          style: TextStyle(
-                            fontWeight: FontWeight.w800,
-                            fontSize: 20,
-                          ),
-                        ),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 16),
-
-                  // Hiển thị trạng thái hiện tại
-                  Text(
-                    'Trạng thái hiện tại: ${data.status.toUpperCase()}',
-                    style: TextStyle(
-                      fontWeight: FontWeight.w600,
-                      color: AppTheme.getStatusColor(data.status),
-                    ),
-                  ),
-                  const SizedBox(height: 12),
-
-                  // Chọn trạng thái đề xuất
-                  _ElevatedCard(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
+            child: GestureDetector(
+              behavior: HitTestBehavior.translucent,
+              onTap: () => FocusScope.of(dialogCtx).unfocus(),
+              child: SingleChildScrollView(
+                padding: const EdgeInsets.fromLTRB(20, 20, 20, 12),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
                       children: [
-                        Text(
-                          'Chọn trạng thái đề xuất:',
-                          style: TextStyle(
-                            fontWeight: FontWeight.w700,
-                            fontSize: 16,
-                            color: Colors.grey.shade800,
+                        Container(
+                          padding: const EdgeInsets.all(10),
+                          decoration: BoxDecoration(
+                            color: Colors.blue.shade50,
+                            borderRadius: BorderRadius.circular(12),
+                          ),
+                          child: Icon(
+                            Icons.edit_note_rounded,
+                            color: Colors.blue.shade600,
+                            size: 26,
                           ),
                         ),
-                        const SizedBox(height: 10),
-                        Wrap(
-                          spacing: 10,
-                          runSpacing: 10,
-                          children: statusOptions.map((status) {
-                            final isSelected = selectedStatus == status;
-                            final statusColor = AppTheme.getStatusColor(status);
-                            final label = statusLabels[status]!;
-                            final icon = statusIcons[status]!;
-
-                            return GestureDetector(
-                              onTap: () =>
-                                  setState(() => selectedStatus = status),
-                              child: AnimatedContainer(
-                                duration: const Duration(milliseconds: 160),
-                                padding: const EdgeInsets.symmetric(
-                                  horizontal: 12,
-                                  vertical: 9,
-                                ),
-                                decoration: BoxDecoration(
-                                  color: isSelected
-                                      ? statusColor
-                                      : Colors.white,
-                                  borderRadius: BorderRadius.circular(22),
-                                  border: Border.all(
-                                    color: isSelected
-                                        ? statusColor
-                                        : Colors.grey.shade300,
-                                    width: isSelected ? 2 : 1,
-                                  ),
-                                ),
-                                child: Row(
-                                  mainAxisSize: MainAxisSize.min,
-                                  children: [
-                                    Icon(
-                                      icon,
-                                      size: 16,
-                                      color: isSelected
-                                          ? Colors.white
-                                          : statusColor,
-                                    ),
-                                    const SizedBox(width: 6),
-                                    Text(
-                                      label.toUpperCase(),
-                                      style: TextStyle(
-                                        fontSize: 12,
-                                        fontWeight: FontWeight.w700,
-                                        color: isSelected
-                                            ? Colors.white
-                                            : Colors.grey.shade800,
-                                      ),
-                                    ),
-                                  ],
-                                ),
-                              ),
-                            );
-                          }).toList(),
-                        ),
-                        const SizedBox(height: 6),
-                        if (statusOptions.isEmpty)
-                          Text(
-                            'Không có trạng thái khác để đề xuất.',
+                        const SizedBox(width: 12),
+                        const Expanded(
+                          child: Text(
+                            'Đề xuất thay đổi sự kiện',
                             style: TextStyle(
-                              fontSize: 12,
-                              color: Colors.grey.shade600,
+                              fontWeight: FontWeight.w800,
+                              fontSize: 20,
                             ),
                           ),
+                        ),
                       ],
                     ),
-                  ),
+                    const SizedBox(height: 18),
 
-                  const SizedBox(height: 16),
-
-                  // Ghi chú
-                  _ElevatedCard(
-                    child: TextField(
-                      onChanged: (v) => note = v,
-                      maxLines: 4,
-                      maxLength: 240,
-                      decoration: InputDecoration(
-                        labelText: 'Lý do đề xuất (bắt buộc)',
-                        border: OutlineInputBorder(
-                          borderRadius: BorderRadius.circular(10),
-                        ),
-                        counterText: '',
+                    Text(
+                      'Trạng thái hiện tại: ${_be.BackendEnums.statusToVietnamese(data.status)}',
+                      style: TextStyle(
+                        fontWeight: FontWeight.w600,
+                        color: AppTheme.getStatusColor(data.status),
                       ),
                     ),
-                  ),
+                    const SizedBox(height: 12),
 
-                  const SizedBox(height: 20),
-                  Row(
-                    children: [
-                      Expanded(
-                        child: OutlinedButton(
-                          onPressed: () => Navigator.of(dialogCtx).pop(),
-                          child: const Text('Hủy'),
-                        ),
-                      ),
-                      const SizedBox(width: 12),
-                      Expanded(
-                        child: ElevatedButton.icon(
-                          icon: const Icon(Icons.send_rounded),
-                          label: const Text('Gửi đề xuất'),
-                          onPressed: () {
-                            if (selectedStatus == null) {
-                              ScaffoldMessenger.of(pageContext).showSnackBar(
-                                const SnackBar(
-                                  content: Text(
-                                    'Vui lòng chọn trạng thái đề xuất',
+                    _ElevatedCard(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          const Text(
+                            'Chọn trạng thái đề xuất:',
+                            style: TextStyle(
+                              fontWeight: FontWeight.w700,
+                              fontSize: 16,
+                              color: Color(0xFF1A1A1A),
+                            ),
+                          ),
+                          const SizedBox(height: 12),
+                          Wrap(
+                            spacing: 10,
+                            runSpacing: 10,
+                            children: statusOptions.map((status) {
+                              final isSelected = selectedStatus == status;
+                              final label = statusLabels[status]!;
+
+                              return GestureDetector(
+                                onTap: () =>
+                                    setState(() => selectedStatus = status),
+                                child: AnimatedContainer(
+                                  duration: const Duration(milliseconds: 160),
+                                  padding: const EdgeInsets.symmetric(
+                                    horizontal: 16,
+                                    vertical: 10,
+                                  ),
+                                  decoration: BoxDecoration(
+                                    color: isSelected
+                                        ? Colors.blue.shade50
+                                        : Colors.white,
+                                    borderRadius: BorderRadius.circular(10),
+                                    border: Border.all(
+                                      color: isSelected
+                                          ? Colors.blue.shade600
+                                          : Colors.grey.shade300,
+                                      width: isSelected ? 1.5 : 1,
+                                    ),
+                                  ),
+                                  child: Text(
+                                    label,
+                                    style: TextStyle(
+                                      fontSize: 15,
+                                      fontWeight: FontWeight.w600,
+                                      color: isSelected
+                                          ? Colors.blue.shade700
+                                          : Colors.grey.shade800,
+                                    ),
                                   ),
                                 ),
                               );
-                              return;
-                            }
-                            if (note.trim().isEmpty) {
-                              ScaffoldMessenger.of(pageContext).showSnackBar(
-                                const SnackBar(
-                                  content: Text('Vui lòng nhập lý do đề xuất'),
+                            }).toList(),
+                          ),
+                        ],
+                      ),
+                    ),
+
+                    const SizedBox(height: 20),
+
+                    Text(
+                      'Loại hiện tại: ${_be.BackendEnums.eventTypeToVietnamese(data.eventType)}',
+                      style: TextStyle(
+                        fontWeight: FontWeight.w600,
+                        color: Colors.blue.shade600,
+                      ),
+                    ),
+                    const SizedBox(height: 12),
+
+                    _ElevatedCard(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          const Text(
+                            'Chọn loại sự kiện đề xuất:',
+                            style: TextStyle(
+                              fontWeight: FontWeight.w700,
+                              fontSize: 16,
+                              color: Color(0xFF1A1A1A),
+                            ),
+                          ),
+                          const SizedBox(height: 12),
+                          Wrap(
+                            spacing: 10,
+                            runSpacing: 10,
+                            children: availableEventTypes.map((type) {
+                              final label =
+                                  _be.BackendEnums.eventTypeToVietnamese(type);
+                              final isSelected = selectedEventType == type;
+
+                              return GestureDetector(
+                                onTap: () =>
+                                    setState(() => selectedEventType = type),
+                                child: AnimatedContainer(
+                                  duration: const Duration(milliseconds: 160),
+                                  padding: const EdgeInsets.symmetric(
+                                    horizontal: 16,
+                                    vertical: 10,
+                                  ),
+                                  decoration: BoxDecoration(
+                                    color: isSelected
+                                        ? Colors.blue.shade50
+                                        : Colors.white,
+                                    borderRadius: BorderRadius.circular(10),
+                                    border: Border.all(
+                                      color: isSelected
+                                          ? Colors.blue.shade600
+                                          : Colors.grey.shade300,
+                                      width: isSelected ? 1.5 : 1,
+                                    ),
+                                  ),
+                                  child: Text(
+                                    label,
+                                    style: TextStyle(
+                                      fontSize: 15,
+                                      fontWeight: FontWeight.w600,
+                                      color: isSelected
+                                          ? Colors.blue.shade700
+                                          : Colors.grey.shade800,
+                                    ),
+                                  ),
                                 ),
                               );
-                              return;
-                            }
-                            Navigator.of(dialogCtx).pop();
-                            _confirmPropose(pageContext, selectedStatus!, note);
-                          },
+                            }).toList(),
+                          ),
+                        ],
+                      ),
+                    ),
+
+                    const SizedBox(height: 20),
+
+                    _ElevatedCard(
+                      child: TextField(
+                        onChanged: (v) => note = v,
+                        // Dismiss keyboard when tapping outside the TextField (Flutter 3.3+)
+                        onTapOutside: (_) => FocusScope.of(dialogCtx).unfocus(),
+                        maxLines: 4,
+                        maxLength: 240,
+                        decoration: InputDecoration(
+                          labelText: 'Lý do đề xuất (bắt buộc)',
+                          labelStyle: const TextStyle(
+                            fontWeight: FontWeight.w600,
+                          ),
+                          border: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(10),
+                          ),
+                          counterText: '',
                         ),
                       ),
-                    ],
-                  ),
-                ],
+                    ),
+
+                    const SizedBox(height: 24),
+
+                    Row(
+                      children: [
+                        Expanded(
+                          child: OutlinedButton(
+                            onPressed: () => Navigator.of(dialogCtx).pop(),
+                            child: const Text('Hủy'),
+                          ),
+                        ),
+                        const SizedBox(width: 12),
+                        Expanded(
+                          child: ElevatedButton.icon(
+                            icon: const Icon(Icons.send_rounded),
+                            label: const Text('Gửi đề xuất'),
+                            onPressed: () {
+                              if (selectedStatus == null &&
+                                  selectedEventType == null) {
+                                ScaffoldMessenger.of(pageContext).showSnackBar(
+                                  const SnackBar(
+                                    content: Text(
+                                      'Vui lòng chọn trạng thái hoặc loại sự kiện',
+                                    ),
+                                  ),
+                                );
+                                return;
+                              }
+                              if (note.trim().isEmpty) {
+                                ScaffoldMessenger.of(pageContext).showSnackBar(
+                                  const SnackBar(
+                                    content: Text(
+                                      'Vui lòng nhập lý do đề xuất',
+                                    ),
+                                  ),
+                                );
+                                return;
+                              }
+                              Navigator.of(dialogCtx).pop();
+                              _confirmPropose(
+                                pageContext,
+                                selectedStatus ?? data.status,
+                                note,
+                                eventType: selectedEventType,
+                              );
+                            },
+                          ),
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
               ),
             ),
           ),
@@ -1325,14 +1482,19 @@ class ActionLogCard extends StatelessWidget {
     );
   }
 
-  void _confirmPropose(BuildContext ctx, String newStatus, String note) {
+  void _confirmPropose(
+    BuildContext ctx,
+    String newStatus,
+    String note, {
+    String? eventType,
+  }) {
     showDialog(
       context: ctx,
       builder: (confirmCtx) => AlertDialog(
         title: const Text('Xác nhận gửi đề xuất'),
         content: Text(
-          'Đề xuất thay đổi trạng thái từ "${data.status}" sang "$newStatus"?\n'
-          'Khách hàng sẽ xem xét và phê duyệt yêu cầu này.',
+          'Bạn có chắc muốn gửi đề xuất thay đổi trạng thái / loại sự kiện này?\n'
+          'Khách hàng sẽ xem xét và phê duyệt sau.',
         ),
         actions: [
           TextButton(
@@ -1342,7 +1504,7 @@ class ActionLogCard extends StatelessWidget {
           ElevatedButton(
             onPressed: () async {
               Navigator.of(confirmCtx).pop();
-              await _performPropose(ctx, newStatus, note);
+              await _performPropose(ctx, newStatus, note, eventType: eventType);
             },
             child: const Text('Gửi đề xuất'),
           ),
@@ -1354,55 +1516,42 @@ class ActionLogCard extends StatelessWidget {
   Future<void> _performPropose(
     BuildContext ctx,
     String newStatus,
-    String note,
-  ) async {
-    final navigatorCtx = NavigatorKey.navigatorKey.currentContext;
-    final messenger = navigatorCtx != null
-        ? ScaffoldMessenger.of(navigatorCtx)
-        : ScaffoldMessenger.of(ctx);
+    String note, {
+    String? eventType,
+  }) async {
+    final messenger = ScaffoldMessenger.of(ctx);
     final repo = EventRepository(EventService.withDefaultClient());
 
-    if (data.eventId.trim().isEmpty) {
-      messenger.showSnackBar(
-        const SnackBar(
-          content: Text('Không tìm thấy ID sự kiện. Không thể gửi đề xuất.'),
-          backgroundColor: Colors.red,
-        ),
-      );
-      return;
-    }
-
     try {
+      // pending_until mặc định 48h sau thời điểm tạo (nếu có)
+      final pendingUntil = data.createdAt != null
+          ? data.createdAt!.add(const Duration(hours: 48))
+          : DateTime.now().add(const Duration(hours: 48));
+
       await repo.proposeEvent(
         eventId: data.eventId,
         proposedStatus: newStatus,
+        proposedEventType: eventType,
         reason: note,
-        pendingUntil: DateTime.now().add(const Duration(hours: 48)),
+        pendingUntil: pendingUntil,
       );
 
       messenger.showSnackBar(
         SnackBar(
-          content: Text('Đã gửi đề xuất thay đổi sang "${newStatus}"'),
-          backgroundColor: Colors.blue.shade600,
+          content: const Text('Đã gửi đề xuất thay đổi thành công'),
+          backgroundColor: Colors.green.shade600,
         ),
       );
+
       try {
-        showOverlayToast('Đã gửi đề xuất thay đổi sang "$newStatus"');
+        showOverlayToast('Đã gửi đề xuất thành công');
       } catch (_) {}
 
-      if (onUpdated != null) {
-        try {
-          onUpdated!(newStatus);
-        } catch (_) {}
-      }
       try {
         AppEvents.instance.notifyEventsChanged();
       } catch (_) {}
     } catch (e) {
-      final raw = e.toString();
-      final cleaned = raw.startsWith('Exception: ')
-          ? raw.replaceFirst('Exception: ', '')
-          : raw;
+      final cleaned = e.toString().replaceFirst('Exception: ', '');
       messenger.showSnackBar(
         SnackBar(
           content: Text('Gửi đề xuất thất bại: $cleaned'),
@@ -1413,11 +1562,11 @@ class ActionLogCard extends StatelessWidget {
   }
 
   void _showImagesModal(BuildContext context, EventLog event) {
-    debugPrint('\n🖼️ Loading images for event ${event.eventId}...');
+    print('\n🖼️ Loading images for event ${event.eventId}...');
     final future = loadEventImageUrls(event).then((urls) {
-      debugPrint('📸 Found ${urls.length} images:');
+      print('📸 Found ${urls.length} images:');
       for (var url in urls) {
-        debugPrint('   - $url');
+        print('   - $url');
       }
       return urls;
     });
@@ -1450,7 +1599,7 @@ class ActionLogCard extends StatelessWidget {
                   const SizedBox(width: 12),
                   const Expanded(
                     child: Text(
-                      'Event Images',
+                      'Ảnh sự kiện',
                       style: TextStyle(
                         fontWeight: FontWeight.w700,
                         fontSize: 20,
@@ -1687,7 +1836,7 @@ class ActionLogCard extends StatelessWidget {
                   borderRadius: BorderRadius.circular(20),
                 ),
                 child: Text(
-                  'Image ${index + 1}',
+                  'Ảnh ${index + 1}',
                   style: const TextStyle(
                     color: Colors.black,
                     fontWeight: FontWeight.w600,

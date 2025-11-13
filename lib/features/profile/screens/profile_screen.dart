@@ -160,8 +160,8 @@ class _ProfileScreenState extends State<ProfileScreen>
                   const SizedBox(height: 12),
                   _buildInfoRow(Icons.email_outlined, 'Email', user.email),
                   const SizedBox(height: 12),
-                  _buildInfoRow(Icons.work_outline, 'Vai trò', user.role),
-                  const SizedBox(height: 32),
+                  // _buildInfoRow(Icons.work_outline, 'Vai trò', user.role),
+                  // const SizedBox(height: 32),
                   _buildEditButton(),
                   const SizedBox(height: 24),
 
@@ -442,32 +442,80 @@ class _ProfileScreenState extends State<ProfileScreen>
   // }
 
   Widget _buildLogoutButton(BuildContext context) {
-    return OutlinedButton.icon(
-      icon: const Icon(Icons.logout, color: Colors.red),
-      label: const Text('Đăng xuất', style: TextStyle(color: Colors.red)),
-      onPressed: () {
-        showDialog(
-          context: context,
-          builder: (_) => AlertDialog(
-            title: const Text('Xác nhận'),
-            content: const Text('Bạn có chắc muốn đăng xuất?'),
-            actions: [
-              TextButton(
-                onPressed: () => Navigator.pop(context),
-                child: const Text('Hủy'),
-              ),
-              ElevatedButton(
-                onPressed: () {
-                  Navigator.pop(context);
-                  context.read<AuthProvider>().logout();
-                },
-                style: ElevatedButton.styleFrom(backgroundColor: Colors.red),
-                child: const Text('Đăng xuất'),
-              ),
-            ],
+    return Container(
+      width: double.infinity,
+      height: 56,
+      decoration: BoxDecoration(
+        gradient: const LinearGradient(
+          colors: [AppTheme.dangerColor, AppTheme.dangerColorDark],
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+        ),
+        borderRadius: BorderRadius.circular(16),
+        boxShadow: [
+          BoxShadow(
+            color: AppTheme.dangerColor.withValues(alpha: 0.3),
+            blurRadius: 8,
+            offset: const Offset(0, 4),
           ),
-        );
-      },
+        ],
+      ),
+      child: ElevatedButton.icon(
+        icon: const Icon(Icons.logout_rounded, color: Colors.white, size: 20),
+        label: const Text(
+          'Đăng xuất',
+          style: TextStyle(
+            color: Colors.white,
+            fontSize: 16,
+            fontWeight: FontWeight.w600,
+            letterSpacing: 0.5,
+          ),
+        ),
+        onPressed: () {
+          showDialog(
+            context: context,
+            builder: (_) => AlertDialog(
+              backgroundColor: Colors.white,
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(16),
+              ),
+              title: const Text(
+                'Xác nhận',
+                style: TextStyle(
+                  fontWeight: FontWeight.w600,
+                  color: AppTheme.primaryBlue,
+                ),
+              ),
+              content: const Text(
+                'Bạn có chắc muốn đăng xuất?',
+                style: TextStyle(color: Color(0xFF64748B), fontSize: 14),
+              ),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.pop(context),
+                  child: const Text('Hủy'),
+                ),
+                ElevatedButton(
+                  onPressed: () {
+                    Navigator.pop(context);
+                    context.read<AuthProvider>().logout();
+                  },
+                  style: ElevatedButton.styleFrom(backgroundColor: Colors.red),
+                  child: const Text('Đăng xuất'),
+                ),
+              ],
+            ),
+          );
+        },
+        style: ElevatedButton.styleFrom(
+          backgroundColor: Colors.transparent,
+          shadowColor: Colors.transparent,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(16),
+          ),
+          padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
+        ),
+      ),
     );
   }
 }
