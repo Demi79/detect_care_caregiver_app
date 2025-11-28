@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../../../core/theme/app_theme.dart';
 import '../constants/filter_constants.dart';
+import '../../../core/utils/backend_enums.dart' as be;
 
 class FilterBar extends StatelessWidget {
   final List<String> statusOptions;
@@ -12,6 +13,9 @@ class FilterBar extends StatelessWidget {
   final ValueChanged<String?> onStatusChanged;
   final ValueChanged<DateTimeRange?> onDayRangeChanged;
   final ValueChanged<String?> onPeriodChanged;
+  final bool showStatus;
+  final bool showPeriod;
+  final bool enforceTwoDayRange;
 
   static const List<Map<String, String>> timeSlots = [
     {'label': '00:00-06:00', 'value': '00-06'},
@@ -30,6 +34,9 @@ class FilterBar extends StatelessWidget {
     required this.onStatusChanged,
     required this.onDayRangeChanged,
     required this.onPeriodChanged,
+    this.showStatus = true,
+    this.showPeriod = true,
+    this.enforceTwoDayRange = false,
   });
 
   @override
@@ -95,38 +102,62 @@ class FilterBar extends StatelessWidget {
             //   _buildAppliedSummary(context, summary, defaultRange),
             // ],
             const SizedBox(height: 16),
-            _LabeledPill(
-              icon: Icons.schedule_rounded,
-              accentColor: AppTheme.successColor,
-              label: 'Ngày',
-              value: _formatRangeVN(
-                selectedDayRange ?? HomeFilters.defaultDayRange,
-              ),
-              highlight: hasCustomDayRange,
-              onTap: () => _pickDateRange(
-                context,
-                selectedDayRange ?? defaultRange,
-                defaultRange,
-              ),
-            ),
-            const SizedBox(height: 16),
-            _LabeledPill(
-              icon: Icons.place_outlined,
-              accentColor: AppTheme.primaryBlue,
-              label: 'Trạng thái',
-              value: _translateStatus(selectedStatus),
-              highlight: hasCustomStatus,
-              onTap: () => _selectStatus(context),
-            ),
-            const SizedBox(height: 16),
-            _LabeledPill(
-              icon: Icons.auto_awesome_rounded,
-              accentColor: _Palette.stageAccent,
-              label: 'Khung giờ',
-              value: _getTimeSlotLabel(selectedPeriod),
-              highlight: hasCustomPeriod,
-              onTap: () => _selectPeriod(context),
-            ),
+            () {
+              final List<Widget> pills = [];
+
+              pills.add(
+                _LabeledPill(
+                  icon: Icons.schedule_rounded,
+                  accentColor: AppTheme.successColor,
+                  label: 'Ngày',
+                  value: _formatRangeVN(
+                    selectedDayRange ?? HomeFilters.defaultDayRange,
+                  ),
+                  highlight: hasCustomDayRange,
+                  onTap: () => enforceTwoDayRange
+                      ? _pickDateRangeReport(
+                          context,
+                          selectedDayRange ?? defaultRange,
+                          defaultRange,
+                        )
+                      : _pickDateRange(
+                          context,
+                          selectedDayRange ?? defaultRange,
+                          defaultRange,
+                        ),
+                ),
+              );
+
+              if (showStatus) {
+                pills.add(const SizedBox(height: 16));
+                pills.add(
+                  _LabeledPill(
+                    icon: Icons.place_outlined,
+                    accentColor: AppTheme.primaryBlue,
+                    label: 'Trạng thái',
+                    value: _translateStatus(selectedStatus),
+                    highlight: hasCustomStatus,
+                    onTap: () => _selectStatus(context),
+                  ),
+                );
+              }
+
+              if (showPeriod) {
+                pills.add(const SizedBox(height: 16));
+                pills.add(
+                  _LabeledPill(
+                    icon: Icons.auto_awesome_rounded,
+                    accentColor: _Palette.stageAccent,
+                    label: 'Khung giờ',
+                    value: _getTimeSlotLabel(selectedPeriod),
+                    highlight: hasCustomPeriod,
+                    onTap: () => _selectPeriod(context),
+                  ),
+                );
+              }
+
+              return Column(children: pills);
+            }(),
           ],
         ),
       ),
@@ -210,6 +241,16 @@ class FilterBar extends StatelessWidget {
       firstDate: DateTime(2023, 1, 1),
       lastDate: DateTime(today.year, today.month, today.day),
       initialDateRange: initial,
+      locale: const Locale('vi', 'VN'),
+      builder: (context, child) {
+        return Theme(
+          data: Theme.of(context).copyWith(
+            colorScheme: ColorScheme.light(primary: AppTheme.primaryBlue),
+            dialogBackgroundColor: const Color(0xFFF8FAFC),
+          ),
+          child: child!,
+        );
+      },
     );
     if (picked != null) {
       onDayRangeChanged(
@@ -222,6 +263,49 @@ class FilterBar extends StatelessWidget {
           end: DateTime(picked.end.year, picked.end.month, picked.end.day),
         ),
       );
+    } else if (selectedDayRange == null) {
+      onDayRangeChanged(fallback);
+    }
+  }
+
+  Future<void> _pickDateRangeReport(
+    BuildContext context,
+    DateTimeRange initial,
+    DateTimeRange fallback,
+  ) async {
+    final today = DateTime.now();
+
+    final DateTime? picked = await showDatePicker(
+      context: context,
+      initialDate: initial.start,
+      firstDate: DateTime(2023, 1, 1),
+      lastDate: DateTime(today.year, today.month, today.day),
+      locale: const Locale('vi', 'VN'),
+      builder: (context, child) {
+        return Theme(
+          data: Theme.of(context).copyWith(
+            colorScheme: ColorScheme.light(primary: AppTheme.primaryBlue),
+            dialogBackgroundColor: const Color(0xFFF8FAFC),
+          ),
+          child: child!,
+        );
+      },
+    );
+
+    if (picked != null) {
+      final startDate = DateTime(picked.year, picked.month, picked.day);
+      DateTime endDate = startDate.add(const Duration(days: 1));
+
+      final todayDate = DateTime(today.year, today.month, today.day);
+
+      if (endDate.isAfter(todayDate)) {
+        endDate = todayDate;
+        final yesterday = todayDate.subtract(const Duration(days: 1));
+        onDayRangeChanged(DateTimeRange(start: yesterday, end: endDate));
+        return;
+      }
+
+      onDayRangeChanged(DateTimeRange(start: startDate, end: endDate));
     } else if (selectedDayRange == null) {
       onDayRangeChanged(fallback);
     }
@@ -292,21 +376,10 @@ class FilterBar extends StatelessWidget {
   static String _normalize(String value) => value.toLowerCase();
 
   String _translateStatus(String status) {
-    switch (status.toLowerCase()) {
-      case 'all':
-        return 'Tất cả trạng thái';
-      case 'abnormal':
-        return 'Bất thường';
-      case 'danger':
-      case 'critical':
-        return 'Nguy hiểm';
-      case 'warning':
-        return 'Cảnh báo';
-      case 'normal':
-        return 'Bình thường';
-      default:
-        return status;
-    }
+    final s = status.toLowerCase();
+    if (s == 'all') return 'Tất cả trạng thái';
+    if (s == 'abnormal') return 'Bất thường';
+    return be.BackendEnums.statusToVietnamese(s);
   }
 
   String _getTimeSlotLabel(String slotValue) {

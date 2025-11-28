@@ -41,7 +41,9 @@ class LoadingView extends StatelessWidget {
 }
 
 class EmptyView extends StatefulWidget {
-  const EmptyView({super.key});
+  final VoidCallback? onAddCamera;
+
+  const EmptyView({super.key, this.onAddCamera});
 
   @override
   State<EmptyView> createState() => _EmptyViewState();
@@ -124,16 +126,20 @@ class _EmptyViewState extends State<EmptyView>
                 ),
               ),
               const SizedBox(height: 12),
-              // const Text(
-              //   'Bắt đầu bằng cách thêm camera đầu tiên của bạn để giám sát và bảo vệ ngôi nhà',
-              //   style: TextStyle(
-              //     color: Colors.black54,
-              //     fontSize: 16,
-              //     height: 1.5,
-              //   ),
-              //   textAlign: TextAlign.center,
-              // ),
+              const Text(
+                'Bắt đầu bằng cách thêm camera đầu tiên của bạn để giám sát và bảo vệ ngôi nhà',
+                style: TextStyle(
+                  color: Colors.black54,
+                  fontSize: 16,
+                  height: 1.5,
+                ),
+                textAlign: TextAlign.center,
+              ),
               // const SizedBox(height: 32),
+              // AddCameraButton(
+              //   onPressed: widget.onAddCamera,
+              //   label: 'Thêm camera đầu tiên',
+              // ),
             ],
           ),
         ),

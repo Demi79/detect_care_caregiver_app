@@ -38,6 +38,7 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:provider/provider.dart';
 import 'package:detect_care_caregiver_app/core/theme/theme_provider.dart';
 import 'package:detect_care_caregiver_app/core/theme/app_theme.dart';
+import 'package:flutter_localizations/flutter_localizations.dart';
 
 @pragma('vm:entry-point')
 Future<void> firebaseBackgroundHandler(RemoteMessage message) async {
@@ -147,10 +148,20 @@ Future<void> main() async {
     debugPrint('🔄 Firebase background handler registered');
 
     // 4) Supabase
-    await Supabase.initialize(
-      url: 'https://undznprwlqjpnxqsgyiv.supabase.co',
-      anonKey: AppConfig.supabaseKey,
-    );
+    var supabaseUrl = AppConfig.supabaseUrl;
+    if (supabaseUrl.endsWith('/'))
+      supabaseUrl = supabaseUrl.substring(0, supabaseUrl.length - 1);
+    try {
+      final uri = Uri.parse(supabaseUrl);
+      if (uri.hasPort && uri.port != 0) {
+      } else {
+        supabaseUrl = '${supabaseUrl}:443';
+      }
+    } catch (_) {
+      supabaseUrl = AppConfig.supabaseUrl;
+    }
+
+    await Supabase.initialize(url: supabaseUrl, anonKey: AppConfig.supabaseKey);
     debugPrint('⚡ Supabase initialized');
 
     final auth = Supabase.instance.client.auth;
@@ -358,9 +369,16 @@ class MyApp extends StatelessWidget {
     return MaterialApp(
       title: 'Detect Care App',
       navigatorKey: NavigatorKey.navigatorKey,
-      theme: AppTheme.lightTheme,
-      darkTheme: AppTheme.darkTheme,
+      // Use caregiver-specific theme (app is caregiver-only)
+      theme: AppTheme.caregiverLightTheme,
+      darkTheme: AppTheme.caregiverDarkTheme,
       themeMode: theme.isDark ? ThemeMode.dark : ThemeMode.light,
+      localizationsDelegates: [
+        GlobalMaterialLocalizations.delegate,
+        GlobalWidgetsLocalizations.delegate,
+        GlobalCupertinoLocalizations.delegate,
+      ],
+      supportedLocales: const [Locale('vi', 'VN'), Locale('en', 'US')],
       home: const AuthGate(),
       routes: {
         '/settings': (_) => const SettingsScreen(),

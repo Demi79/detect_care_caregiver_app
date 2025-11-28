@@ -9,21 +9,30 @@ class EventRepository {
 
   Future<List<EventLog>> getEvents({
     int page = 1,
-    int limit = 50,
+    int limit = 100,
     String? status,
     DateTimeRange? dayRange,
     String? period,
     String? search,
+    String? lifecycleState,
   }) async {
     try {
-      return await _service.fetchLogs(
+      final events = await _service.fetchLogs(
         page: page,
         limit: limit,
         status: status,
         dayRange: dayRange,
         period: period,
         search: search,
+        lifecycleState: lifecycleState,
       );
+      try {
+        final sample = events.take(5).map((e) => e.eventId).toList();
+        print(
+          '[Repository] getEvents returned=${events.length} sampleIds=$sample',
+        );
+      } catch (_) {}
+      return events;
     } catch (e) {
       dev.log('Repository error - getEvents: $e');
       rethrow;

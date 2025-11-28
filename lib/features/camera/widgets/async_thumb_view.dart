@@ -3,15 +3,28 @@ import 'dart:io';
 
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
+import 'package:shimmer/shimmer.dart';
 
 class AsyncThumbView extends StatelessWidget {
   final String src;
   final double borderRadius;
-  const AsyncThumbView({super.key, required this.src, this.borderRadius = 8});
+  final bool isOnline;
+  final double? width;
+  final double? height;
+  const AsyncThumbView({
+    super.key,
+    required this.src,
+    this.borderRadius = 8,
+    this.isOnline = true,
+    this.width,
+    this.height,
+  });
 
   @override
   Widget build(BuildContext context) {
     Widget fallback = Container(
+      width: width,
+      height: height,
       decoration: BoxDecoration(
         color: Colors.black12,
         borderRadius: BorderRadius.circular(borderRadius),
@@ -19,13 +32,29 @@ class AsyncThumbView extends StatelessWidget {
       alignment: Alignment.center,
       child: Icon(Icons.camera_alt_outlined, color: Colors.grey[300]),
     );
+
+    Widget shimmerPlaceholder = Shimmer.fromColors(
+      baseColor: Colors.grey[300]!,
+      highlightColor: Colors.grey[100]!,
+      child: Container(
+        width: width,
+        height: height,
+        decoration: BoxDecoration(
+          color: Colors.grey[300],
+          borderRadius: BorderRadius.circular(borderRadius),
+        ),
+      ),
+    );
+
     if (src.startsWith('http')) {
       return ClipRRect(
         borderRadius: BorderRadius.circular(borderRadius),
         child: CachedNetworkImage(
           imageUrl: src,
+          width: width,
+          height: height,
           fit: BoxFit.cover,
-          placeholder: (_, __) => Center(child: CircularProgressIndicator()),
+          placeholder: (_, __) => shimmerPlaceholder,
           errorWidget: (_, __, ___) => fallback,
         ),
       );
@@ -64,7 +93,7 @@ class AsyncThumbView extends StatelessWidget {
       future: file.exists(),
       builder: (context, snapshot) {
         if (snapshot.connectionState == ConnectionState.waiting) {
-          return Center(child: CircularProgressIndicator());
+          return shimmerPlaceholder;
         }
         if (snapshot.hasError || !(snapshot.data ?? false)) {
           return fallback;
@@ -73,6 +102,8 @@ class AsyncThumbView extends StatelessWidget {
           borderRadius: BorderRadius.circular(borderRadius),
           child: Image.file(
             file,
+            width: width,
+            height: height,
             fit: BoxFit.cover,
             errorBuilder: (_, __, ___) => fallback,
           ),

@@ -10,7 +10,6 @@ import '../../../core/theme/app_theme.dart';
 import '../../../core/widgets/error_widget.dart';
 import '../../../core/widgets/loading_widget.dart';
 import '../widgets/overview_widgets.dart';
-import 'health_insights_screen.dart';
 import 'analyst_data_screen.dart';
 
 class HealthOverviewScreen extends StatefulWidget {
@@ -39,6 +38,8 @@ class _HealthOverviewScreenState extends State<HealthOverviewScreen> {
   void initState() {
     super.initState();
     _fetch();
+    // In debug mode, automatically run the event comparison after the first
+    // frame so developers don't need to press the debug button manually.
     WidgetsBinding.instance.addPostFrameCallback((_) {
       // if (kDebugMode) {
       //   Future.delayed(const Duration(milliseconds: 400), () {
@@ -296,6 +297,7 @@ class _HealthOverviewScreenState extends State<HealthOverviewScreen> {
           selectedDayRange: _selectedDayRange,
           selectedStatus: _selectedStatus,
           selectedPeriod: _selectedPeriod,
+          enforceTwoDayRange: true,
           onStatusChanged: (v) =>
               setState(() => _selectedStatus = v ?? HomeFilters.defaultStatus),
           onDayRangeChanged: (r) => setState(() {
@@ -304,6 +306,8 @@ class _HealthOverviewScreenState extends State<HealthOverviewScreen> {
           }),
           onPeriodChanged: (v) =>
               setState(() => _selectedPeriod = v ?? HomeFilters.defaultPeriod),
+          showStatus: false,
+          showPeriod: false,
         ),
         const SizedBox(height: AppTheme.spacingL),
 
@@ -324,19 +328,19 @@ class _HealthOverviewScreenState extends State<HealthOverviewScreen> {
         ),
         const SizedBox(height: AppTheme.spacingL),
 
-        Container(
-          padding: const EdgeInsets.all(AppTheme.spacingM),
-          decoration: BoxDecoration(
-            color: Colors.white,
-            borderRadius: BorderRadius.circular(AppTheme.borderRadiusMedium),
-            boxShadow: AppTheme.cardShadow,
-          ),
-          child: Text(
-            d.aiSummary.isEmpty ? "Không có tóm tắt AI" : d.aiSummary,
-            style: Theme.of(context).textTheme.bodyMedium,
-          ),
-        ),
-        const SizedBox(height: AppTheme.spacingM),
+        // Container(
+        //   padding: const EdgeInsets.all(AppTheme.spacingM),
+        //   decoration: BoxDecoration(
+        //     color: Colors.white,
+        //     borderRadius: BorderRadius.circular(AppTheme.borderRadiusMedium),
+        //     boxShadow: AppTheme.cardShadow,
+        //   ),
+        //   child: Text(
+        //     d.aiSummary.isEmpty ? "Không có tóm tắt AI" : d.aiSummary,
+        //     style: Theme.of(context).textTheme.bodyMedium,
+        //   ),
+        // ),
+        // const SizedBox(height: AppTheme.spacingM),
 
         // --- KẾT LUẬN TỪNG NGÀY (daily conclusions) ---
         Container(
@@ -406,8 +410,8 @@ class _HealthOverviewScreenState extends State<HealthOverviewScreen> {
                 const Center(child: CircularProgressIndicator())
               else if (_analystError != null)
                 Text('Lỗi tải kết luận: $_analystError')
-              else if (_analystEntries == null || _analystEntries!.isEmpty)
-                const Text('Không có kết luận cho khoảng thời gian này')
+              // else if (_analystEntries == null || _analystEntries!.isEmpty)
+              //   const Text('Không có kết luận cho khoảng thời gian này')
               else
                 Column(
                   crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -472,113 +476,113 @@ class _HealthOverviewScreenState extends State<HealthOverviewScreen> {
           ),
         ),
 
-        const SizedBox(height: AppTheme.spacingXL),
-        Container(
-          padding: const EdgeInsets.all(AppTheme.spacingM),
-          margin: const EdgeInsets.only(top: AppTheme.spacingM),
-          decoration: BoxDecoration(
-            color: Colors.white,
-            borderRadius: BorderRadius.circular(AppTheme.borderRadiusMedium),
-            boxShadow: AppTheme.cardShadow,
-          ),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              Row(
-                children: [
-                  Expanded(
-                    child: Text(
-                      'Báo cáo chi tiết',
-                      style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                        fontWeight: FontWeight.w700,
-                      ),
-                    ),
-                  ),
+        // const SizedBox(height: AppTheme.spacingXL),
+        // Container(
+        //   padding: const EdgeInsets.all(AppTheme.spacingM),
+        //   margin: const EdgeInsets.only(top: AppTheme.spacingM),
+        //   decoration: BoxDecoration(
+        //     color: Colors.white,
+        //     borderRadius: BorderRadius.circular(AppTheme.borderRadiusMedium),
+        //     boxShadow: AppTheme.cardShadow,
+        //   ),
+        //   child: Column(
+        //     crossAxisAlignment: CrossAxisAlignment.stretch,
+        //     children: [
+        //       Row(
+        //         children: [
+        //           Expanded(
+        //             child: Text(
+        //               'Gợi ý từ AI',
+        //               style: Theme.of(context).textTheme.titleMedium?.copyWith(
+        //                 fontWeight: FontWeight.w700,
+        //               ),
+        //             ),
+        //           ),
 
-                  TextButton(
-                    onPressed: () {
-                      Navigator.of(context).push(
-                        MaterialPageRoute(
-                          builder: (_) => HealthInsightsScreen(
-                            dayRange: _selectedDayRange,
-                            patientId: widget.patientId,
-                          ),
-                        ),
-                      );
-                    },
-                    child: const Text('Xem chi tiết'),
-                  ),
-                ],
-              ),
+        //           TextButton(
+        //             onPressed: () {
+        //               Navigator.of(context).push(
+        //                 MaterialPageRoute(
+        //                   builder: (_) => HealthInsightsScreen(
+        //                     dayRange: _selectedDayRange,
+        //                     patientId: widget.patientId,
+        //                   ),
+        //                 ),
+        //               );
+        //             },
+        //             child: const Text('Xem chi tiết'),
+        //           ),
+        //         ],
+        //       ),
 
-              // const SizedBox(height: AppTheme.spacingS),
-              // if (_analystLoading)
-              //   const Center(child: CircularProgressIndicator())
-              // else if (_analystError != null)
-              //   Text('Lỗi tải kết luận: $_analystError')
-              // else if (_analystEntries == null || _analystEntries!.isEmpty)
-              //   const Text('Không có kết luận cho khoảng thời gian này')
-              // else
-              //   Column(
-              //     crossAxisAlignment: CrossAxisAlignment.stretch,
-              //     children: _analystEntries!.map((e) {
-              //       final m = (e as Map<String, dynamic>);
-              //       final data = m['data'];
-              //       String summary = '';
-              //       if (data != null && data['analyses'] is List) {
-              //         try {
-              //           final analyses = (data['analyses'] as List).firstWhere(
-              //             (a) =>
-              //                 a is Map<String, dynamic> &&
-              //                 a['suggest_summary_daily'] != null,
-              //             orElse: () => null,
-              //           );
-              //           if (analyses != null &&
-              //               analyses is Map<String, dynamic>) {
-              //             summary =
-              //                 analyses['suggest_summary_daily']?.toString() ??
-              //                 '';
-              //           }
-              //         } catch (_) {}
-              //       }
+        //       // const SizedBox(height: AppTheme.spacingS),
+        //       // if (_analystLoading)
+        //       //   const Center(child: CircularProgressIndicator())
+        //       // else if (_analystError != null)
+        //       //   Text('Lỗi tải kết luận: $_analystError')
+        //       // else if (_analystEntries == null || _analystEntries!.isEmpty)
+        //       //   const Text('Không có kết luận cho khoảng thời gian này')
+        //       // else
+        //       //   Column(
+        //       //     crossAxisAlignment: CrossAxisAlignment.stretch,
+        //       //     children: _analystEntries!.map((e) {
+        //       //       final m = (e as Map<String, dynamic>);
+        //       //       final data = m['data'];
+        //       //       String summary = '';
+        //       //       if (data != null && data['analyses'] is List) {
+        //       //         try {
+        //       //           final analyses = (data['analyses'] as List).firstWhere(
+        //       //             (a) =>
+        //       //                 a is Map<String, dynamic> &&
+        //       //                 a['suggest_summary_daily'] != null,
+        //       //             orElse: () => null,
+        //       //           );
+        //       //           if (analyses != null &&
+        //       //               analyses is Map<String, dynamic>) {
+        //       //             summary =
+        //       //                 analyses['suggest_summary_daily']?.toString() ??
+        //       //                 '';
+        //       //           }
+        //       //         } catch (_) {}
+        //       //       }
 
-              //       final date = m['date']?.toString() ?? '';
-              //       return Container(
-              //         margin: const EdgeInsets.only(top: AppTheme.spacingS),
-              //         padding: const EdgeInsets.all(AppTheme.spacingS),
-              //         decoration: BoxDecoration(
-              //           color: AppTheme.primaryBlue.withOpacity(0.03),
-              //           borderRadius: BorderRadius.circular(8),
-              //         ),
-              //         child: Row(
-              //           children: [
-              //             Expanded(
-              //               child: Column(
-              //                 crossAxisAlignment: CrossAxisAlignment.start,
-              //                 children: [
-              //                   Text(
-              //                     date,
-              //                     style: Theme.of(context).textTheme.bodySmall
-              //                         ?.copyWith(color: AppTheme.textSecondary),
-              //                   ),
-              //                   const SizedBox(height: 6),
-              //                   Text(
-              //                     summary.isEmpty
-              //                         ? 'Không có kết luận'
-              //                         : summary,
-              //                     style: Theme.of(context).textTheme.bodyMedium,
-              //                   ),
-              //                 ],
-              //               ),
-              //             ),
-              //           ],
-              //         ),
-              //       );
-              //     }).toList(),
-              //   ),
-            ],
-          ),
-        ),
+        //       //       final date = m['date']?.toString() ?? '';
+        //       //       return Container(
+        //       //         margin: const EdgeInsets.only(top: AppTheme.spacingS),
+        //       //         padding: const EdgeInsets.all(AppTheme.spacingS),
+        //       //         decoration: BoxDecoration(
+        //       //           color: AppTheme.primaryBlue.withOpacity(0.03),
+        //       //           borderRadius: BorderRadius.circular(8),
+        //       //         ),
+        //       //         child: Row(
+        //       //           children: [
+        //       //             Expanded(
+        //       //               child: Column(
+        //       //                 crossAxisAlignment: CrossAxisAlignment.start,
+        //       //                 children: [
+        //       //                   Text(
+        //       //                     date,
+        //       //                     style: Theme.of(context).textTheme.bodySmall
+        //       //                         ?.copyWith(color: AppTheme.textSecondary),
+        //       //                   ),
+        //       //                   const SizedBox(height: 6),
+        //       //                   Text(
+        //       //                     summary.isEmpty
+        //       //                         ? 'Không có kết luận'
+        //       //                         : summary,
+        //       //                     style: Theme.of(context).textTheme.bodyMedium,
+        //       //                   ),
+        //       //                 ],
+        //       //               ),
+        //       //             ),
+        //       //           ],
+        //       //         ),
+        //       //       );
+        //       //     }).toList(),
+        //       //   ),
+        //     ],
+        //   ),
+        // ),
 
         // SectionHeader(
         //   title: 'Báo cáo chi tiết',

@@ -5,6 +5,8 @@ import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'package:detect_care_caregiver_app/core/config/app_config.dart';
 import './alert_settings_manager.dart';
 
+import 'package:detect_care_caregiver_app/core/utils/logger.dart';
+
 class NotificationService {
   static final FlutterLocalNotificationsPlugin _instance =
       FlutterLocalNotificationsPlugin();
@@ -20,11 +22,16 @@ class NotificationService {
     bool urgent = false,
     String severity = 'info',
   }) async {
+    AppLogger.i(
+      '[NotificationService] show called urgent=$urgent severity=$severity',
+    );
+    AppLogger.d('[NotificationService] call stack:\n${StackTrace.current}');
+
     final shouldShow = AlertSettingsManager.instance.settings.shouldShowPush(
       severity,
     );
     if (!shouldShow) {
-      debugPrint('Notification suppressed by settings for severity=$severity');
+      AppLogger.i('Notification suppressed by settings for severity=$severity');
       return;
     }
 
@@ -52,9 +59,23 @@ class NotificationService {
 
       final detail = NotificationDetails(android: android, iOS: iOS);
 
+      final soundName = AppConfig.useCustomNotificationSounds
+          ? _soundResource
+          : 'default';
+      AppLogger.i(
+        '[NotificationService] Prepared notification: sound=$soundName urgent=$urgent playSound=$playSound',
+      );
+      AppLogger.d(
+        '[NotificationService] NotificationDetails: android=$android iOS=$iOS',
+      );
+
+      AppLogger.i('[NotificationService] Calling local notifications .show()');
       await _instance.show(0, title, body, detail, payload: null);
+      AppLogger.i(
+        '[NotificationService] Local notifications .show() completed',
+      );
     } catch (e) {
-      debugPrint('Failed to show notification: $e');
+      AppLogger.e('Failed to show notification: $e', e);
     }
   }
 

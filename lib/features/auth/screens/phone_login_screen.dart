@@ -61,29 +61,38 @@ class _PhoneLoginScreenState extends State<PhoneLoginScreen>
         ),
         child: SafeArea(
           child: SingleChildScrollView(
-            child: Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 16.0),
-              child: FadeTransition(
-                opacity: _fadeAnimation,
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.stretch,
-                  children: [
-                    const SizedBox(height: 60),
+            physics: const AlwaysScrollableScrollPhysics(),
+            child: ConstrainedBox(
+              constraints: BoxConstraints(
+                minHeight:
+                    MediaQuery.of(context).size.height -
+                    MediaQuery.of(context).padding.top -
+                    MediaQuery.of(context).padding.bottom,
+              ),
+              child: Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 16.0),
+                child: FadeTransition(
+                  opacity: _fadeAnimation,
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      const SizedBox(height: 60),
 
-                    // Medical Header
-                    _buildMedicalHeader(),
+                      // Medical Header
+                      _buildMedicalHeader(),
 
-                    const SizedBox(height: 50),
+                      const SizedBox(height: 50),
 
-                    // Login Form
-                    _buildLoginForm(),
+                      // Login Form
+                      _buildLoginForm(),
 
-                    const SizedBox(height: 40),
+                      const SizedBox(height: 40),
 
-                    // // Bottom Actions
-                    // _buildBottomActions(),
-                    // const SizedBox(height: 30),
-                  ],
+                      // // Bottom Actions
+                      // _buildBottomActions(),
+                      // const SizedBox(height: 30),
+                    ],
+                  ),
                 ),
               ),
             ),

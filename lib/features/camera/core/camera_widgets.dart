@@ -42,7 +42,7 @@ class CameraWidgets {
               ),
               const SizedBox(height: 8),
               Text(
-                'Nhập URL để bắt đầu',
+                'Nhấn vào để xem camera',
                 textAlign: TextAlign.center,
                 style: TextStyle(
                   color: Colors.white.withValues(alpha: 0.71),
@@ -60,33 +60,42 @@ class CameraWidgets {
   /// Build the fullscreen view container
   static Widget buildFullscreenContainer({
     required Widget child,
-    required VoidCallback onTap,
-    required VoidCallback onDoubleTap,
+    VoidCallback? onTap,
+    VoidCallback? onDoubleTap,
   }) {
     return SafeArea(
       child: ClipRRect(
         borderRadius: BorderRadius.circular(18),
-        child: Container(
-          decoration: BoxDecoration(
-            color: Colors.black,
-            boxShadow: [
-              BoxShadow(
-                color: Colors.black.withValues(alpha: 0.3),
-                blurRadius: 16,
-                offset: const Offset(0, 4),
+        child: LayoutBuilder(
+          builder: (context, constraints) {
+            final isLandscape =
+                MediaQuery.of(context).orientation == Orientation.landscape;
+            return Container(
+              decoration: BoxDecoration(
+                color: Colors.black,
+                boxShadow: [
+                  BoxShadow(
+                    color: Colors.black.withValues(alpha: 0.3),
+                    blurRadius: 16,
+                    offset: const Offset(0, 4),
+                  ),
+                ],
               ),
-            ],
-          ),
-          margin: const EdgeInsets.all(12),
-          width: double.infinity,
-          height: double.infinity,
-          padding: const EdgeInsets.symmetric(vertical: 20, horizontal: 20),
-          child: GestureDetector(
-            behavior: HitTestBehavior.opaque,
-            onTap: onTap,
-            onDoubleTap: onDoubleTap,
-            child: child,
-          ),
+
+              margin: EdgeInsets.zero,
+              width: double.infinity,
+              height: double.infinity,
+              padding: isLandscape
+                  ? const EdgeInsets.symmetric(vertical: 8, horizontal: 12)
+                  : const EdgeInsets.symmetric(vertical: 12, horizontal: 12),
+              child: GestureDetector(
+                behavior: HitTestBehavior.opaque,
+                onTap: onTap,
+                onDoubleTap: onDoubleTap,
+                child: child,
+              ),
+            );
+          },
         ),
       ),
     );
@@ -123,16 +132,39 @@ class CameraWidgets {
 
   /// Build the app bar for the camera screen
   static AppBar buildAppBar({
+    required BuildContext context,
     required VoidCallback onFullscreenToggle,
     required bool isFullscreen,
   }) {
     return AppBar(
-      title: const Text('Camera trực tiếp'),
-      elevation: 0,
+      centerTitle: true,
       backgroundColor: Colors.white,
-      foregroundColor: Colors.black,
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(bottom: Radius.circular(18)),
+      elevation: 0,
+      shadowColor: Colors.black.withValues(alpha: 0.1),
+      leading: Container(
+        margin: const EdgeInsets.all(8),
+        decoration: BoxDecoration(
+          color: const Color(0xFFF8FAFC),
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(color: const Color(0xFFE2E8F0)),
+        ),
+        child: IconButton(
+          onPressed: () => Navigator.pop(context),
+          icon: const Icon(
+            Icons.arrow_back_ios_new,
+            color: Color(0xFF374151),
+            size: 18,
+          ),
+        ),
+      ),
+      title: const Text(
+        'Camera trực tiếp',
+        style: TextStyle(
+          color: Color(0xFF1E293B),
+          fontSize: 20,
+          fontWeight: FontWeight.w700,
+          letterSpacing: -0.5,
+        ),
       ),
       actions: [
         IconButton(
@@ -401,6 +433,7 @@ extension CameraWidgetExtensions on BuildContext {
 
 /// Build complete camera screen
 Widget buildCompleteCameraScreen({
+  required BuildContext context,
   required Widget cameraView,
   required VoidCallback onFullscreenToggle,
   VoidCallback? onConnectionTap,
@@ -413,6 +446,7 @@ Widget buildCompleteCameraScreen({
 }) {
   return Scaffold(
     appBar: CameraWidgets.buildAppBar(
+      context: context,
       onFullscreenToggle: onFullscreenToggle,
       isFullscreen: isFullscreen,
     ),

@@ -10,12 +10,12 @@ class HealthOverviewRepositoryImpl implements HealthOverviewRepository {
 
   @override
   Future<HealthOverviewData> getOverview({
-    String? patientId,
+    String? customerId,
     String? startDate,
     String? endDate,
   }) {
     return remote.fetchOverview(
-      patientId: patientId,
+      customerId: customerId,
       startDate: startDate,
       endDate: endDate,
     );

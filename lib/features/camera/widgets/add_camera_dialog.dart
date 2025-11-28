@@ -1,10 +1,12 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
+// Hộp thoại thêm camera nâng cấp: UI/UX hiện đại với Material Design 3,
+// dark mode support, animations, và trải nghiệm người dùng tối ưu
 class AddCameraDialog extends StatefulWidget {
   final String? userId;
   final String? roomId;
-  final Map<String, dynamic>? initialData;
+  final Map<String, dynamic>? initialData; // If provided, dialog acts as Edit
   const AddCameraDialog({
     super.key,
     this.userId,
@@ -39,6 +41,7 @@ class _AddCameraDialogState extends State<AddCameraDialog>
   @override
   void initState() {
     super.initState();
+    // Prefill fields if editing
     final init = widget.initialData;
     if (init != null) {
       _nameCtrl.text = (init['camera_name'] as String?) ?? '';
@@ -83,6 +86,7 @@ class _AddCameraDialogState extends State<AddCameraDialog>
     super.dispose();
   }
 
+  // Ghép các thành phần thành URL hoàn chỉnh: <protocol>://user:pass@ip:port/path
   String get _builtUrl {
     final scheme = '$_protocol://';
     final user = _usernameCtrl.text.trim();
@@ -102,6 +106,7 @@ class _AddCameraDialogState extends State<AddCameraDialog>
     return '$scheme$auth$ip:$port$path';
   }
 
+  // URL xem trước: ẩn mật khẩu nếu có
   String get _previewUrl {
     final scheme = '$_protocol://';
     final user = _usernameCtrl.text.trim();
@@ -121,6 +126,7 @@ class _AddCameraDialogState extends State<AddCameraDialog>
     return '$scheme$auth$ip:$port$path';
   }
 
+  // Preset đường dẫn gợi ý theo giao thức hiện tại
   List<Map<String, String>> get _pathPresets {
     if (_protocol == 'http') {
       return [
@@ -128,6 +134,7 @@ class _AddCameraDialogState extends State<AddCameraDialog>
         {'label': 'HTTP - MJPEG', 'value': '/mjpeg'},
       ];
     }
+    // RTSP presets
     return [
       {
         'label': 'RTSP - Dahua (mặc định)',
@@ -202,11 +209,13 @@ class _AddCameraDialogState extends State<AddCameraDialog>
                     ),
                     const SizedBox(height: 24),
 
+                    // Form fields
                     Flexible(
                       child: SingleChildScrollView(
                         child: Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
+                            // Tên camera
                             _buildTextField(
                               controller: _nameCtrl,
                               label: 'Tên Camera',
@@ -219,6 +228,7 @@ class _AddCameraDialogState extends State<AddCameraDialog>
                             ),
                             const SizedBox(height: 16),
 
+                            // Giao thức
                             _buildDropdownField(
                               value: _protocol,
                               label: 'Giao thức',
@@ -253,6 +263,7 @@ class _AddCameraDialogState extends State<AddCameraDialog>
                             ),
                             const SizedBox(height: 16),
 
+                            // Username & Password
                             Row(
                               children: [
                                 Expanded(
@@ -291,6 +302,7 @@ class _AddCameraDialogState extends State<AddCameraDialog>
                             ),
                             const SizedBox(height: 16),
 
+                            // IP/Host & Port
                             Row(
                               children: [
                                 Expanded(
@@ -330,12 +342,15 @@ class _AddCameraDialogState extends State<AddCameraDialog>
                             ),
                             const SizedBox(height: 16),
 
+                            // Đường dẫn với presets
                             _buildPathField(),
                             const SizedBox(height: 16),
 
+                            // Quick setup buttons
                             _buildQuickSetupButtons(),
                             const SizedBox(height: 16),
 
+                            // URL Preview
                             _buildUrlPreview(theme, colorScheme),
                           ],
                         ),
@@ -344,6 +359,7 @@ class _AddCameraDialogState extends State<AddCameraDialog>
 
                     const SizedBox(height: 24),
 
+                    // Actions
                     Row(
                       mainAxisAlignment: MainAxisAlignment.end,
                       children: [
@@ -757,6 +773,7 @@ class _AddCameraDialogState extends State<AddCameraDialog>
 
     setState(() => _isLoading = true);
 
+    // Simulate network delay for better UX
     await Future.delayed(const Duration(milliseconds: 800));
 
     final url = _builtUrl;

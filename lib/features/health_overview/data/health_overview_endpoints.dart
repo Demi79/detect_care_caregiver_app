@@ -6,12 +6,12 @@ class HealthOverviewEndpoints {
     : base = overrideBase ?? AppConfig.apiBaseUrl;
 
   Uri getHealthOverview({
-    String? patientId,
+    String? customerId,
     String? startDate,
     String? endDate,
   }) {
     final params = <String, String>{};
-    if (patientId != null) params['userId'] = patientId;
+    if (customerId != null) params['customerId'] = customerId;
     if (startDate != null) params['startDate'] = startDate;
     if (endDate != null) params['endDate'] = endDate;
 

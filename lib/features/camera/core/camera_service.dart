@@ -1,6 +1,6 @@
 import 'dart:async';
 import 'dart:io';
-import 'dart:typed_data';
+import 'package:flutter/foundation.dart';
 
 import 'package:flutter_vlc_player/flutter_vlc_player.dart';
 import 'package:wakelock_plus/wakelock_plus.dart';
@@ -10,35 +10,65 @@ import 'camera_helpers.dart';
 
 class CameraService {
   VlcPlayerController? _controller;
+  String? _lastUrl;
 
   Future<VlcPlayerController> createController(String url) async {
     await _disposeController();
 
     await WakelockPlus.enable();
 
-    _controller = VlcPlayerController.network(
-      url,
-      autoInitialize: true,
-      autoPlay: true,
-      hwAcc: HwAcc.full,
-      options: VlcPlayerOptions(
-        advanced: VlcAdvancedOptions([
-          '--network-caching=${CameraConstants.networkCaching}',
-          '--rtsp-tcp',
-          '--live-caching=${CameraConstants.liveCaching}',
-          '--clock-jitter=0',
-          '--avcodec-hw=auto',
-          '--avcodec-threads=0',
-          '--video-filter=deinterlace',
-          '--deinterlace-mode=blend',
-        ]),
-      ),
-    );
+    try {
+      _controller = VlcPlayerController.network(
+        url,
+        autoInitialize: true,
+        autoPlay: true,
+        hwAcc: HwAcc.disabled,
+        options: VlcPlayerOptions(
+          advanced: VlcAdvancedOptions([
+            '--network-caching=${CameraConstants.networkCaching}',
+            '--rtsp-tcp',
+            '--live-caching=${CameraConstants.liveCaching}',
+            '--clock-jitter=0',
+            '--avcodec-threads=0',
+            '--video-filter=deinterlace',
+            '--deinterlace-mode=blend',
+          ]),
+        ),
+      );
 
-    return _controller!;
+      print('🐛 [CameraService] created VlcPlayerController for $url');
+
+      return _controller!;
+    } catch (e, st) {
+      print('❌ [CameraService] createController failed for $url: $e');
+      if (kDebugMode) print(st.toString());
+      try {
+        await WakelockPlus.disable();
+      } catch (_) {}
+      rethrow;
+    }
   }
 
-  /// Dispose the current controller
+  Future<VlcPlayerController?> ensureControllerFor(
+    String url, {
+    Duration waitFor = const Duration(seconds: 2),
+  }) async {
+    try {
+      if (_controller == null || (_lastUrl != null && _lastUrl != url)) {
+        final c = await createController(url);
+        _lastUrl = url;
+        final started = await waitForPlayback(waitFor);
+        if (started) return c;
+        return c;
+      }
+      return _controller;
+    } catch (e, st) {
+      print('❌ [CameraService] ensureControllerFor failed for $url: $e');
+      if (kDebugMode) print(st.toString());
+      return null;
+    }
+  }
+
   Future<void> _disposeController() async {
     if (_controller != null) {
       try {
@@ -48,10 +78,11 @@ class CameraService {
         await _controller!.dispose();
       } catch (_) {}
       _controller = null;
+      _lastUrl = null;
     }
   }
 
-  /// Wait for playback to start
+  /// Đợi playback bắt đầu
   Future<bool> waitForPlayback(Duration timeout) async {
     if (_controller == null) return false;
 
@@ -66,12 +97,21 @@ class CameraService {
     return false;
   }
 
-  /// Take a snapshot and save it as thumbnail
+  Future<bool> safeIsPlaying(VlcPlayerController? controller) async {
+    if (controller == null) return false;
+    try {
+      final ok = await controller.isPlaying();
+      return ok == true;
+    } catch (_) {
+      return false;
+    }
+  }
+
   Future<String?> takeSnapshot() async {
     if (_controller == null) return null;
 
     try {
-      final Uint8List? bytes = await _controller!.takeSnapshot();
+      final bytes = await _controller!.takeSnapshot();
       if (bytes == null || bytes.isEmpty) return null;
 
       final thumbsDir = await CameraHelpers.getThumbsDirectory();
@@ -88,7 +128,7 @@ class CameraService {
     }
   }
 
-  /// Toggle play/pause
+  /// Chuyển trạng thái phát/tạm dừng
   Future<void> togglePlayPause(bool isPlaying) async {
     if (_controller == null) return;
 
@@ -99,7 +139,7 @@ class CameraService {
     }
   }
 
-  /// Toggle mute
+  /// Bật/tắt âm
   Future<void> toggleMute(bool isMuted) async {
     if (_controller == null) return;
 
@@ -110,21 +150,21 @@ class CameraService {
     }
   }
 
-  /// Set volume
+  /// Đặt âm lượng
   Future<void> setVolume(int volume) async {
     if (_controller == null) return;
     await _controller!.setVolume(volume.clamp(0, 100));
   }
 
-  /// Get current controller
+  /// Lấy controller hiện tại
   VlcPlayerController? get controller => _controller;
 
-  /// Dispose service and cleanup resources
+  /// Huỷ service và dọn dẹp tài nguyên
   Future<void> dispose() async {
     await WakelockPlus.disable();
     await _disposeController();
   }
 }
 
-/// Singleton instance of camera service
+/// Thể hiện singleton của CameraService
 final cameraService = CameraService();

@@ -16,7 +16,8 @@ import 'package:detect_care_caregiver_app/features/home/constants/types.dart';
 import 'package:detect_care_caregiver_app/features/home/models/event_log.dart';
 import 'package:detect_care_caregiver_app/features/home/models/log_entry.dart';
 import 'package:detect_care_caregiver_app/features/home/repository/event_repository.dart';
-import 'package:detect_care_caregiver_app/features/home/screens/warning_log_screen.dart';
+import 'package:detect_care_caregiver_app/features/home/screens/high_confidence_events_screen.dart';
+import 'package:detect_care_caregiver_app/features/home/screens/low_confidence_events_screen.dart';
 import 'package:detect_care_caregiver_app/features/home/service/event_service.dart';
 import 'package:detect_care_caregiver_app/features/notification/screens/notification_screen.dart';
 import 'package:detect_care_caregiver_app/features/notification/screens/send_notification_screen.dart';
@@ -25,7 +26,7 @@ import 'package:detect_care_caregiver_app/features/patient/screens/patient_profi
 import 'package:detect_care_caregiver_app/features/shared_permissions/screens/caregiver_settings_screen.dart';
 import 'package:detect_care_caregiver_app/features/search/screens/search_screen.dart';
 import 'package:detect_care_caregiver_app/features/setting/screens/settings_screen.dart';
-import 'package:detect_care_caregiver_app/features/setup/demo/setup_trigger_helper.dart';
+
 import 'package:detect_care_caregiver_app/services/notification_api_service.dart';
 import 'package:detect_care_caregiver_app/services/supabase_service.dart';
 import 'package:flutter/material.dart';
@@ -205,9 +206,25 @@ class _HomeScreenState extends State<HomeScreen>
         return;
       }
 
+      // Increase page size when the user requested a multi-day range so
+      // the backend doesn't truncate results across days due to paging.
+      int effectiveLimit = 200;
+      try {
+        if (_selectedDayRange != null) {
+          final days =
+              _selectedDayRange!.end
+                  .difference(_selectedDayRange!.start)
+                  .inDays +
+              1;
+          if (days > 1) {
+            effectiveLimit = (days * 50).clamp(200, 500);
+          }
+        }
+      } catch (_) {}
+
       final events = await _eventRepository.getEvents(
         page: 1,
-        limit: 20,
+        limit: effectiveLimit,
         status: _selectedStatus,
         dayRange: _selectedDayRange,
         period: _selectedPeriod,
@@ -291,206 +308,212 @@ class _HomeScreenState extends State<HomeScreen>
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: AppTheme.scaffoldBackground,
-      appBar: AppBar(
-        backgroundColor: Colors.white,
-        // title: Text(
-        //   _appBarTitle(),
-        //   style: const TextStyle(color: AppTheme.text),
-        // ),
-        centerTitle: false,
-        leading: IconButton(
-          onPressed: () => Navigator.of(
-            context,
-          ).push(MaterialPageRoute(builder: (_) => const SettingsScreen())),
-          icon: const Icon(
-            Icons.settings,
-            color: AppTheme.primaryBlue,
-            size: 24,
-          ),
-          splashRadius: 20,
-        ),
-        actions: [
-          Semantics(
-            button: true,
-            label: 'Tìm kiếm',
-            child: Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 8.0),
-              child: IconButton(
-                tooltip: 'Tìm kiếm',
-                onPressed: () {
-                  Navigator.of(context).push(
-                    MaterialPageRoute(builder: (_) => const SearchScreen()),
-                  );
-                },
+      appBar: _selectedIndex == 1
+          ? null
+          : AppBar(
+              backgroundColor: AppTheme.caregiverPrimary,
+              // title: Text(
+              //   _appBarTitle(),
+              //   style: const TextStyle(color: AppTheme.text),
+              // ),
+              centerTitle: false,
+              leading: IconButton(
+                onPressed: () => Navigator.of(context).push(
+                  MaterialPageRoute(builder: (_) => const SettingsScreen()),
+                ),
                 icon: const Icon(
-                  Icons.search,
-                  color: AppTheme.primaryBlue,
+                  Icons.settings,
+                  color: AppTheme.caregiverTextOnPrimary,
                   size: 24,
                 ),
                 splashRadius: 20,
               ),
-            ),
-          ),
-          // Invoice icon with badge
-          // Stack(
-          //   alignment: Alignment.center,
-          //   children: [
-          //     Semantics(
-          //       button: true,
-          //       label: 'Hóa đơn',
-          //       child: Padding(
-          //         padding: const EdgeInsets.symmetric(horizontal: 6.0),
-          //         child: IconButton(
-          //           tooltip: 'Hóa đơn',
-          //           onPressed: () {
-          //             Navigator.of(context).push(
-          //               MaterialPageRoute(
-          //                 builder: (_) => const InvoicesScreen(),
-          //               ),
-          //             );
-          //           },
-          //           icon: const Icon(
-          //             Icons.receipt_long,
-          //             color: AppTheme.primaryBlue,
-          //           ),
-          //           splashRadius: 24,
-          //         ),
-          //       ),
-          //     ),
-          //     if (_invoiceCount > 0)
-          //       Positioned(
-          //         right: 6,
-          //         top: 8,
-          //         child: Semantics(
-          //           label: '$_invoiceCount hóa đơn',
-          //           child: Container(
-          //             padding: const EdgeInsets.symmetric(
-          //               horizontal: 4,
-          //               vertical: 2,
-          //             ),
-          //             decoration: BoxDecoration(
-          //               color: const Color(0xFFE53935),
-          //               borderRadius: BorderRadius.circular(8),
-          //               border: Border.all(color: Colors.white, width: 1),
-          //             ),
-          //             constraints: const BoxConstraints(
-          //               minWidth: 12,
-          //               minHeight: 12,
-          //             ),
-          //             child: Text(
-          //               _invoiceCount > 99 ? '99+' : _invoiceCount.toString(),
-          //               style: const TextStyle(
-          //                 color: Colors.white,
-          //                 fontSize: 10,
-          //                 fontWeight: FontWeight.bold,
-          //               ),
-          //               textAlign: TextAlign.center,
-          //             ),
-          //           ),
-          //         ),
-          //       ),
-          //   ],
-          // ),
-          // Notification icon with badge
-          Stack(
-            alignment: Alignment.center,
-            children: [
-              Semantics(
-                button: true,
-                label: 'Thông báo',
-                child: Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 6.0),
-                  child: IconButton(
-                    tooltip: 'Thông báo',
-                    onPressed: () async {
-                      final navigator = Navigator.of(context);
-
-                      try {
-                        final service = NotificationApiService();
-                        final success = await service.markAllAsRead();
-                        if (success) {
-                          _resetNotificationCount();
-                        }
-                      } catch (e) {
-                        debugPrint('Error marking notifications as read: $e');
-                      }
-
-                      navigator.push(
-                        MaterialPageRoute(
-                          builder: (_) => const NotificationScreen(),
-                        ),
-                      );
-                    },
-                    icon: const Icon(
-                      Icons.notifications,
-                      color: AppTheme.primaryBlue,
-                    ),
-                    splashRadius: 24,
-                  ),
-                ),
-              ),
-              if (_notificationCount > 0)
-                Positioned(
-                  right: 6,
-                  top: 8,
-                  child: Semantics(
-                    label: '$_notificationCount thông báo',
-                    child: Container(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 4,
-                        vertical: 2,
+              actions: [
+                Semantics(
+                  button: true,
+                  label: 'Tìm kiếm',
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 8.0),
+                    child: IconButton(
+                      tooltip: 'Tìm kiếm',
+                      onPressed: () {
+                        Navigator.of(context).push(
+                          MaterialPageRoute(
+                            builder: (_) => const SearchScreen(),
+                          ),
+                        );
+                      },
+                      icon: const Icon(
+                        Icons.search,
+                        color: AppTheme.background,
+                        size: 24,
                       ),
-                      decoration: BoxDecoration(
-                        color: const Color(0xFFE53935),
-                        borderRadius: BorderRadius.circular(8),
-                        border: Border.all(color: Colors.white, width: 1),
-                      ),
-                      constraints: const BoxConstraints(
-                        minWidth: 12,
-                        minHeight: 12,
-                      ),
-                      child: Text(
-                        _notificationCount > 99
-                            ? '99+'
-                            : _notificationCount.toString(),
-                        style: const TextStyle(
-                          color: Colors.white,
-                          fontSize: 10,
-                          fontWeight: FontWeight.bold,
-                        ),
-                        textAlign: TextAlign.center,
-                      ),
+                      splashRadius: 20,
                     ),
                   ),
                 ),
-            ],
-          ),
-          // Send notification icon
-          Semantics(
-            button: true,
-            label: 'Gửi thông báo',
-            child: Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 8.0),
-              child: IconButton(
-                tooltip: 'Gửi thông báo',
-                onPressed: () {
-                  Navigator.of(context).push(
-                    MaterialPageRoute(
-                      builder: (_) => const SendNotificationScreen(),
+                // Invoice icon with badge
+                // Stack(
+                //   alignment: Alignment.center,
+                //   children: [
+                //     Semantics(
+                //       button: true,
+                //       label: 'Hóa đơn',
+                //       child: Padding(
+                //         padding: const EdgeInsets.symmetric(horizontal: 6.0),
+                //         child: IconButton(
+                //           tooltip: 'Hóa đơn',
+                //           onPressed: () {
+                //             Navigator.of(context).push(
+                //               MaterialPageRoute(
+                //                 builder: (_) => const InvoicesScreen(),
+                //               ),
+                //             );
+                //           },
+                //           icon: const Icon(
+                //             Icons.receipt_long,
+                //             color: AppTheme.primaryBlue,
+                //           ),
+                //           splashRadius: 24,
+                //         ),
+                //       ),
+                //     ),
+                //     if (_invoiceCount > 0)
+                //       Positioned(
+                //         right: 6,
+                //         top: 8,
+                //         child: Semantics(
+                //           label: '$_invoiceCount hóa đơn',
+                //           child: Container(
+                //             padding: const EdgeInsets.symmetric(
+                //               horizontal: 4,
+                //               vertical: 2,
+                //             ),
+                //             decoration: BoxDecoration(
+                //               color: const Color(0xFFE53935),
+                //               borderRadius: BorderRadius.circular(8),
+                //               border: Border.all(color: Colors.white, width: 1),
+                //             ),
+                //             constraints: const BoxConstraints(
+                //               minWidth: 12,
+                //               minHeight: 12,
+                //             ),
+                //             child: Text(
+                //               _invoiceCount > 99 ? '99+' : _invoiceCount.toString(),
+                //               style: const TextStyle(
+                //                 color: Colors.white,
+                //                 fontSize: 10,
+                //                 fontWeight: FontWeight.bold,
+                //               ),
+                //               textAlign: TextAlign.center,
+                //             ),
+                //           ),
+                //         ),
+                //       ),
+                //   ],
+                // ),
+                // Notification icon with badge
+                Stack(
+                  alignment: Alignment.center,
+                  children: [
+                    Semantics(
+                      button: true,
+                      label: 'Thông báo',
+                      child: Padding(
+                        padding: const EdgeInsets.symmetric(horizontal: 6.0),
+                        child: IconButton(
+                          tooltip: 'Thông báo',
+                          onPressed: () async {
+                            final navigator = Navigator.of(context);
+
+                            try {
+                              final service = NotificationApiService();
+                              final success = await service.markAllAsRead();
+                              if (success) {
+                                _resetNotificationCount();
+                              }
+                            } catch (e) {
+                              debugPrint(
+                                'Error marking notifications as read: $e',
+                              );
+                            }
+
+                            navigator.push(
+                              MaterialPageRoute(
+                                builder: (_) => const NotificationScreen(),
+                              ),
+                            );
+                          },
+                          icon: const Icon(
+                            Icons.notifications,
+                            color: AppTheme.selectedTextColor,
+                          ),
+                          splashRadius: 24,
+                        ),
+                      ),
                     ),
-                  );
-                },
-                icon: const Icon(
-                  Icons.send,
-                  color: AppTheme.primaryBlue,
-                  size: 24,
+                    if (_notificationCount > 0)
+                      Positioned(
+                        right: 6,
+                        top: 8,
+                        child: Semantics(
+                          label: '$_notificationCount thông báo',
+                          child: Container(
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 4,
+                              vertical: 2,
+                            ),
+                            decoration: BoxDecoration(
+                              color: const Color(0xFFE53935),
+                              borderRadius: BorderRadius.circular(8),
+                              border: Border.all(color: Colors.white, width: 1),
+                            ),
+                            constraints: const BoxConstraints(
+                              minWidth: 12,
+                              minHeight: 12,
+                            ),
+                            child: Text(
+                              _notificationCount > 99
+                                  ? '99+'
+                                  : _notificationCount.toString(),
+                              style: const TextStyle(
+                                color: Colors.white,
+                                fontSize: 10,
+                                fontWeight: FontWeight.bold,
+                              ),
+                              textAlign: TextAlign.center,
+                            ),
+                          ),
+                        ),
+                      ),
+                  ],
                 ),
-                splashRadius: 20,
-              ),
+                // Send notification icon
+                Semantics(
+                  button: true,
+                  label: 'Gửi thông báo',
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 8.0),
+                    child: IconButton(
+                      tooltip: 'Gửi thông báo',
+                      onPressed: () {
+                        Navigator.of(context).push(
+                          MaterialPageRoute(
+                            builder: (_) => const SendNotificationScreen(),
+                          ),
+                        );
+                      },
+                      icon: const Icon(
+                        Icons.send,
+                        color: AppTheme.background,
+                        size: 24,
+                      ),
+                      splashRadius: 20,
+                    ),
+                  ),
+                ),
+              ],
             ),
-          ),
-        ],
-      ),
       body: _buildContentByIndex(),
       floatingActionButton: Semantics(
         button: true,
@@ -504,7 +527,7 @@ class _HomeScreenState extends State<HomeScreen>
             }
           },
           shape: const CircleBorder(),
-          backgroundColor: AppTheme.primaryBlue,
+          backgroundColor: AppTheme.caregiverPrimary,
           elevation: 6,
           child: const Icon(Icons.home, color: Colors.white, size: 32),
         ),
@@ -518,30 +541,6 @@ class _HomeScreenState extends State<HomeScreen>
         horizontalMargin: 10,
       ),
     );
-  }
-
-  String _appBarTitle() {
-    switch (_selectedIndex) {
-      case 0:
-        return 'Camera';
-      case 1:
-        return 'Thiết lập ';
-      case 2:
-        return 'Bệnh nhân';
-      case 3:
-        return 'Hồ sơ cá nhân';
-      case 4:
-      default:
-        switch (_selectedTab) {
-          case 'activity':
-            return 'Hoạt động';
-          case 'report':
-            return 'Báo cáo';
-          case 'warning':
-          default:
-            return 'Cảnh báo';
-        }
-    }
   }
 
   Widget _buildContentByIndex() {
@@ -560,15 +559,25 @@ class _HomeScreenState extends State<HomeScreen>
         } catch (_) {}
         return const AssignmentsScreen();
       case 2:
-        return const PatientProfileScreen();
+        return const PatientProfileScreen(embedInParent: true);
       case 3:
-        return const ProfileScreen();
+        return const ProfileScreen(embedInParent: true);
       case 4:
         return Column(
           children: [
             TabSelector(
               selectedTab: _selectedTab,
-              onTabChanged: (t) => setState(() => _selectedTab = t),
+              onTabChanged: (t) => setState(() {
+                _selectedTab = t;
+                // Ensure the status filter default depends on the tab:
+                // - HighConfidence ('warning') uses the global default ('abnormal')
+                // - LowConfidence ('activity') uses 'all' (shows unknown + suspect)
+                if (t == 'activity') {
+                  _selectedStatus = 'all';
+                } else if (t == 'warning') {
+                  _selectedStatus = HomeFilters.defaultStatus;
+                }
+              }),
             ),
             Expanded(
               child: Padding(
@@ -604,7 +613,7 @@ class _HomeScreenState extends State<HomeScreen>
             ),
           );
         }
-        return WarningLogScreen(
+        return HighConfidenceEventsScreen(
           logs: _logs,
           selectedStatus: _selectedStatus,
           selectedDayRange: _selectedDayRange,
@@ -647,20 +656,53 @@ class _HomeScreenState extends State<HomeScreen>
           },
         );
       case 'activity':
-        return const ActivityLogsScreen();
+        return LowConfidenceEventsScreen(
+          logs: _logs,
+          selectedDayRange: _selectedDayRange,
+          selectedStatus: _selectedStatus,
+          selectedPeriod: _selectedPeriod,
+          onStatusChanged: (v) {
+            setState(() => _selectedStatus = v ?? HomeFilters.defaultStatus);
+            _refreshLogs();
+          },
+          onDayRangeChanged: (v) {
+            setState(
+              () => _selectedDayRange = v ?? HomeFilters.defaultDayRange,
+            );
+            _refreshLogs();
+          },
+          onPeriodChanged: (v) {
+            setState(() => _selectedPeriod = v ?? HomeFilters.defaultPeriod);
+            _refreshLogs();
+          },
+          onEventUpdated: (eventId, {bool? confirmed}) {
+            try {
+              if (confirmed == true) {
+                final idx = _logs.indexWhere((e) => e.eventId == eventId);
+                if (idx != -1) {
+                  final old = _logs[idx];
+                  if (old is EventLog) {
+                    final updated = old.copyWith(confirmStatus: true);
+                    setState(() => _logs[idx] = updated);
+                  } else {
+                    _refreshLogs();
+                  }
+                } else {
+                  _refreshLogs();
+                }
+              } else {
+                _refreshLogs();
+              }
+            } catch (_) {
+              _refreshLogs();
+            }
+          },
+          onRefresh: _refreshLogs,
+        );
       case 'report':
         return const HealthOverviewScreen();
       default:
         return const SizedBox.shrink();
     }
-  }
-
-  void _showSetupDebugMenu() {
-    bool isDebug = false;
-    assert(isDebug = true);
-
-    if (!isDebug) return;
-
-    SetupTriggerHelper.showDebugMenu(context);
   }
 }

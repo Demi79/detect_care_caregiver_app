@@ -150,11 +150,13 @@ class ThumbView extends StatelessWidget {
                 errorBuilder: (_, __, ___) => _buildFallback(),
               ),
             ),
+            // Only show status dot, remove connection indicator to avoid overlap
             _buildStatusDot(),
           ],
         );
       }
 
+      // Assume file path
       String path = src;
       final q = path.indexOf('?');
       final hash = path.indexOf('#');
@@ -201,6 +203,7 @@ class ThumbView extends StatelessWidget {
                   errorBuilder: (_, __, ___) => _buildFallback(),
                 ),
               ),
+              // Only show status dot, remove connection indicator to avoid overlap
               _buildStatusDot(),
             ],
           );

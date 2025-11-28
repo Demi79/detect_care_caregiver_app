@@ -5,6 +5,8 @@ import 'package:detect_care_caregiver_app/features/auth/data/auth_storage.dart';
 import 'package:detect_care_caregiver_app/features/camera/data/camera_api.dart';
 import 'package:detect_care_caregiver_app/features/camera/models/camera_entry.dart';
 import 'package:detect_care_caregiver_app/features/camera/services/camera_quota_service.dart';
+import 'package:detect_care_caregiver_app/features/subscription/data/service_package_api.dart';
+import 'package:detect_care_caregiver_app/features/assignments/data/assignments_remote_data_source.dart';
 import 'package:flutter/foundation.dart';
 
 class CameraService {
@@ -15,12 +17,26 @@ class CameraService {
     : _cameraApi = CameraApi(
         ApiClient(tokenProvider: AuthStorage.getAccessToken),
       ),
-      _quotaService = CameraQuotaService();
+      _quotaService = CameraQuotaService(ServicePackageApi());
 
   Future<List<CameraEntry>> loadCameras() async {
     try {
-      final userId = await AuthStorage.getUserId();
-      final result = await _cameraApi.getCamerasByUser(userId: userId ?? '');
+      // Resolve the customer id linked to this caregiver (if any).
+      String? customerId;
+      try {
+        final assignmentsDs = AssignmentsRemoteDataSource();
+        final assignments = await assignmentsDs.listPending(status: 'accepted');
+        final active = assignments
+            .where((a) => a.isActive && (a.status.toLowerCase() == 'accepted'))
+            .toList();
+        if (active.isNotEmpty) customerId = active.first.customerId;
+      } catch (_) {}
+
+      customerId ??= await AuthStorage.getUserId();
+
+      final result = await _cameraApi.getCamerasByUser(
+        customerId: customerId ?? '',
+      );
       final List<dynamic> data = result['data'] ?? [];
       return data.map((e) => CameraEntry.fromJson(e)).toList();
     } catch (e) {
@@ -30,6 +46,7 @@ class CameraService {
 
   Future<CameraEntry> createCamera(Map<String, dynamic> cameraData) async {
     try {
+      // Validate camera quota before creating
       final userId = await AuthStorage.getUserId();
       if (userId != null) {
         final cameras = await loadCameras();
@@ -54,6 +71,7 @@ class CameraService {
     Map<String, dynamic> cameraData,
   ) async {
     try {
+      // Only send allowed updatable fields to backend to avoid validation errors
       final allowedUpdates = <String>{
         'camera_name',
         'camera_type',
@@ -76,6 +94,7 @@ class CameraService {
         }
       }
 
+      // Ensure updated_at is set
       filtered.putIfAbsent(
         'updated_at',
         () => DateTime.now().toIso8601String(),
@@ -90,6 +109,7 @@ class CameraService {
       return CameraEntry.fromJson(payload);
     } catch (e) {
       debugPrint('[CameraService] Error updating camera $cameraId: $e');
+      // Surface detailed message for debug, but keep user-facing message concise
       if (kDebugMode) {
         throw Exception('Không thể cập nhật camera: $e');
       }
@@ -106,7 +126,10 @@ class CameraService {
   }
 
   Future<void> refreshThumbnails(List<String> cameraIds) async {
+    // Method placeholder - implement when CameraApi supports this
     debugPrint('Thumbnail refresh requested for ${cameraIds.length} cameras');
+    // TODO: Implement actual thumbnail refresh when API supports it
+    // For now, just add a small delay to simulate network call
     await Future.delayed(const Duration(milliseconds: 50));
   }
 
@@ -144,11 +167,14 @@ class CameraService {
     return filtered;
   }
 
+  /// Replace a camera record entirely (PUT /cameras/:camera_id)
+  /// Use when the backend expects a full entity replacement rather than a partial update.
   Future<CameraEntry> replaceCamera(
     String cameraId,
     Map<String, dynamic> cameraData,
   ) async {
     try {
+      // Prepare payload and ensure updated_at exists
       final data = Map<String, dynamic>.from(cameraData);
       data.putIfAbsent('updated_at', () => DateTime.now().toIso8601String());
 

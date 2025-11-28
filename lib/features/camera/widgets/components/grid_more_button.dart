@@ -5,6 +5,7 @@ class Grid2MoreButton extends StatelessWidget {
   final VoidCallback? onEdit;
   final VoidCallback onDelete;
   final VoidCallback? onRefresh;
+  final VoidCallback? onTimeline;
 
   const Grid2MoreButton({
     super.key,
@@ -12,6 +13,7 @@ class Grid2MoreButton extends StatelessWidget {
     required this.onEdit,
     required this.onDelete,
     this.onRefresh,
+    this.onTimeline,
   });
 
   @override
@@ -62,12 +64,24 @@ class Grid2MoreButton extends StatelessWidget {
               ],
             ),
           ),
+        if (onTimeline != null)
+          const PopupMenuItem(
+            value: 5,
+            child: Row(
+              children: [
+                Icon(Icons.view_timeline, color: Colors.deepOrange, size: 18),
+                SizedBox(width: 8),
+                Text('Bản ghi'),
+              ],
+            ),
+          ),
       ],
       onSelected: (v) {
         if (v == 1) onPlay();
         if (v == 2 && onEdit != null) onEdit!();
         if (v == 3) onDelete();
         if (v == 4 && onRefresh != null) onRefresh!();
+        if (v == 5 && onTimeline != null) onTimeline!();
       },
     );
   }

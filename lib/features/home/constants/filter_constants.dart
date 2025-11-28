@@ -7,6 +7,7 @@ DateTimeRange todayRange() {
 }
 
 class HomeFilters {
+  // include 'abnormal' which represents danger + warning
   static const statusOptions = [
     'all',
     'abnormal',

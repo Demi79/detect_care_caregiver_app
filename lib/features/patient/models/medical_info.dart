@@ -1,6 +1,31 @@
 import 'package:flutter/foundation.dart';
 import 'package:intl/intl.dart';
 
+List<String>? _toStringList(dynamic src) {
+  if (src == null) return null;
+  if (src is List) return src.map((e) => e.toString()).toList();
+  if (src is String) {
+    final trimmed = src.trim();
+    if (trimmed.isEmpty) return null;
+    return trimmed
+        .split(',')
+        .map((e) => e.trim())
+        .where((s) => s.isNotEmpty)
+        .toList();
+  }
+  try {
+    final s = src.toString();
+    if (s.isEmpty) return null;
+    return s
+        .split(',')
+        .map((e) => e.trim())
+        .where((s) => s.isNotEmpty)
+        .toList();
+  } catch (_) {
+    return null;
+  }
+}
+
 class PatientInfo {
   final String name;
   final String dob;
@@ -17,10 +42,8 @@ class PatientInfo {
   factory PatientInfo.fromJson(Map<String, dynamic> json) => PatientInfo(
     name: json['name']?.toString() ?? '',
     dob: json['dob']?.toString() ?? '',
-    allergies: (json['allergies'] as List?)?.map((e) => e.toString()).toList(),
-    chronicDiseases: (json['chronicDiseases'] as List?)
-        ?.map((e) => e.toString())
-        .toList(),
+    allergies: _parseStringList(json['allergies']),
+    chronicDiseases: _parseStringList(json['chronicDiseases']),
   );
 
   Map<String, dynamic> toJson() => {
@@ -36,6 +59,32 @@ class PatientInfo {
       return DateFormat('dd/MM/yyyy', 'vi_VN').format(date);
     } catch (_) {
       return dob;
+    }
+  }
+
+  static List<String>? _parseStringList(dynamic src) {
+    if (src == null) return null;
+    if (src is List) {
+      return src.map((e) => e.toString()).toList();
+    }
+    if (src is String) {
+      final trimmed = src.trim();
+      if (trimmed.isEmpty) return null;
+      return trimmed
+          .split(',')
+          .map((e) => e.trim())
+          .where((s) => s.isNotEmpty)
+          .toList();
+    }
+    try {
+      return src
+          .toString()
+          .split(',')
+          .map((e) => e.trim())
+          .where((s) => s.isNotEmpty)
+          .toList();
+    } catch (_) {
+      return null;
     }
   }
 }
@@ -54,15 +103,11 @@ class PatientRecord {
 
   factory PatientRecord.fromJson(Map<String, dynamic> json) => PatientRecord(
     conditions:
-        ((json['name'] as List?) ?? (json['conditions'] as List?) ?? const [])
-            .map((e) => e.toString())
-            .toList(),
-    medications: (json['medications'] as List? ?? const [])
-        .map((e) => e.toString())
-        .toList(),
-    history: (json['history'] as List? ?? const [])
-        .map((e) => e.toString())
-        .toList(),
+        _toStringList(json['name']) ??
+        _toStringList(json['conditions']) ??
+        const [],
+    medications: _toStringList(json['medications']) ?? const [],
+    history: _toStringList(json['history']) ?? const [],
   );
 
   Map<String, dynamic> toJson() => {
@@ -72,7 +117,6 @@ class PatientRecord {
   };
 }
 
-/// Contact khẩn cấp
 class EmergencyContact {
   final String? id;
   final String name;
@@ -113,8 +157,8 @@ class Habit {
   final String habitType;
   final String habitName;
   final String? description;
-  final String? sleepStart; // HH:mm:ss
-  final String? sleepEnd; // HH:mm:ss
+  final String? sleepStart;
+  final String? sleepEnd;
   final String? typicalTime;
   final int? durationMinutes;
   final String frequency;
@@ -151,9 +195,7 @@ class Habit {
         ? int.tryParse(json['duration_minutes'].toString())
         : null,
     frequency: json['frequency']?.toString() ?? '',
-    daysOfWeek: (json['days_of_week'] as List?)
-        ?.map((e) => e.toString())
-        .toList(),
+    daysOfWeek: _toStringList(json['days_of_week']),
     location: json['location']?.toString(),
     notesMap: json['notes'] is Map
         ? (json['notes'] as Map).cast<String, dynamic>()
@@ -183,7 +225,6 @@ class Habit {
   };
 }
 
-/// Gộp toàn bộ dữ liệu phản hồi từ API
 class MedicalInfoResponse {
   final PatientInfo? patient;
   final PatientRecord? record;
@@ -200,22 +241,22 @@ class MedicalInfoResponse {
   factory MedicalInfoResponse.fromJson(Map<String, dynamic> json) {
     debugPrint('[MedicalInfoResponse.fromJson] keys: ${json.keys.join(', ')}');
 
-    // Chuẩn hóa contacts
     final List<EmergencyContact> contacts = [];
     final rawContacts = json['contacts'];
     if (rawContacts is List) {
       for (final e in rawContacts) {
-        if (e is Map)
+        if (e is Map) {
           contacts.add(EmergencyContact.fromJson(e.cast<String, dynamic>()));
+        }
       }
     } else if (rawContacts is Map && rawContacts['items'] is List) {
       for (final e in rawContacts['items'] as List) {
-        if (e is Map)
+        if (e is Map) {
           contacts.add(EmergencyContact.fromJson(e.cast<String, dynamic>()));
+        }
       }
     }
 
-    // Chuẩn hóa habits
     final List<Habit> habits = [];
     final rawHabits = json['habits'];
     if (rawHabits is List) {

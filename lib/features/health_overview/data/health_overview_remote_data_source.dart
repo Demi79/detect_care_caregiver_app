@@ -10,12 +10,12 @@ class HealthOverviewRemoteDataSource {
   HealthOverviewRemoteDataSource({required this.api, required this.endpoints});
 
   Future<HealthOverviewData> fetchOverview({
-    String? patientId,
+    String? customerId,
     String? startDate,
     String? endDate,
   }) async {
     final uri = endpoints.getHealthOverview(
-      patientId: patientId,
+      customerId: customerId,
       startDate: startDate,
       endDate: endDate,
     );
