@@ -1,5 +1,13 @@
 import 'dart:convert' as convert;
+import 'package:detect_care_caregiver_app/core/services/direct_caller.dart';
+import 'package:detect_care_caregiver_app/features/auth/data/auth_storage.dart';
+import 'package:detect_care_caregiver_app/features/camera/services/camera_service.dart';
+import 'package:detect_care_caregiver_app/features/camera/screens/live_camera_screen.dart';
+import 'package:detect_care_caregiver_app/features/emergency_contacts/data/emergency_contacts_remote_data_source.dart';
+import 'package:detect_care_caregiver_app/features/events/screens/propose_screen.dart';
 import 'package:detect_care_caregiver_app/features/home/repository/event_repository.dart';
+import 'package:permission_handler/permission_handler.dart';
+import 'package:url_launcher/url_launcher.dart';
 import '../../../main.dart';
 import 'package:detect_care_caregiver_app/core/events/app_events.dart';
 import 'package:detect_care_caregiver_app/core/ui/overlay_toast.dart';
@@ -61,7 +69,6 @@ class ActionLogCard extends StatelessWidget {
             color: const Color.fromRGBO(0, 0, 0, 0.04),
             blurRadius: 12,
             offset: const Offset(0, 3),
-            spreadRadius: 0,
           ),
         ],
       ),
@@ -87,10 +94,148 @@ class ActionLogCard extends StatelessWidget {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                  crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    _statusChip(status, statusColor),
-                    _confirmChip(data.confirmStatus),
+                    Expanded(
+                      child: Wrap(
+                        spacing: 8,
+                        runSpacing: 6,
+                        crossAxisAlignment: WrapCrossAlignment.center,
+                        children: [
+                          _statusChip(status, statusColor),
+
+                          // Lifecycle badge may be long; allow it to wrap to next run.
+                          if ((data.lifecycleState ?? '').toString().isNotEmpty)
+                            Container(
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 10,
+                                vertical: 6,
+                              ),
+                              decoration: BoxDecoration(
+                                color: Colors.grey.shade200,
+                                borderRadius: BorderRadius.circular(18),
+                              ),
+                              child: Text(
+                                _be.BackendEnums.lifecycleStateToVietnamese(
+                                  data.lifecycleState,
+                                ),
+                                style: const TextStyle(fontSize: 13),
+                              ),
+                            ),
+                        ],
+                      ),
+                    ),
+
+                    /// Nút gọi khẩn cấp
+                    IconButton(
+                      padding: EdgeInsets.zero,
+                      constraints: const BoxConstraints(),
+                      icon: const Icon(Icons.call, color: Colors.red),
+                      onPressed: () async {
+                        final messenger = ScaffoldMessenger.of(context);
+
+                        try {
+                          String? phoneToCall;
+
+                          try {
+                            final userId = await AuthStorage.getUserId();
+                            if (userId != null && userId.isNotEmpty) {
+                              final contacts =
+                                  await EmergencyContactsRemoteDataSource()
+                                      .list(userId);
+
+                              final p1 = contacts
+                                  .where(
+                                    (c) =>
+                                        (c.alertLevel == 1) &&
+                                        c.phone.trim().isNotEmpty,
+                                  )
+                                  .toList();
+
+                              if (p1.isNotEmpty) {
+                                phoneToCall = p1.first.phone.trim();
+                              } else {
+                                final any = contacts.firstWhere(
+                                  (c) => c.phone.trim().isNotEmpty,
+                                  orElse: () => EmergencyContactDto(
+                                    id: '',
+                                    name: '',
+                                    relation: '',
+                                    phone: '',
+                                    alertLevel: 1,
+                                  ),
+                                );
+                                if (any.phone.trim().isNotEmpty)
+                                  phoneToCall = any.phone.trim();
+                              }
+                            }
+                          } catch (e) {
+                            print('[ActionLogCard] load contacts error: $e');
+                          }
+
+                          phoneToCall =
+                              (phoneToCall == null || phoneToCall.isEmpty)
+                              ? '112'
+                              : phoneToCall;
+
+                          String normalized = phoneToCall.replaceAll(
+                            RegExp(r'[\s\-\(\)]'),
+                            '',
+                          );
+                          if (normalized.startsWith('+84')) {
+                            normalized = '0${normalized.substring(3)}';
+                          } else if (normalized.startsWith('84')) {
+                            normalized = '0${normalized.substring(2)}';
+                          }
+
+                          try {
+                            final status = await Permission.phone.request();
+                            if (status.isGranted) {
+                              final success = await DirectCaller.call(
+                                normalized,
+                              );
+                              if (!success) {
+                                await launchUrl(Uri.parse('tel:$normalized'));
+                              }
+                            } else if (status.isPermanentlyDenied) {
+                              messenger.showSnackBar(
+                                SnackBar(
+                                  content: const Text(
+                                    'Quyền gọi điện bị từ chối vĩnh viễn. Vui lòng bật quyền trong cài đặt.',
+                                  ),
+                                  action: SnackBarAction(
+                                    label: 'Cài đặt',
+                                    onPressed: () => openAppSettings(),
+                                  ),
+                                ),
+                              );
+                              await launchUrl(Uri.parse('tel:$normalized'));
+                            } else {
+                              await launchUrl(Uri.parse('tel:$normalized'));
+                            }
+                          } catch (e) {
+                            try {
+                              await launchUrl(Uri.parse('tel:$normalized'));
+                            } catch (_) {
+                              messenger.showSnackBar(
+                                SnackBar(
+                                  content: Text('Lỗi khi gọi: $e'),
+                                  backgroundColor: Colors.red.shade600,
+                                  behavior: SnackBarBehavior.floating,
+                                ),
+                              );
+                            }
+                          }
+                        } catch (e) {
+                          messenger.showSnackBar(
+                            SnackBar(
+                              content: Text('Lỗi khi gọi: $e'),
+                              backgroundColor: Colors.red.shade600,
+                            ),
+                          );
+                        }
+                      },
+                    ),
                   ],
                 ),
 
@@ -131,7 +276,6 @@ class ActionLogCard extends StatelessWidget {
                             ),
                             typeColor,
                           ),
-
                           const SizedBox(height: 4),
                           Row(
                             children: [
@@ -164,36 +308,6 @@ class ActionLogCard extends StatelessWidget {
             padding: const EdgeInsets.all(16),
             child: Column(
               children: [
-                _factCard(
-                  icon: Icons.analytics_outlined,
-                  label: 'Độ tin cậy',
-                  value: _percent(data.confidenceScore),
-                  color: _getConfidenceColor(data.confidenceScore),
-                  fullWidth: true,
-                ),
-                const SizedBox(height: 12),
-
-                _factCard(
-                  icon: Icons.fingerprint_outlined,
-                  label: 'ID sự kiện',
-                  value: _shortId(data.eventId),
-                  color: Colors.blue.shade600,
-                  fullWidth: true,
-                ),
-
-                if (data.createdAt != null) ...[
-                  const SizedBox(height: 12),
-                  _factCard(
-                    icon: Icons.schedule_outlined,
-                    label: 'Ngày tạo',
-                    value: _formatDateTime(data.createdAt),
-                    color: Colors.grey.shade600,
-                    fullWidth: true,
-                  ),
-                ],
-
-                const SizedBox(height: 16),
-
                 SizedBox(
                   width: double.infinity,
                   child: ElevatedButton.icon(
@@ -547,81 +661,90 @@ class ActionLogCard extends StatelessWidget {
                         end: Alignment.bottomRight,
                       ),
                     ),
-                    child: Stack(
-                      clipBehavior: Clip.none,
+                    child: Row(
                       children: [
-                        Row(
-                          children: [
-                            Container(
-                              padding: const EdgeInsets.all(8),
-                              decoration: BoxDecoration(
-                                color: typeColor.withValues(
-                                  alpha: 0.1,
-                                  red: typeColor.r * 255.0,
-                                  green: typeColor.g * 255.0,
-                                  blue: typeColor.b * 255.0,
-                                ),
-                                borderRadius: BorderRadius.circular(12),
-                              ),
-                              child: Icon(
-                                _getEventIcon(data.eventType),
-                                color: typeColor,
-                                size: 20,
-                              ),
+                        Container(
+                          padding: const EdgeInsets.all(12),
+                          decoration: BoxDecoration(
+                            color: typeColor.withValues(
+                              alpha: 0.1,
+                              red: typeColor.r * 255.0,
+                              green: typeColor.g * 255.0,
+                              blue: typeColor.b * 255.0,
                             ),
-                            const SizedBox(width: 12),
-                            Expanded(
-                              child: Column(
+                            borderRadius: BorderRadius.circular(16),
+                          ),
+                          child: Icon(
+                            _getEventIcon(data.eventType),
+                            color: typeColor,
+                            size: 28,
+                          ),
+                        ),
+                        const SizedBox(width: 16),
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                overflow: TextOverflow.ellipsis,
+                                data.eventDescription?.trim().isNotEmpty == true
+                                    ? data.eventDescription!.trim()
+                                    : _titleFromType(data.eventType),
+                                style: const TextStyle(
+                                  fontSize: 20,
+                                  fontWeight: FontWeight.w700,
+                                  color: Color(0xFF1A1A1A),
+                                  height: 1.2,
+                                ),
+                              ),
+                              const SizedBox(height: 4),
+                              // Show event type on its own line, then status + lifecycle
+                              Column(
                                 crossAxisAlignment: CrossAxisAlignment.start,
                                 children: [
-                                  Text(
-                                    overflow: TextOverflow.ellipsis,
-                                    data.eventDescription?.trim().isNotEmpty ==
-                                            true
-                                        ? data.eventDescription!.trim()
-                                        : _titleFromType(data.eventType),
-                                    style: const TextStyle(
-                                      fontSize: 16,
-                                      fontWeight: FontWeight.w700,
-                                      color: Color(0xFF1A1A1A),
-                                      height: 1.2,
+                                  _eventTypeChip(
+                                    _be.BackendEnums.eventTypeToVietnamese(
+                                      data.eventType,
                                     ),
+                                    typeColor,
                                   ),
-                                  const SizedBox(height: 4),
-                                  Row(
+                                  const SizedBox(height: 8),
+                                  Wrap(
+                                    spacing: 8,
+                                    runSpacing: 6,
+                                    crossAxisAlignment:
+                                        WrapCrossAlignment.center,
                                     children: [
                                       _statusChip(data.status, statusColor),
-                                      const SizedBox(width: 6),
-                                      _eventTypeChip(
-                                        _be.BackendEnums.eventTypeToVietnamese(
-                                          data.eventType,
+                                      if ((data.lifecycleState ?? '')
+                                          .toString()
+                                          .isNotEmpty)
+                                        Tooltip(
+                                          message:
+                                              _be.BackendEnums.lifecycleStateToVietnamese(
+                                                data.lifecycleState,
+                                              ),
+                                          child: _lifecycleChip(
+                                            data.lifecycleState,
+                                          ),
                                         ),
-                                        typeColor,
-                                      ),
                                     ],
                                   ),
                                 ],
                               ),
-                            ),
-                          ],
+                            ],
+                          ),
                         ),
 
-                        Positioned(
-                          top: 4,
-                          right: 4,
-                          child: IconButton(
-                            onPressed: () => Navigator.of(context).pop(),
-                            icon: const Icon(Icons.close, size: 16),
-                            padding: const EdgeInsets.all(4),
-                            style: IconButton.styleFrom(
-                              backgroundColor: Colors.white.withValues(
-                                alpha: 0.18,
-                                red: Colors.white.r * 255.0,
-                                green: Colors.white.g * 255.0,
-                                blue: Colors.white.b * 255.0,
-                              ),
-                              minimumSize: const Size(36, 36),
-                              tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                        IconButton(
+                          onPressed: () => Navigator.of(context).pop(),
+                          icon: const Icon(Icons.close),
+                          style: IconButton.styleFrom(
+                            backgroundColor: Colors.white.withValues(
+                              alpha: 0.3,
+                              red: Colors.white.r * 255.0,
+                              green: Colors.white.g * 255.0,
+                              blue: Colors.white.b * 255.0,
                             ),
                           ),
                         ),
@@ -639,9 +762,19 @@ class ActionLogCard extends StatelessWidget {
                       children: [
                         Expanded(
                           child: ElevatedButton.icon(
-                            onPressed: () => _showProposeModal(context),
+                            onPressed: () {
+                              try {
+                                Navigator.of(context).pop();
+                              } catch (_) {}
+                              Navigator.push(
+                                context,
+                                MaterialPageRoute(
+                                  builder: (_) => ProposeScreen(logEntry: data),
+                                ),
+                              );
+                            },
                             icon: const Icon(Icons.edit_outlined, size: 18),
-                            label: const Text('Đề xuất'),
+                            label: const Text('Đề xuất sửa đổi'),
                             style: ElevatedButton.styleFrom(
                               backgroundColor: Colors.blue.shade600,
                               foregroundColor: Colors.white,
@@ -670,6 +803,7 @@ class ActionLogCard extends StatelessWidget {
                                 boundingBoxes: data.boundingBoxes,
                                 confirmStatus: data.confirmStatus,
                                 createdAt: data.createdAt,
+                                cameraId: data.cameraId,
                               );
                               _showImagesModal(context, eventLog);
                             },
@@ -702,25 +836,37 @@ class ActionLogCard extends StatelessWidget {
                           _sectionTitle('Chi tiết sự kiện'),
                           const SizedBox(height: 12),
                           _detailCard([
-                            _kvRow(
-                              'Trạng thái xử lý',
-                              _be.BackendEnums.confirmStatusToVietnamese(
-                                data.confirmStatus,
+                            //   _kvRow(
+                            //     'Trạng thái xử lý',
+                            //     _be.BackendEnums.confirmStatusToVietnamese(
+                            //       data.confirmStatus,
+                            //     ),
+                            //     data.confirmStatus
+                            //         ? Colors.green.shade600
+                            //         : Colors.grey.shade600,
+                            //     data.confirmStatus
+                            //         ? Icons.check_circle
+                            //         : Icons.radio_button_unchecked,
+                            //   ),
+                            // Lifecycle state on its own row, above the status row
+                            if ((data.lifecycleState ?? '')
+                                .toString()
+                                .isNotEmpty)
+                              _kvRow(
+                                'Hiện tại sự kiện',
+                                _be.BackendEnums.lifecycleStateToVietnamese(
+                                  _normalizeLifecycle(data.lifecycleState),
+                                ),
+                                Colors.grey.shade600,
+                                Icons.event_available,
                               ),
-                              data.confirmStatus
-                                  ? Colors.green.shade600
-                                  : Colors.grey.shade600,
-                              data.confirmStatus
-                                  ? Icons.check_circle
-                                  : Icons.radio_button_unchecked,
-                            ),
-
                             _kvRow(
                               'Trạng thái',
                               _be.BackendEnums.statusToVietnamese(data.status),
                               statusColor,
                               Icons.flag_outlined,
                             ),
+
                             _kvRow(
                               'Sự kiện',
                               _be.BackendEnums.eventTypeToVietnamese(
@@ -737,12 +883,12 @@ class ActionLogCard extends StatelessWidget {
                               typeColor,
                               Icons.category_outlined,
                             ),
-                            _kvRow(
-                              'Độ tin cậy',
-                              _percent(data.confidenceScore),
-                              _getConfidenceColor(data.confidenceScore),
-                              Icons.analytics_outlined,
-                            ),
+                            // _kvRow(
+                            //   'Độ tin cậy',
+                            //   _percent(data.confidenceScore),
+                            //   _getConfidenceColor(data.confidenceScore),
+                            //   Icons.analytics_outlined,
+                            // ),
                             _kvRow(
                               'Mã sự kiện',
                               _shortId(data.eventId),
@@ -755,6 +901,12 @@ class ActionLogCard extends StatelessWidget {
                             //   Colors.grey.shade600,
                             //   Icons.access_time_outlined,
                             // ),
+                            _kvRow(
+                              'Thời gian tạo',
+                              _formatDateTime(data.createdAt),
+                              Colors.grey.shade600,
+                              Icons.access_time_outlined,
+                            ),
                             // if (data.createdAt != null)
                             //   _kvRow(
                             //     'Thời gian tạo',
@@ -762,12 +914,6 @@ class ActionLogCard extends StatelessWidget {
                             //     Colors.grey.shade600,
                             //     Icons.schedule_outlined,
                             //   ),
-                            _kvRow(
-                              'Thời gian phát hiện',
-                              _formatDateTime(data.createdAt),
-                              Colors.grey.shade600,
-                              Icons.schedule_outlined,
-                            ),
                           ]),
 
                           Builder(
@@ -785,6 +931,7 @@ class ActionLogCard extends StatelessWidget {
                                 boundingBoxes: data.boundingBoxes,
                                 confirmStatus: data.confirmStatus,
                                 createdAt: data.createdAt,
+                                cameraId: data.cameraId,
                               );
 
                               return FutureBuilder<List<String>>(
@@ -937,118 +1084,117 @@ class ActionLogCard extends StatelessWidget {
                             },
                           ),
 
-                          if (data.contextData.isNotEmpty) ...[
-                            const SizedBox(height: 24),
-                            _sectionTitle('Dữ liệu ngữ cảnh'),
-                            const SizedBox(height: 12),
-                            _jsonPreview(data.contextData),
-                          ],
+                          // if (data.contextData.isNotEmpty) ...[
+                          //   const SizedBox(height: 24),
+                          //   _sectionTitle('Dữ liệu ngữ cảnh'),
+                          //   const SizedBox(height: 12),
+                          //   _jsonPreview(data.contextData),
+                          // ],
+                          // if (data.aiAnalysisResult.isNotEmpty) ...[
+                          //   const SizedBox(height: 24),
+                          //   _sectionTitle('Kết quả phân tích AI'),
+                          //   const SizedBox(height: 12),
+                          //   _jsonPreview(data.aiAnalysisResult),
+                          // ],
 
-                          if (data.aiAnalysisResult.isNotEmpty) ...[
-                            const SizedBox(height: 24),
-                            _sectionTitle('Kết quả phân tích AI'),
-                            const SizedBox(height: 12),
-                            _jsonPreview(data.aiAnalysisResult),
-                          ],
+                          // if (data.detectionData.isNotEmpty) ...[
+                          //   const SizedBox(height: 24),
+                          //   _sectionTitle('Dữ liệu phát hiện'),
+                          //   const SizedBox(height: 12),
+                          //   _jsonPreview(data.detectionData),
+                          // ],
 
-                          if (data.detectionData.isNotEmpty) ...[
-                            const SizedBox(height: 24),
-                            _sectionTitle('Dữ liệu phát hiện'),
-                            const SizedBox(height: 12),
-                            _jsonPreview(data.detectionData),
-                          ],
-
-                          const SizedBox(height: 20),
+                          // const SizedBox(height: 20),
                         ],
                       ),
                     ),
                   ),
 
-                  // Confirm toggle
-                  Padding(
-                    padding: const EdgeInsets.fromLTRB(20, 6, 20, 8),
-                    child: StatefulBuilder(
-                      builder: (ctx, setState) {
-                        bool confirmed = (data.confirmStatus as bool?) ?? false;
-                        final initiallyConfirmed = data.confirmStatus == true;
+                  // // Confirm toggle
+                  // Padding(
+                  //   padding: const EdgeInsets.fromLTRB(20, 6, 20, 8),
+                  //   child: StatefulBuilder(
+                  //     builder: (ctx, setState) {
+                  //       bool confirmed = (data.confirmStatus as bool?) ?? false;
+                  //       final initiallyConfirmed = data.confirmStatus == true;
 
-                        Future<void> _toggleConfirm(bool value) async {
-                          if (initiallyConfirmed) return;
+                  //       Future<void> toggleConfirm(bool value) async {
+                  //         if (initiallyConfirmed) return;
 
-                          if (!value) {
-                            return;
-                          }
+                  //         if (!value) {
+                  //           return;
+                  //         }
 
-                          setState(() => confirmed = true);
-                          final messenger = ScaffoldMessenger.of(ctx);
-                          try {
-                            final ds = EventsRemoteDataSource();
-                            await ds.confirmEvent(
-                              eventId: data.eventId,
-                              confirmStatusBool: true,
-                            );
+                  //         setState(() => confirmed = true);
+                  //         final messenger = ScaffoldMessenger.of(ctx);
+                  //         try {
+                  //           final ds = EventsRemoteDataSource();
+                  //           await ds.confirmEvent(
+                  //             eventId: data.eventId,
+                  //             confirmStatusBool: true,
+                  //           );
 
-                            messenger.showSnackBar(
-                              SnackBar(
-                                content: const Text(
-                                  'Đã đánh dấu sự kiện là đã xử lý',
-                                ),
-                                backgroundColor: Colors.green.shade600,
-                                behavior: SnackBarBehavior.floating,
-                                duration: const Duration(seconds: 2),
-                              ),
-                            );
+                  //           messenger.showSnackBar(
+                  //             SnackBar(
+                  //               content: const Text(
+                  //                 'Đã đánh dấu sự kiện là đã xử lý',
+                  //               ),
+                  //               backgroundColor: Colors.green.shade600,
+                  //               behavior: SnackBarBehavior.floating,
+                  //               duration: const Duration(seconds: 2),
+                  //             ),
+                  //           );
 
-                            if (onUpdated != null) {
-                              onUpdated!('confirm', confirmed: true);
-                            }
-                            try {
-                              AppEvents.instance.notifyEventsChanged();
-                            } catch (_) {}
-                          } catch (e) {
-                            setState(() => confirmed = false);
-                            messenger.showSnackBar(
-                              SnackBar(
-                                content: Text(
-                                  'Xử lý thất bại: ${e.toString()}',
-                                ),
-                                backgroundColor: Colors.red.shade600,
-                                behavior: SnackBarBehavior.floating,
-                                duration: const Duration(seconds: 3),
-                              ),
-                            );
-                          }
-                        }
+                  //           if (onUpdated != null) {
+                  //             onUpdated!('confirm', confirmed: true);
+                  //           }
+                  //           try {
+                  //             AppEvents.instance.notifyEventsChanged();
+                  //           } catch (_) {}
+                  //         } catch (e) {
+                  //           setState(() => confirmed = false);
+                  //           messenger.showSnackBar(
+                  //             SnackBar(
+                  //               content: Text(
+                  //                 'Xử lý thất bại: ${e.toString()}',
+                  //               ),
+                  //               backgroundColor: Colors.red.shade600,
+                  //               behavior: SnackBarBehavior.floating,
+                  //               duration: const Duration(seconds: 3),
+                  //             ),
+                  //           );
+                  //         }
+                  //       }
 
-                        return Container(
-                          padding: const EdgeInsets.symmetric(vertical: 8),
-                          child: SwitchListTile(
-                            value: confirmed,
-                            onChanged: initiallyConfirmed
-                                ? null
-                                : (v) async => await _toggleConfirm(v),
-                            title: Text(
-                              'Đánh dấu đã xử lý',
-                              style: TextStyle(
-                                fontWeight: FontWeight.w700,
-                                color: Colors.grey.shade800,
-                              ),
-                            ),
-                            subtitle: Text(
-                              initiallyConfirmed
-                                  ? 'Xác nhận bạn đã xử lý sự kiện này'
-                                  : 'Xác nhận bạn đã xử lý sự kiện này',
-                              style: TextStyle(color: Colors.grey.shade600),
-                            ),
-                            activeColor: Colors.green.shade600,
-                            activeTrackColor: Colors.green.shade200,
-                            inactiveTrackColor: Colors.grey.shade300,
-                            contentPadding: EdgeInsets.zero,
-                          ),
-                        );
-                      },
-                    ),
-                  ),
+                  //       return Container(
+                  //         padding: const EdgeInsets.symmetric(vertical: 8),
+                  //         child: SwitchListTile(
+                  //           value: confirmed,
+                  //           onChanged: initiallyConfirmed
+                  //               ? null
+                  //               : (v) async => await toggleConfirm(v),
+                  //           title: Text(
+                  //             'Đánh dấu đã xử lý',
+                  //             style: TextStyle(
+                  //               fontWeight: FontWeight.w700,
+                  //               color: Colors.grey.shade800,
+                  //             ),
+                  //           ),
+                  //           subtitle: Text(
+                  //             initiallyConfirmed
+                  //                 ? 'Xác nhận bạn đã xử lý sự kiện này'
+                  //                 : 'Xác nhận bạn đã xử lý sự kiện này',
+                  //             style: TextStyle(color: Colors.grey.shade600),
+                  //           ),
+                  //           activeColor: Colors.green.shade600,
+                  //           activeTrackColor: Colors.green.shade200,
+                  //           inactiveTrackColor: Colors.grey.shade300,
+                  //           contentPadding: EdgeInsets.zero,
+                  //         ),
+                  //       );
+                  //     },
+                  //   ),
+                  // ),
                 ],
               ),
             );
@@ -1063,38 +1209,85 @@ class ActionLogCard extends StatelessWidget {
     } catch (_) {}
   }
 
-  Widget _confirmChip(bool confirmed) {
-    final Color c = confirmed ? Colors.green.shade600 : Colors.red.shade500;
-    final String label = _be.BackendEnums.confirmStatusToVietnamese(confirmed);
+  String _normalizeLifecycle(String? s) {
+    if (s == null) return '';
+    final trimmed = s.toString().trim();
+    if (trimmed.isEmpty) return '';
+
+    // Split on common separators first and take the primary token.
+    final parts = trimmed
+        .split(RegExp(r'[_\-\s]+'))
+        .where((p) => p.isNotEmpty)
+        .toList();
+    String token = parts.isNotEmpty ? parts.first : trimmed;
+
+    // If token is camelCase / PascalCase, extract the leading word.
+    final camelMatches = RegExp(
+      r'([A-Z]?[a-z]+|[A-Z]+(?![a-z]))',
+    ).allMatches(token);
+    if (camelMatches.isNotEmpty) {
+      token = camelMatches.first.group(0) ?? token;
+    }
+
+    final low = token.toLowerCase();
+    return low.isNotEmpty
+        ? (low[0].toUpperCase() + (low.length > 1 ? low.substring(1) : ''))
+        : '';
+  }
+
+  Widget _lifecycleChip(String? lifecycle) {
+    final norm = _normalizeLifecycle(lifecycle);
+    if (norm.isEmpty) return const SizedBox.shrink();
+    final label = _be.BackendEnums.lifecycleStateToVietnamese(norm);
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
       decoration: BoxDecoration(
-        color: c.withValues(alpha: 0.18),
-        borderRadius: BorderRadius.circular(20),
-        border: Border.all(color: c.withValues(alpha: 0.45)),
+        color: AppTheme.caregiverPrimary,
+        borderRadius: BorderRadius.circular(18),
       ),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Icon(
-            confirmed ? Icons.check_circle : Icons.radio_button_unchecked,
-            size: 14,
-            color: c,
-          ),
-          const SizedBox(width: 6),
-          Text(
-            label,
-            style: TextStyle(
-              color: c,
-              fontSize: 11,
-              fontWeight: FontWeight.w700,
-              letterSpacing: 0.5,
-            ),
-          ),
-        ],
+      child: Text(
+        label.toUpperCase(),
+        style: const TextStyle(
+          fontSize: 11,
+          fontWeight: FontWeight.w700,
+          color: Colors.white,
+        ),
       ),
     );
   }
+
+  // Widget _confirmChip(bool confirmed) {
+  //   final Color c = confirmed ? Colors.green.shade600 : Colors.red.shade500;
+  //   // final String label = _be.BackendEnums.confirmStatusToVietnamese(confirmed);
+  //   return Container(
+  //     padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+  //     decoration: BoxDecoration(
+  //       color: c.withValues(alpha: 0.18),
+  //       borderRadius: BorderRadius.circular(20),
+  //       border: Border.all(color: c.withValues(alpha: 0.45)),
+  //     ),
+  //     child: Row(
+  //       mainAxisSize: MainAxisSize.min,
+  //       children: [
+  //         Icon(
+  //           confirmed ? Icons.check_circle : Icons.radio_button_unchecked,
+  //           size: 14,
+  //           color: c,
+  //         ),
+  //         const SizedBox(width: 6),
+  //         // Text(
+  //         //   label,
+  //         //   style: TextStyle(
+  //         //     color: c,
+  //         //     fontSize: 11,
+  //         //     fontWeight: FontWeight.w700,
+  //         //     letterSpacing: 0.5,
+  //         //   ),
+  //         // ),
+  //       ],
+  //     ),
+  //   );
+  // }
 
   Widget _sectionTitle(String title) {
     return Text(
@@ -1523,6 +1716,8 @@ class ActionLogCard extends StatelessWidget {
     final repo = EventRepository(EventService.withDefaultClient());
 
     try {
+      final ds = EventsRemoteDataSource();
+
       // pending_until mặc định 48h sau thời điểm tạo (nếu có)
       final pendingUntil = data.createdAt != null
           ? data.createdAt!.add(const Duration(hours: 48))
@@ -1535,6 +1730,25 @@ class ActionLogCard extends StatelessWidget {
         reason: note,
         pendingUntil: pendingUntil,
       );
+      try {
+        final currentNorm = _normalizeLifecycle(
+          data.lifecycleState,
+        ).toUpperCase();
+        if (currentNorm == 'NOTIFIED' || currentNorm == '') {
+          try {
+            await ds.updateEventLifecycle(
+              eventId: data.eventId,
+              lifecycleState: 'ACKNOWLEDGED',
+            );
+          } catch (e) {
+            try {
+              print(
+                '[ActionLogCard] Failed to update lifecycle to ACKNOWLEDGED: $e',
+              );
+            } catch (_) {}
+          }
+        }
+      } catch (_) {}
 
       messenger.showSnackBar(
         SnackBar(
@@ -1561,7 +1775,7 @@ class ActionLogCard extends StatelessWidget {
     }
   }
 
-  void _showImagesModal(BuildContext context, EventLog event) {
+  void _showImagesModal(BuildContext pageContext, EventLog event) {
     print('\n🖼️ Loading images for event ${event.eventId}...');
     final future = loadEventImageUrls(event).then((urls) {
       print('📸 Found ${urls.length} images:');
@@ -1572,16 +1786,17 @@ class ActionLogCard extends StatelessWidget {
     });
 
     showDialog(
-      context: context,
-      builder: (context) => Dialog(
+      context: pageContext,
+      builder: (dialogCtx) => Dialog(
         backgroundColor: Colors.white,
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
         child: Container(
-          width: MediaQuery.of(context).size.width * 0.9,
-          height: MediaQuery.of(context).size.height * 0.7,
+          width: MediaQuery.of(pageContext).size.width * 0.9,
+          height: MediaQuery.of(pageContext).size.height * 0.7,
           padding: const EdgeInsets.all(20),
           child: Column(
             children: [
+              // Header
               Row(
                 children: [
                   Container(
@@ -1599,23 +1814,40 @@ class ActionLogCard extends StatelessWidget {
                   const SizedBox(width: 12),
                   const Expanded(
                     child: Text(
-                      'Ảnh sự kiện',
+                      'Hình ảnh',
                       style: TextStyle(
                         fontWeight: FontWeight.w700,
                         fontSize: 20,
                       ),
                     ),
                   ),
+
+                  //  Nút đóng dialog
                   IconButton(
-                    onPressed: () => Navigator.of(context).pop(),
+                    onPressed: () => Navigator.of(dialogCtx).pop(),
                     icon: const Icon(Icons.close),
                     style: IconButton.styleFrom(
                       backgroundColor: Colors.grey.shade100,
                     ),
                   ),
+
+                  //  Nút xem camera
+                  IconButton(
+                    onPressed: () {
+                      Navigator.of(dialogCtx, rootNavigator: true).pop();
+                      Future.delayed(const Duration(milliseconds: 250), () {
+                        _openCameraForEvent(pageContext, event);
+                      });
+                    },
+                    icon: const Icon(Icons.videocam_outlined),
+                    tooltip: 'Xem camera',
+                  ),
                 ],
               ),
+
               const SizedBox(height: 20),
+
+              //  Grid hiển thị hình ảnh
               Expanded(
                 child: FutureBuilder<List<String>>(
                   future: future,
@@ -1631,10 +1863,12 @@ class ActionLogCard extends StatelessWidget {
                         ),
                       );
                     }
+
                     final urls = snap.data ?? const [];
                     if (urls.isEmpty) {
                       return _emptyImages();
                     }
+
                     return GridView.builder(
                       gridDelegate:
                           const SliverGridDelegateWithFixedCrossAxisCount(
@@ -1703,7 +1937,7 @@ class ActionLogCard extends StatelessWidget {
                                         ),
                                       ),
                                       child: Text(
-                                        'Image ${index + 1}',
+                                        'Ảnh ${index + 1}',
                                         style: const TextStyle(
                                           color: Colors.white,
                                           fontSize: 12,
@@ -1844,9 +2078,123 @@ class ActionLogCard extends StatelessWidget {
                 ),
               ),
             ),
+            // Camera button for full image
+            Positioned(
+              bottom: 20,
+              right: 20,
+              child: Container(
+                decoration: BoxDecoration(
+                  color: const Color.fromRGBO(255, 255, 255, 0.9),
+                  borderRadius: BorderRadius.circular(20),
+                ),
+                child: IconButton(
+                  onPressed: () async {
+                    try {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        const SnackBar(
+                          content: Text(
+                            'Vui lòng dùng nút "Xem camera" trong cửa sổ ảnh để mở camera.',
+                          ),
+                        ),
+                      );
+                    } catch (_) {}
+                  },
+                  icon: const Icon(Icons.videocam, color: Colors.black),
+                ),
+              ),
+            ),
           ],
         ),
       ),
     );
+  }
+
+  Future<void> _openCameraForEvent(BuildContext context, EventLog event) async {
+    final messenger = ScaffoldMessenger.of(context);
+    print('[DEBUG] event.cameraId = ${event.cameraId}');
+    print(
+      '[DEBUG] detectionData.camera_id = ${event.detectionData['camera_id']}',
+    );
+    print('[DEBUG] contextData.camera_id = ${event.contextData['camera_id']}');
+
+    String? cameraId =
+        event.cameraId ??
+        event.detectionData['camera_id']?.toString() ??
+        event.contextData['camera_id']?.toString();
+
+    if (cameraId == null) {
+      print('[INFO] CameraId not found — fetching event detail...');
+      try {
+        final detail = await EventsRemoteDataSource().getEventById(
+          eventId: event.eventId,
+        );
+
+        if (detail['camera_id'] != null) {
+          cameraId = detail['camera_id'].toString();
+          print('[✅] Found camera_id from top-level: $cameraId');
+        } else if (detail['cameras'] is Map &&
+            detail['cameras']['camera_id'] != null) {
+          cameraId = detail['cameras']['camera_id'].toString();
+          print('[✅] Found camera_id from cameras object: $cameraId');
+        } else if (detail['snapshots'] is Map &&
+            detail['snapshots']['camera_id'] != null) {
+          cameraId = detail['snapshots']['camera_id'].toString();
+          print('[✅] Found camera_id from snapshots: $cameraId');
+        } else {
+          print('[⚠️] No camera_id found in event detail.');
+        }
+      } catch (e) {
+        print('[❌] Error fetching event detail: $e');
+      }
+    }
+
+    if (cameraId == null) {
+      messenger.showSnackBar(
+        const SnackBar(content: Text('Không tìm thấy camera cho sự kiện này.')),
+      );
+      return;
+    }
+
+    print('[INFO] Final cameraId to open: $cameraId');
+
+    try {
+      final userId = await AuthStorage.getUserId();
+      if (userId == null || userId.isEmpty) {
+        messenger.showSnackBar(
+          const SnackBar(content: Text('Không xác thực được người dùng.')),
+        );
+        return;
+      }
+
+      final cameraService = CameraService();
+      final cameras = await cameraService.loadCameras();
+
+      final matched = cameras.firstWhere(
+        (cam) => cam.id == cameraId,
+        orElse: () => cameras.first,
+      );
+
+      final cameraUrl = matched.url;
+      if (cameraUrl.isEmpty) {
+        messenger.showSnackBar(
+          const SnackBar(content: Text('Camera không có URL hợp lệ.')),
+        );
+        return;
+      }
+
+      print('🎬 Opening LiveCameraScreen with url=$cameraUrl');
+      if (!context.mounted) return;
+      Navigator.push(
+        context,
+        MaterialPageRoute(
+          builder: (_) => LiveCameraScreen(initialUrl: cameraUrl),
+        ),
+      );
+    } catch (e) {
+      print('[❌] Failed to load camera list: $e');
+      messenger.showSnackBar(
+        const SnackBar(content: Text('Không thể tải danh sách camera.')),
+      );
+    }
   }
 }

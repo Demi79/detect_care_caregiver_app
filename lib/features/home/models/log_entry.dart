@@ -3,6 +3,7 @@ class LogEntry {
   final String status;
   final String eventType;
   final String? eventDescription;
+  final String? cameraId;
   final double confidenceScore;
   final DateTime? detectedAt;
   final DateTime? createdAt;
@@ -10,6 +11,7 @@ class LogEntry {
   final Map<String, dynamic> aiAnalysisResult;
   final Map<String, dynamic> contextData;
   final Map<String, dynamic> boundingBoxes;
+  final String? lifecycleState;
 
   final bool confirmStatus;
 
@@ -18,6 +20,7 @@ class LogEntry {
     required this.status,
     required this.eventType,
     this.eventDescription,
+    this.cameraId,
     required this.confidenceScore,
     this.detectedAt,
     this.createdAt,
@@ -25,6 +28,7 @@ class LogEntry {
     this.aiAnalysisResult = const {},
     this.contextData = const {},
     this.boundingBoxes = const {},
+    this.lifecycleState,
     required this.confirmStatus,
   });
 }

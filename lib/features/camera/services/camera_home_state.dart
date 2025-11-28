@@ -10,6 +10,7 @@ class CameraHomeState extends ChangeNotifier {
   final CameraService _cameraService;
   final CameraQuotaService _quotaService;
 
+  // State
   List<CameraEntry> _cameras = [];
   bool _loading = true;
   bool _refreshing = false;
@@ -18,14 +19,18 @@ class CameraHomeState extends ChangeNotifier {
   bool _sortAsc = true;
   DateTime? _lastRefreshed;
 
+  // Quota state
   CameraQuotaValidationResult? _quotaValidation;
 
+  // Pending operations
   final Map<String, Timer> _pendingDeleteTimers = {};
   final Map<String, CameraEntry> _pendingDeletedEntries = {};
   Timer? _searchDebounceTimer;
 
+  // Dispose management
   bool _isDisposed = false;
 
+  // Getters
   List<CameraEntry> get cameras => _cameras;
   bool get loading => _loading;
   bool get refreshing => _refreshing;
@@ -54,17 +59,13 @@ class CameraHomeState extends ChangeNotifier {
     _loading = true;
     notifyListeners();
 
+    // 1) Quick: load cached/seeded cameras to show UI immediately
     try {
-      final cached = await CameraStorage.load();
-      debugPrint('[CameraHomeState] cached cameras (raw): ${cached.length}');
-      final visibleCached = cached
-          .where((c) => !c.id.startsWith('demo-'))
-          .toList();
-      debugPrint(
-        '[CameraHomeState] cached cameras (filtered): ${visibleCached.length}',
-      );
-      if (visibleCached.isNotEmpty && !_isDisposed) {
-        _cameras = visibleCached;
+      final cached = await CameraStorage.loadOrSeed();
+      debugPrint('[CameraHomeState] cached cameras: ${cached.length}');
+      if (cached.isNotEmpty && !_isDisposed) {
+        _cameras = cached;
+        // show quickly to user
         _loading = false;
         notifyListeners();
       }
@@ -90,8 +91,10 @@ class CameraHomeState extends ChangeNotifier {
       }
     } on TimeoutException catch (t) {
       debugPrint('[CameraHomeState] remote fetch timed out: $t');
+      // keep cached list if available
     } catch (e, st) {
       debugPrint('[CameraHomeState] Error loading cameras: $e\n$st');
+      // keep cached list if available
     } finally {
       if (!_isDisposed) {
         _loading = false;
@@ -100,6 +103,7 @@ class CameraHomeState extends ChangeNotifier {
         );
         notifyListeners();
 
+        // Validate camera quota after loading cameras
         await validateCameraQuota();
       }
     }
@@ -112,6 +116,7 @@ class CameraHomeState extends ChangeNotifier {
 
       _cameras.add(newCamera);
 
+      // Re-validate quota after adding camera
       await validateCameraQuota();
 
       if (!_isDisposed) {
@@ -135,6 +140,7 @@ class CameraHomeState extends ChangeNotifier {
         _cameras[idx] = updated;
       }
 
+      // Re-validate quota in case something changed
       await validateCameraQuota();
 
       if (!_isDisposed) notifyListeners();
@@ -146,9 +152,11 @@ class CameraHomeState extends ChangeNotifier {
   Future<void> deleteCamera(CameraEntry camera) async {
     if (_isDisposed) return;
 
+    // Optimistic update
     _cameras.removeWhere((c) => c.id == camera.id);
     notifyListeners();
 
+    // Store for potential undo
     _pendingDeletedEntries[camera.id] = camera;
     _pendingDeleteTimers[camera.id]?.cancel();
     _pendingDeleteTimers[camera.id] = Timer(const Duration(seconds: 5), () {
@@ -160,6 +168,7 @@ class CameraHomeState extends ChangeNotifier {
     try {
       await _cameraService.deleteCamera(camera.id);
     } catch (e) {
+      // Revert optimistic update
       if (!_isDisposed) {
         _cameras.add(camera);
         notifyListeners();

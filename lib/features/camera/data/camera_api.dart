@@ -7,16 +7,17 @@ class CameraApi {
   final ApiClient apiClient;
   CameraApi(this.apiClient);
 
-  // GET /cameras
+  // GET /cameras by customer
   Future<Map<String, dynamic>> getCamerasByUser({
-    required String userId,
+    required String customerId,
     int page = 1,
     int limit = 20,
   }) async {
     final res = await apiClient.get(
-      '/cameras/by-user/$userId',
+      '/cameras/by-user/$customerId',
       query: {'page': page, 'limit': limit},
     );
+
     final decoded = apiClient.extractDataFromResponse(res);
     if (decoded is! Map<String, dynamic>) {
       throw Exception('Unexpected response for getCamerasByUser: ${res.body}');

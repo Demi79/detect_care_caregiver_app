@@ -112,48 +112,6 @@ class PatientHeaderCard extends StatelessWidget {
                 style: const TextStyle(fontSize: 16, color: Color(0xFF64748B)),
               ),
             ),
-          // Luôn hiển thị nút cập nhật hồ sơ
-          Padding(
-            padding: const EdgeInsets.only(top: 16),
-            child: TextButton.icon(
-              icon: const Icon(Icons.edit, color: _Palette.primary),
-              label: const Text(
-                'Cập nhật hồ sơ',
-                style: TextStyle(
-                  color: _Palette.primary,
-                  fontWeight: FontWeight.w600,
-                  fontSize: 16,
-                ),
-              ),
-              style: TextButton.styleFrom(
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 22,
-                  vertical: 12,
-                ),
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(12),
-                ),
-                backgroundColor: const Color.fromRGBO(
-                  105,
-                  172,
-                  237,
-                  0.08,
-                ), // màu xanh nhạt, trong suốt
-                foregroundColor: _Palette.primary,
-                elevation: 0,
-              ),
-              onPressed: () {
-                Navigator.of(context).push(
-                  MaterialPageRoute(
-                    builder: (_) => UpdatePatientInfoScreen(
-                      patient: patient,
-                      readOnly: true,
-                    ),
-                  ),
-                );
-              },
-            ),
-          ),
         ],
       ),
     );

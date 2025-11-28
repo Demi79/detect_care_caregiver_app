@@ -81,6 +81,108 @@ class AppTheme {
     'danger': dangerColor,
   };
 
+  // --- Caregiver-specific visual tokens (Calm Teal palette) ---
+  static const Color caregiverPrimary = Color(0xFF3a86ff);
+  static const Color caregiverPrimaryDark = Color(0xFF005B86);
+  static const Color caregiverPrimaryLight = Color(0xFF90D5F4);
+  static const Color caregiverSurface = Color(0xFFF8FAFC);
+  static const Color caregiverAccent = Color(0xFF48C8F5);
+  static const Color caregiverTextOnPrimary = Color(0xFFFFFFFF);
+
+  static ThemeData get caregiverLightTheme {
+    return ThemeData(
+      colorScheme: ColorScheme.fromSeed(
+        seedColor: caregiverPrimary,
+        brightness: Brightness.light,
+        primary: caregiverPrimary,
+        secondary: caregiverAccent,
+        surface: caregiverSurface,
+        error: dangerColor,
+      ),
+      useMaterial3: true,
+      fontFamily: 'SF Pro Text',
+      scaffoldBackgroundColor: scaffoldBackground,
+      appBarTheme: const AppBarTheme(
+        backgroundColor: caregiverPrimary,
+        elevation: 0,
+        scrolledUnderElevation: 4,
+        shadowColor: shadowColor,
+        surfaceTintColor: Colors.transparent,
+        titleTextStyle: TextStyle(
+          color: caregiverTextOnPrimary,
+          fontSize: 20,
+          fontWeight: FontWeight.w600,
+          letterSpacing: -0.5,
+        ),
+        iconTheme: IconThemeData(color: caregiverTextOnPrimary, size: 24),
+      ),
+      elevatedButtonTheme: ElevatedButtonThemeData(
+        style: ElevatedButton.styleFrom(
+          backgroundColor: caregiverPrimary,
+          foregroundColor: caregiverTextOnPrimary,
+          elevation: 0,
+          padding: const EdgeInsets.symmetric(
+            vertical: spacingL,
+            horizontal: spacingXXL,
+          ),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(borderRadiusLarge),
+          ),
+        ),
+      ),
+      floatingActionButtonTheme: const FloatingActionButtonThemeData(
+        backgroundColor: caregiverPrimary,
+        foregroundColor: caregiverTextOnPrimary,
+        elevation: 6,
+      ),
+      cardTheme: CardThemeData(
+        color: cardBackground,
+        elevation: 0,
+        shadowColor: shadowColor,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(borderRadiusMedium),
+        ),
+      ),
+    );
+  }
+
+  static ThemeData get caregiverDarkTheme {
+    return ThemeData(
+      colorScheme: ColorScheme.fromSeed(
+        seedColor: caregiverPrimary,
+        brightness: Brightness.dark,
+        primary: caregiverPrimaryLight,
+        secondary: caregiverAccent,
+        surface: const Color(0xFF111216),
+        error: dangerColor,
+      ),
+      useMaterial3: true,
+      fontFamily: 'SF Pro Text',
+      appBarTheme: const AppBarTheme(
+        backgroundColor: Color(0xFF062826),
+        elevation: 0,
+        scrolledUnderElevation: 4,
+        shadowColor: shadowColor,
+        surfaceTintColor: Colors.transparent,
+        titleTextStyle: TextStyle(
+          color: caregiverTextOnPrimary,
+          fontSize: 20,
+          fontWeight: FontWeight.w600,
+          letterSpacing: -0.5,
+        ),
+        iconTheme: IconThemeData(color: caregiverTextOnPrimary, size: 24),
+      ),
+      cardTheme: CardThemeData(
+        color: const Color(0xFF0F1316),
+        elevation: 0,
+        shadowColor: shadowColor,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(borderRadiusMedium),
+        ),
+      ),
+    );
+  }
+
   // Gradient Definitions
   static const LinearGradient primaryGradient = LinearGradient(
     colors: [primaryBlue, primaryBlueDark],

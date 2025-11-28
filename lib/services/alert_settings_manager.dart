@@ -1,9 +1,64 @@
+class RetrySettings {
+  final int maxRetries;
+  final Duration initialDelay;
+  final Duration maxDelay;
+  final double backoffMultiplier;
+  final List<String> escalationChannels; // ['sms', 'call', 'emergency_contact']
+  final Duration escalationDelay;
+
+  const RetrySettings({
+    required this.maxRetries,
+    required this.initialDelay,
+    required this.maxDelay,
+    required this.backoffMultiplier,
+    required this.escalationChannels,
+    required this.escalationDelay,
+  });
+
+  factory RetrySettings.defaultSettings() {
+    return const RetrySettings(
+      maxRetries: 3,
+      initialDelay: Duration(minutes: 5),
+      maxDelay: Duration(hours: 1),
+      backoffMultiplier: 2.0,
+      escalationChannels: ['sms', 'call'],
+      escalationDelay: Duration(minutes: 15),
+    );
+  }
+
+  RetrySettings copyWith({
+    int? maxRetries,
+    Duration? initialDelay,
+    Duration? maxDelay,
+    double? backoffMultiplier,
+    List<String>? escalationChannels,
+    Duration? escalationDelay,
+  }) {
+    return RetrySettings(
+      maxRetries: maxRetries ?? this.maxRetries,
+      initialDelay: initialDelay ?? this.initialDelay,
+      maxDelay: maxDelay ?? this.maxDelay,
+      backoffMultiplier: backoffMultiplier ?? this.backoffMultiplier,
+      escalationChannels: escalationChannels ?? this.escalationChannels,
+      escalationDelay: escalationDelay ?? this.escalationDelay,
+    );
+  }
+}
+
 class AlertSettings {
   final bool push;
   final bool email;
   final bool sms;
   final bool call;
   final Map<String, Map<String, bool>> severityOverrides;
+  final RetrySettings retrySettings;
+  // Forwarding mode when caregiver does not respond.
+  // Allowed values: 'none', 'attempts', 'elapsed_time'
+  final String forwardingMode;
+  // Number of failed notification attempts before forwarding when mode=='attempts'
+  final int forwardingAttemptThreshold;
+  // Seconds to wait before forwarding when mode=='elapsed_time'
+  final int forwardingElapsedThresholdSeconds;
 
   AlertSettings({
     required this.push,
@@ -11,6 +66,10 @@ class AlertSettings {
     required this.sms,
     required this.call,
     required this.severityOverrides,
+    required this.retrySettings,
+    this.forwardingMode = 'none',
+    this.forwardingAttemptThreshold = 3,
+    this.forwardingElapsedThresholdSeconds = 60,
   });
 
   factory AlertSettings.defaultSettings() {
@@ -23,6 +82,10 @@ class AlertSettings {
         'critical': {'push': true, 'email': true, 'sms': true, 'call': true},
         'warning': {'push': true, 'email': false, 'sms': false, 'call': false},
       },
+      retrySettings: RetrySettings.defaultSettings(),
+      forwardingMode: 'none',
+      forwardingAttemptThreshold: 3,
+      forwardingElapsedThresholdSeconds: 60,
     );
   }
 
@@ -32,6 +95,10 @@ class AlertSettings {
     bool? sms,
     bool? call,
     Map<String, Map<String, bool>>? severityOverrides,
+    RetrySettings? retrySettings,
+    String? forwardingMode,
+    int? forwardingAttemptThreshold,
+    int? forwardingElapsedThresholdSeconds,
   }) {
     return AlertSettings(
       push: push ?? this.push,
@@ -39,6 +106,13 @@ class AlertSettings {
       sms: sms ?? this.sms,
       call: call ?? this.call,
       severityOverrides: severityOverrides ?? this.severityOverrides,
+      retrySettings: retrySettings ?? this.retrySettings,
+      forwardingMode: forwardingMode ?? this.forwardingMode,
+      forwardingAttemptThreshold:
+          forwardingAttemptThreshold ?? this.forwardingAttemptThreshold,
+      forwardingElapsedThresholdSeconds:
+          forwardingElapsedThresholdSeconds ??
+          this.forwardingElapsedThresholdSeconds,
     );
   }
 

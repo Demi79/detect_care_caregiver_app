@@ -5,6 +5,7 @@ import 'package:detect_care_caregiver_app/features/camera/models/camera_entry.da
 import 'package:detect_care_caregiver_app/features/camera/screens/live_camera_screen.dart';
 import 'package:detect_care_caregiver_app/features/camera/services/camera_home_state.dart';
 import 'package:detect_care_caregiver_app/features/camera/services/camera_quota_service.dart';
+import 'package:detect_care_caregiver_app/features/subscription/data/service_package_api.dart';
 import 'package:detect_care_caregiver_app/features/camera/services/camera_service.dart';
 import 'package:detect_care_caregiver_app/features/camera/widgets/add_camera_dialog.dart';
 import 'package:detect_care_caregiver_app/features/camera/widgets/components/camera_layouts.dart';
@@ -24,7 +25,9 @@ class LiveCameraHomeScreen extends StatefulWidget {
 }
 
 class _LiveCameraHomeScreenState extends State<LiveCameraHomeScreen>
-    with TickerProviderStateMixin, AutomaticKeepAliveClientMixin {
+    with
+        TickerProviderStateMixin,
+        AutomaticKeepAliveClientMixin<LiveCameraHomeScreen> {
   late final CameraHomeState _state;
   late final VoidCallback _stateListener;
   late final AnimationController _fabAnimationController;
@@ -37,7 +40,10 @@ class _LiveCameraHomeScreenState extends State<LiveCameraHomeScreen>
   void initState() {
     super.initState();
 
-    _state = CameraHomeState(CameraService(), CameraQuotaService());
+    _state = CameraHomeState(
+      CameraService(),
+      CameraQuotaService(ServicePackageApi()),
+    );
     _stateListener = () {
       if (!mounted) return;
       setState(() {});

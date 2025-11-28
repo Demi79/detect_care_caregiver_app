@@ -25,12 +25,24 @@ class AlertCoordinator {
     if (_isDuplicate(e.eventId)) return;
 
     if (AppLifecycle.isForeground) {
-      print('\n🔎 AlertCoordinator handling EventLog:');
-      try {
-        print(e.toString());
-      } catch (_) {}
-      InAppAlert.show(e);
+      final status = (e.status ?? '').toLowerCase();
+      print(
+        '\n[AlertCoordinator] Received event id=${e.eventId} status="$status" foreground=${AppLifecycle.isForeground}',
+      );
+      if (status.contains('danger') || status.contains('warning')) {
+        print('[AlertCoordinator] will show popup for id=${e.eventId}');
+        try {
+          print(e.toString());
+        } catch (_) {}
+        InAppAlert.show(e);
+      } else {
+        print('[AlertCoordinator] skipping event (status="$status")');
+      }
       return;
+    } else {
+      print(
+        '[AlertCoordinator] app not foreground, skipping event id=${e.eventId}',
+      );
     }
   }
 

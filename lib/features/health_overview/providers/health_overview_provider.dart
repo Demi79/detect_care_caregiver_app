@@ -15,7 +15,7 @@ class HealthOverviewProvider extends ChangeNotifier {
   String? get error => _error;
 
   Future<void> load({
-    String? patientId,
+    String? customerId,
     String? startDate,
     String? endDate,
   }) async {
@@ -25,7 +25,7 @@ class HealthOverviewProvider extends ChangeNotifier {
 
     try {
       _data = await repo.getOverview(
-        patientId: patientId,
+        customerId: customerId,
         startDate: startDate,
         endDate: endDate,
       );

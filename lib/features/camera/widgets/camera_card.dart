@@ -12,6 +12,7 @@ class CameraCard extends StatelessWidget {
   final void Function(CameraEntry) onDelete;
   final void Function(CameraEntry)? onEdit;
   final VoidCallback? onRefreshRequested;
+  final void Function(CameraEntry)? onShowTimeline;
   final String? headerLabel;
   final bool isGrid2;
   final double? height;
@@ -24,6 +25,7 @@ class CameraCard extends StatelessWidget {
     required this.onDelete,
     this.onEdit,
     this.onRefreshRequested,
+    this.onShowTimeline,
     this.headerLabel,
     this.isGrid2 = false,
     this.height,
@@ -192,7 +194,9 @@ class CameraCard extends StatelessWidget {
                         height: double.infinity,
                         child: ThumbView(
                           src: camera.thumb ?? '',
-                          borderRadius: 0,
+                          borderRadius:
+                              0, // Remove border radius to avoid conflict with parent ClipRRect
+                          isOnline: camera.isOnline,
                           width: double.infinity,
                           height: double.infinity,
                         ),
@@ -215,12 +219,14 @@ class CameraCard extends StatelessWidget {
                         ),
                       ),
               ),
+              // crosshair mờ - chỉ hiển thị khi có thumbnail
               if (camera.thumb != null && camera.thumb!.isNotEmpty)
                 Positioned.fill(
                   child: IgnorePointer(
                     child: CustomPaint(painter: CrosshairPainter()),
                   ),
                 ),
+              // If there's no thumbnail, draw the camera placeholder icon centered on top
               if (camera.thumb == null || camera.thumb!.isEmpty)
                 Positioned.fill(
                   child: IgnorePointer(
@@ -244,6 +250,7 @@ class CameraCard extends StatelessWidget {
           ),
         ),
 
+        // BODY — make the body slightly different (soft gray) to separate from the preview
         Container(
           decoration: BoxDecoration(
             gradient: LinearGradient(
@@ -292,6 +299,9 @@ class CameraCard extends StatelessWidget {
                       onEdit: onEdit != null ? () => onEdit!(camera) : null,
                       onDelete: () => onDelete(camera),
                       onRefresh: onRefreshRequested,
+                      onTimeline: onShowTimeline != null
+                          ? () => onShowTimeline!(camera)
+                          : null,
                     )
                   else
                     Row(
@@ -305,6 +315,17 @@ class CameraCard extends StatelessWidget {
                           iconSize: theme.actionIconSize,
                           splashRadius: theme.actionSplash,
                         ),
+                        if (onShowTimeline != null) ...[
+                          const SizedBox(width: 8),
+                          ActionButton(
+                            icon: Icons.view_timeline_outlined,
+                            color: Colors.deepOrange,
+                            tooltip: 'Bản ghi',
+                            onPressed: () => onShowTimeline!(camera),
+                            iconSize: theme.actionIconSize,
+                            splashRadius: theme.actionSplash,
+                          ),
+                        ],
                         const SizedBox(width: 8),
                         ActionButton(
                           icon: Icons.edit,
@@ -342,7 +363,7 @@ class CameraCard extends StatelessWidget {
               ),
 
               const SizedBox(height: 6),
-              // HÀNG 2: Nhãn "Camera"
+              // HÀNG 2: Nhãn "Camera" với cải thiện
               Container(
                 padding: EdgeInsets.symmetric(
                   horizontal: theme.labelPaddingH,

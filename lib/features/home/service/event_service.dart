@@ -34,95 +34,194 @@ class EventService {
 
   Future<List<EventLog>> fetchLogs({
     int page = 1,
-    int limit = 50,
+    int limit = 100,
     String? status,
     DateTimeRange? dayRange,
     String? period,
     String? search,
+    String? lifecycleState,
   }) async {
     try {
-      final session = _supabase.auth.currentSession;
-      if (session == null) {
-        print('[EventService.fetchLogs] No Supabase session found');
-        return [];
-      }
+      // final session = _supabase.auth.currentSession;
+      // if (session == null) {
+      //   print('[EventService.fetchLogs] No Supabase session found');
+      //   return [];
+      // }
 
       print(
         'filters status=$status, dayRange=${dayRange != null ? "${dayRange.start}..${dayRange.end}" : "null"}, period=$period, search=$search, page=$page, limit=$limit',
       );
 
-      var query = _supabase
-          .from(EventEndpoints.eventsTable)
-          .select(EventEndpoints.selectList);
-
-      if (status != null && status.isNotEmpty && status != 'All') {
-        query = query.eq(EventEndpoints.status, status);
-      }
-
-      if (dayRange != null) {
-        final startUtc = DateTime(
-          dayRange.start.year,
-          dayRange.start.month,
-          dayRange.start.day,
-        ).toUtc();
-        final endUtc = DateTime(
-          dayRange.end.year,
-          dayRange.end.month,
-          dayRange.end.day + 1,
-        ).toUtc();
-
-        query = query
-            .gte(EventEndpoints.detectedAt, startUtc.toIso8601String())
-            .lt(EventEndpoints.detectedAt, endUtc.toIso8601String());
-      }
-
-      if (search != null && search.isNotEmpty) {
-        final s = search.replaceAll("'", "''");
-        query = query.or(
-          '${EventEndpoints.eventType}.ilike.%$s%,'
-          '${EventEndpoints.eventDescription}.ilike.%$s%',
-        );
-      }
-
-      final from = (page - 1) * limit;
-      final to = page * limit - 1;
+      final session = _supabase.auth.currentSession;
       List<Map<String, dynamic>> normalized = [];
 
-      try {
-        final rows = await query
-            .order(EventEndpoints.detectedAt, ascending: false)
-            .range(from, to);
-
-        _logRawRows(rows);
-        print('[EventService] RAW rows len=${(rows as List).length}');
-
-        for (final r in (rows as List)) {
-          final m = await _normalizeRow(r as Map<String, dynamic>);
-          normalized.add(m);
-        }
-      } catch (e) {
+      if (session == null) {
         print(
-          '[EventService] Supabase fetch failed, falling back to REST /events: $e',
+          '[EventService.fetchLogs] No Supabase session found - using REST /events',
         );
-
         try {
           final ds = EventsRemoteDataSource();
-          // Pass through the caller's page/limit so REST fallback returns
-          // a matching page size (backend default may be 10).
-          final list = await ds.listEvents(page: page, limit: limit);
+          final extra = <String, dynamic>{};
+          if (lifecycleState != null && lifecycleState.isNotEmpty) {
+            extra['lifecycle_state'] = lifecycleState;
+          }
+          if (status != null &&
+              status.isNotEmpty &&
+              status.toLowerCase() != 'all') {
+            if (status.toLowerCase() == 'abnormal') {
+              extra['status'] = ['danger', 'warning'];
+            } else {
+              extra['status'] = status;
+            }
+          }
+          final list = await ds.listEvents(
+            page: page,
+            limit: limit,
+            extraQuery: extra.isNotEmpty ? extra : null,
+          );
           for (final r in list) {
             final m = await _normalizeRow(r);
             normalized.add(m);
           }
         } catch (restErr) {
-          print('[EventService] REST fallback also failed: $restErr');
+          print('[EventService] REST fetch failed: $restErr');
           return [];
+        }
+      } else {
+        var query = _supabase
+            .from(EventEndpoints.eventsTable)
+            .select(EventEndpoints.selectList);
+
+        if (status != null &&
+            status.isNotEmpty &&
+            status.toLowerCase() != 'all') {
+          if (status.toLowerCase() == 'abnormal') {
+            // 'abnormal' is a UI-level alias meaning both 'danger' and 'warning'
+            // Query Supabase for either status using an OR clause so the
+            // backend returns both types.
+            query = query.or(
+              '${EventEndpoints.status}.eq.danger,${EventEndpoints.status}.eq.warning',
+            );
+          } else {
+            query = query.eq(EventEndpoints.status, status);
+          }
+        }
+
+        if (lifecycleState != null && lifecycleState.isNotEmpty) {
+          query = query.eq('lifecycle_state', lifecycleState);
+        }
+
+        if (dayRange != null) {
+          final startUtc = DateTime(
+            dayRange.start.year,
+            dayRange.start.month,
+            dayRange.start.day,
+          ).toUtc();
+          final endUtc = DateTime(
+            dayRange.end.year,
+            dayRange.end.month,
+            dayRange.end.day + 1,
+          ).toUtc();
+
+          query = query
+              .gte(EventEndpoints.detectedAt, startUtc.toIso8601String())
+              .lt(EventEndpoints.detectedAt, endUtc.toIso8601String());
+        }
+
+        if (search != null && search.isNotEmpty) {
+          final s = search.replaceAll("'", "''");
+          query = query.or(
+            '${EventEndpoints.eventType}.ilike.%$s%,'
+            '${EventEndpoints.eventDescription}.ilike.%$s%',
+          );
+        }
+
+        final from = (page - 1) * limit;
+        final to = page * limit - 1;
+
+        try {
+          final rows = await query
+              .order(EventEndpoints.detectedAt, ascending: false)
+              .range(from, to);
+
+          _logRawRows(rows);
+          print('[EventService] RAW rows len=${(rows as List).length}');
+
+          for (final r in (rows as List)) {
+            final m = await _normalizeRow(r as Map<String, dynamic>);
+            normalized.add(m);
+          }
+        } catch (e) {
+          print(
+            '[EventService] Supabase fetch failed, falling back to REST /events: $e',
+          );
+
+          try {
+            final ds = EventsRemoteDataSource();
+            final extra = <String, dynamic>{};
+            if (lifecycleState != null && lifecycleState.isNotEmpty) {
+              extra['lifecycle_state'] = lifecycleState;
+            }
+            if (status != null &&
+                status.isNotEmpty &&
+                status.toLowerCase() != 'all') {
+              if (status.toLowerCase() == 'abnormal') {
+                extra['status'] = ['danger', 'warning'];
+              } else {
+                extra['status'] = status;
+              }
+            }
+            final list = await ds.listEvents(
+              page: page,
+              limit: limit,
+              extraQuery: extra.isNotEmpty ? extra : null,
+            );
+            for (final r in list) {
+              final m = await _normalizeRow(r);
+              normalized.add(m);
+            }
+          } catch (restErr) {
+            print('[EventService] REST fallback also failed: $restErr');
+            return [];
+          }
         }
       }
 
       _logNormalizedSample(normalized);
 
+      // Debug: counts by status in the normalized set
       try {
+        final normDanger = normalized
+            .where(
+              (e) => (e['status']?.toString() ?? '').toLowerCase() == 'danger',
+            )
+            .length;
+        final normWarning = normalized
+            .where(
+              (e) => (e['status']?.toString() ?? '').toLowerCase() == 'warning',
+            )
+            .length;
+        print(
+          '[EventService DEBUG] normalized counts: danger=$normDanger warning=$normWarning total=${normalized.length}',
+        );
+      } catch (_) {}
+
+      List<String> _normalizedIds = [];
+      try {
+        _normalizedIds = normalized
+            .map((e) => (e['eventId'] ?? e['event_id'] ?? e['id'])?.toString())
+            .where((e) => e != null)
+            .cast<String>()
+            .toList();
+        print(
+          '[EventService.fetchLogs] NORMALIZED_IDS len=${_normalizedIds.length} sample=${_normalizedIds.take(50).toList()}',
+        );
+      } catch (_) {}
+
+      try {
+        // Print a larger sample (up to 50) of normalized rows including the
+        // confirmation field so we can compare confirm/confirm_status across
+        // pipeline stages.
         final sampleNorm = normalized
             .take(50)
             .map(
@@ -143,6 +242,23 @@ class EventService {
 
       List<Map<String, dynamic>> working = List.from(normalized);
 
+      // Debug: initial working counts
+      try {
+        final wDanger = working
+            .where(
+              (e) => (e['status']?.toString() ?? '').toLowerCase() == 'danger',
+            )
+            .length;
+        final wWarning = working
+            .where(
+              (e) => (e['status']?.toString() ?? '').toLowerCase() == 'warning',
+            )
+            .length;
+        print(
+          '[EventService DEBUG] working before filters: danger=$wDanger warning=$wWarning total=${working.length}',
+        );
+      } catch (_) {}
+
       if (status != null &&
           status.isNotEmpty &&
           status.toLowerCase() != 'all') {
@@ -161,6 +277,23 @@ class EventService {
               .toList();
         }
       }
+
+      // Debug: after status filter
+      try {
+        final postStatusDanger = working
+            .where(
+              (e) => (e['status']?.toString() ?? '').toLowerCase() == 'danger',
+            )
+            .length;
+        final postStatusWarning = working
+            .where(
+              (e) => (e['status']?.toString() ?? '').toLowerCase() == 'warning',
+            )
+            .length;
+        print(
+          '[EventService DEBUG] after status filter: danger=$postStatusDanger warning=$postStatusWarning total=${working.length}',
+        );
+      } catch (_) {}
 
       if (dayRange != null) {
         final startUtc = DateTime(
@@ -202,6 +335,36 @@ class EventService {
             return false;
           }
         }).toList();
+        try {
+          final workingIds = working
+              .map(
+                (e) => (e['eventId'] ?? e['event_id'] ?? e['id'])?.toString(),
+              )
+              .where((e) => e != null)
+              .cast<String>()
+              .toList();
+          print(
+            '[EventService.fetchLogs] AFTER dayRange filter working_len=${working.length} ids=${workingIds.take(50).toList()}',
+          );
+          try {
+            final drDanger = working
+                .where(
+                  (e) =>
+                      (e['status']?.toString() ?? '').toLowerCase() == 'danger',
+                )
+                .length;
+            final drWarning = working
+                .where(
+                  (e) =>
+                      (e['status']?.toString() ?? '').toLowerCase() ==
+                      'warning',
+                )
+                .length;
+            print(
+              '[EventService DEBUG] after dayRange filter: danger=$drDanger warning=$drWarning total=${working.length}',
+            );
+          } catch (_) {}
+        } catch (_) {}
       }
 
       final filtered = (period == null || period.isEmpty || period == 'All')
@@ -211,6 +374,36 @@ class EventService {
                 .toList();
 
       try {
+        final filteredIds = filtered
+            .map((e) => (e['eventId'] ?? e['event_id'] ?? e['id'])?.toString())
+            .where((e) => e != null)
+            .cast<String>()
+            .toList();
+        print(
+          '[EventService.fetchLogs] AFTER period filter filtered_len=${filtered.length} ids=${filteredIds.take(50).toList()}',
+        );
+        try {
+          final perDanger = filtered
+              .where(
+                (e) =>
+                    (e['status']?.toString() ?? '').toLowerCase() == 'danger',
+              )
+              .length;
+          final perWarning = filtered
+              .where(
+                (e) =>
+                    (e['status']?.toString() ?? '').toLowerCase() == 'warning',
+              )
+              .length;
+          print(
+            '[EventService DEBUG] after period filter: danger=$perDanger warning=$perWarning total=${filtered.length}',
+          );
+        } catch (_) {}
+      } catch (_) {}
+
+      try {
+        // Also print confirm fields for the filtered set to spot which items
+        // were removed by the period filter.
         final sampleFiltered = filtered
             .take(50)
             .map(
@@ -237,12 +430,89 @@ class EventService {
                 row['event_id'] ??
                 row['eventId'];
             final ca = row['created_at'] ?? row['createdAt'];
-            print('[EventService.fetchLogs] row event=${id} created_at=$ca');
+            print('[EventService.fetchLogs] row event=$id created_at=$ca');
           } catch (_) {}
         }
       } catch (_) {}
 
-      return filtered.map(EventLog.fromJson).toList();
+      List<Map<String, dynamic>> finalList = List.from(filtered);
+      if (lifecycleState == null || lifecycleState.isEmpty) {
+        finalList = finalList.where((e) {
+          try {
+            final ls = (e['lifecycle_state'] ?? e['lifecycleState'])
+                ?.toString();
+            if (ls == null || ls.isEmpty) return true;
+            return ls.toLowerCase() != 'canceled';
+          } catch (_) {
+            return true;
+          }
+        }).toList();
+        try {
+          final finalIds = finalList
+              .map(
+                (e) => (e['eventId'] ?? e['event_id'] ?? e['id'])?.toString(),
+              )
+              .where((e) => e != null)
+              .cast<String>()
+              .toList();
+          final dropped = _normalizedIds
+              .where((id) => !finalIds.contains(id))
+              .toList();
+          print(
+            '[EventService.fetchLogs] FINAL length=${finalList.length} final_ids=${finalIds.take(50).toList()} dropped_count=${dropped.length} dropped_sample=${dropped.take(50).toList()}',
+          );
+          try {
+            if (dropped.isNotEmpty) {
+              // Map dropped ids back to normalized rows to see why they were removed
+              final droppedDetails = _normalizedIds
+                  .where((id) => dropped.contains(id))
+                  .map((id) {
+                    try {
+                      final row = normalized.firstWhere(
+                        (r) =>
+                            ((r['eventId'] ?? r['event_id'] ?? r['id'])
+                                ?.toString()) ==
+                            id,
+                      );
+                      final st = (row['status'] ?? '').toString();
+                      final ls =
+                          (row['lifecycle_state'] ??
+                                  row['lifecycleState'] ??
+                                  '')
+                              .toString();
+                      return {'id': id, 'status': st, 'lifecycle': ls};
+                    } catch (_) {
+                      return {'id': id};
+                    }
+                  })
+                  .toList();
+              print(
+                '[EventService DEBUG] dropped details sample=${droppedDetails.take(50).toList()}',
+              );
+            }
+          } catch (_) {}
+          try {
+            final finDanger = finalList
+                .where(
+                  (e) =>
+                      (e['status']?.toString() ?? '').toLowerCase() == 'danger',
+                )
+                .length;
+            final finWarning = finalList
+                .where(
+                  (e) =>
+                      (e['status']?.toString() ?? '').toLowerCase() ==
+                      'warning',
+                )
+                .length;
+            print(
+              '[EventService DEBUG] after lifecycle filter: danger=$finDanger warning=$finWarning total=${finalList.length}',
+            );
+          } catch (_) {}
+        } catch (_) {}
+      }
+
+      return finalList.map(EventLog.fromJson).toList();
     } catch (e) {
       print('[EventService.fetchLogs] Error fetching logs: $e');
       if (e is PostgrestException) {
@@ -375,11 +645,26 @@ class EventService {
       final serverMsg = _messageFromResponse(res);
 
       if (res.statusCode == 400) {
-        throw Exception('Yêu cầu không hợp lệ hoặc dữ liệu sai định dạng.');
+        throw Exception(
+          'Yêu cầu không hợp lệ hoặc dữ liệu sai định dạng. ${serverMsg}',
+        );
       } else if (res.statusCode == 403) {
-        throw Exception('Chỉ caregiver mới được phép gửi đề xuất.');
+        throw Exception(
+          'Chỉ caregiver mới được phép gửi đề xuất. ${serverMsg}',
+        );
       } else if (res.statusCode == 409) {
-        throw Exception('Đã có đề xuất chờ duyệt cho sự kiện này.');
+        // Server says there's already a pending proposal for this event.
+        // Log the full response body to help debugging and include details
+        // in the exception so the UI shows useful information.
+        try {
+          dev.log(
+            '[EventService] proposeEventStatus 409 response body: ${res.body}',
+            name: 'EventService',
+          );
+        } catch (_) {}
+        throw Exception(
+          'Đã có đề xuất chờ duyệt cho sự kiện này. ${serverMsg}',
+        );
       } else {
         throw Exception(serverMsg);
       }
@@ -432,6 +717,7 @@ class EventService {
       'eventDescription': row[EventEndpoints.eventDescription],
       'confidenceScore': row[EventEndpoints.confidenceScore] ?? 0,
       'status': row[EventEndpoints.status],
+      'lifecycle_state': row['lifecycle_state'] ?? row['lifecycleState'],
       'detectedAt': detectedAtIso,
       'confirm_status': row[EventEndpoints.confirmStatus],
     };
@@ -525,6 +811,34 @@ class EventService {
         name: 'EventService.fetchLogs',
         stackTrace: st,
       );
+    }
+  }
+
+  Future<EventLog> sendManualAlarm({
+    required String cameraId,
+    required String snapshotPath,
+    String? cameraName,
+    String? notes,
+    String? streamUrl,
+  }) async {
+    try {
+      final rds = EventsRemoteDataSource(api: _api);
+
+      final data = await rds.createManualAlert(
+        cameraId: cameraId,
+        imagePath: snapshotPath,
+        notes: notes ?? "Manual alarm triggered from LiveCameraScreen",
+        contextData: {
+          "camera_name": cameraName,
+          "stream_url": streamUrl,
+          "source": "manual_button",
+        },
+      );
+
+      return EventLog.fromJson(data);
+    } catch (e) {
+      print("❌ [EventService.sendManualAlarm] $e");
+      rethrow;
     }
   }
 }

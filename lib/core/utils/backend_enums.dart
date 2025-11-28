@@ -8,6 +8,12 @@ class BackendEnums {
         return 'Cảnh báo';
       case 'normal':
         return 'Bình thường';
+      case 'unknown':
+        return 'Không xác định';
+      case 'suspect':
+        return 'Đáng ngờ';
+      case 'abnormal':
+        return 'Bất thường';
       default:
         return status;
     }
@@ -81,4 +87,94 @@ class BackendEnums {
         return freq;
     }
   }
+
+  static String lifecycleStateToVietnamese(String? state) {
+    if (state == null || state.trim().isEmpty) return 'Không xác định';
+
+    switch (state.toUpperCase()) {
+      case 'CANCELED':
+        return 'Đã hủy';
+
+      case 'NOTIFIED':
+        return 'Đã gửi thông báo';
+
+      case 'AUTOCALLED':
+        return 'Đang gọi khẩn cấp tự động';
+
+      case 'ALARM_ACTIVATED':
+        return 'Chuông báo động đang kích hoạt';
+
+      case 'ACKNOWLEDGED':
+        return 'Đã phản hồi';
+
+      case 'EMERGENCY_RESPONSE_RECEIVED':
+        return 'Liên hệ khẩn cấp thành công';
+
+      case 'RESOLVED':
+        return 'Sự kiện đã được xử lý';
+
+      case 'EMERGENCY_ESCALATION_FAILED':
+        return 'Liên hệ khẩn cấp thất bại';
+
+      default:
+        return state;
+    }
+  }
+
+  static String skipDurationToVietnamese(String? code) {
+    if (code == null) return 'Không xác định';
+    switch (code) {
+      case '15m':
+        return '15 phút';
+      case '1h':
+        return '1 giờ';
+      case '8h':
+        return '8 giờ';
+      case '24h':
+        return '24 giờ';
+      case '2d':
+        return '2 ngày';
+      case '7d':
+        return '7 ngày';
+      case '30d':
+        return '30 ngày';
+      case 'until_change':
+        return 'Cho đến khi thay đổi';
+      case 'until_date':
+        return 'Đến ngày đã chọn';
+      default:
+        return code;
+    }
+  }
+
+  static String skipScopeToVietnamese(String? scope) {
+    if (scope == null) return 'Không xác định';
+    switch (scope) {
+      case 'item':
+        return 'Chỉ gợi ý này';
+      case 'type':
+        return 'Theo loại gợi ý';
+      case 'all':
+        return 'Tất cả gợi ý';
+      default:
+        return scope;
+    }
+  }
+
+  static const List<String> skipDurations = [
+    '15m',
+    '1h',
+    '8h',
+    '24h',
+    '2d',
+    '7d',
+    '30d',
+    'until_change',
+    'until_date',
+  ];
+
+  static const List<String> skipScopes = ['item', 'type', 'all'];
+
+  // Hằng số lifecycle được dùng chung ở client để tránh hardcode giá trị.
+  static const String lifecycleForwarded = 'Forwarded';
 }

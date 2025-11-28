@@ -27,7 +27,7 @@ class CustomBottomNavBar extends StatelessWidget {
     this.iconSize = 28,
     this.centerGap = 20,
     this.padding = const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
-    this.color = Colors.white,
+    this.color = AppTheme.caregiverPrimary,
     this.elevation = 12,
     this.notchMargin = 8,
     this.alignment = MainAxisAlignment.spaceAround,
@@ -154,7 +154,7 @@ class CustomBottomNavBar extends StatelessWidget {
                   children: [
                     Icon(
                       spec.icon,
-                      color: isSelected ? AppTheme.primaryBlue : Colors.grey,
+                      color: AppTheme.caregiverTextOnPrimary,
                       size: isSelected ? iconSize + 2 : iconSize,
                     ),
                     const SizedBox(height: 3),

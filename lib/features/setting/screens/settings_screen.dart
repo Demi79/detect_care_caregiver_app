@@ -1,4 +1,11 @@
+import 'package:detect_care_caregiver_app/core/network/api_client.dart';
 import 'package:detect_care_caregiver_app/features/activity_logs/screens/activity_logs_screen.dart';
+import 'package:detect_care_caregiver_app/features/auth/data/auth_storage.dart';
+import 'package:detect_care_caregiver_app/features/home/constants/filter_constants.dart';
+import 'package:detect_care_caregiver_app/features/home/repository/event_repository.dart';
+import 'package:detect_care_caregiver_app/features/home/screens/cancel_event_log_screen.dart';
+import 'package:detect_care_caregiver_app/features/home/service/event_service.dart';
+import 'package:detect_care_caregiver_app/features/patient/screens/sleep_checkin_screen.dart';
 import 'package:detect_care_caregiver_app/features/profile/screens/profile_screen.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
@@ -173,16 +180,90 @@ class _SettingsScreenState extends State<SettingsScreen> {
 
   Widget _otherSettingsSection() => SettingsCard(
     children: [
-      SettingsSwitchItem(
-        icon: Icons.dark_mode_outlined,
-        title: 'Chế độ ban đêm',
-        value: Provider.of<ThemeProvider>(context).isDark,
-        onChanged: (v) async {
-          final tp = Provider.of<ThemeProvider>(context, listen: false);
-          await tp.setDark(v);
-        },
-      ),
+      // SettingsSwitchItem(
+      //   icon: Icons.dark_mode_outlined,
+      //   title: 'Chế độ ban đêm',
+      //   value: Provider.of<ThemeProvider>(context).isDark,
+      //   onChanged: (v) async {
+      //     final tp = Provider.of<ThemeProvider>(context, listen: false);
+      //     await tp.setDark(v);
+      //   },
+      // ),
+      // const SettingsDivider(),
       const SettingsDivider(),
+      SettingsItem(
+        icon: Icons.bedtime_outlined,
+        title: 'Giờ ngủ',
+        onTap: () => Navigator.of(
+          context,
+        ).push(MaterialPageRoute(builder: (_) => SleepCheckinScreen())),
+      ),
+
+      // const SettingsDivider(),
+      // SettingsItem(
+      //   icon: Icons.event_busy,
+      //   title: 'Danh sách sự kiện đã hủy',
+      //   onTap: () async {
+      //     showDialog(
+      //       context: context,
+      //       barrierDismissible: false,
+      //       builder: (_) => const Center(child: CircularProgressIndicator()),
+      //     );
+
+      //     try {
+      //       final repo = EventRepository(
+      //         EventService(
+      //           ApiClient(tokenProvider: AuthStorage.getAccessToken),
+      //         ),
+      //       );
+      //       final events = await repo.getEvents(
+      //         page: 1,
+      //         limit: 200,
+      //         lifecycleState: 'CANCELED',
+      //       );
+      //       try {
+      //         print(
+      //           '[Settings] fetched CANCELED events count=${events.length}',
+      //         );
+      //         for (final ev in events) {
+      //           try {
+      //             print(
+      //               '[Settings] event id=${ev.eventId} status=${ev.status} detectedAt=${ev.detectedAt} createdAt=${ev.createdAt} confirm=${ev.confirmStatus} confirmationState=${ev.confirmationState}',
+      //             );
+      //             print('[Settings] event full map=${ev.toMapString()}');
+      //           } catch (e) {
+      //             print('[Settings] error printing event details: $e');
+      //           }
+      //         }
+      //       } catch (e) {
+      //         print('[Settings] error printing fetched events: $e');
+      //       }
+      //       if (mounted) Navigator.of(context).pop();
+      //       if (!mounted) return;
+      //       Navigator.of(context).push(
+      //         MaterialPageRoute(
+      //           builder: (_) => CancelEventLogScreen(
+      //             logs: events,
+      //             selectedDayRange: HomeFilters.defaultDayRange,
+      //             selectedStatus: HomeFilters.defaultStatus,
+      //             selectedPeriod: HomeFilters.defaultPeriod,
+      //             onRefresh: () {},
+      //             onStatusChanged: (_) {},
+      //             onDayRangeChanged: (_) {},
+      //             onPeriodChanged: (_) {},
+      //           ),
+      //         ),
+      //       );
+      //     } catch (e) {
+      //       if (mounted) Navigator.of(context).pop();
+      //       if (mounted) {
+      //         ScaffoldMessenger.of(context).showSnackBar(
+      //           SnackBar(content: Text('Lỗi tải danh sách đã hủy: $e')),
+      //         );
+      //       }
+      //     }
+      //   },
+      // ),
       SettingsItem(
         icon: Icons.security_outlined,
         title: 'Bảo mật',

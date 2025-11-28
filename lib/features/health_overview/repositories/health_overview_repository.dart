@@ -2,7 +2,7 @@ import 'package:detect_care_caregiver_app/features/health_overview/models/health
 
 abstract class HealthOverviewRepository {
   Future<HealthOverviewData> getOverview({
-    String? patientId,
+    String? customerId,
     String? startDate,
     String? endDate,
   });

@@ -83,6 +83,7 @@ class SupabaseService {
               }
 
               var mobileEvent = await _mapEventToMobile(row);
+
               if ((mobileEvent['event_id'] == null ||
                       (mobileEvent['event_id'] as String).isEmpty) ||
                   (mobileEvent['event_type'] == null ||
@@ -174,12 +175,13 @@ class SupabaseService {
     final snapshotId = s(raw['snapshot_id']);
     final notes = s(raw['notes']);
     final userId = s(raw['user_id']);
-    // allow event_type to be found in nested maps if missing
     String eventType = s(raw['event_type']) ?? '';
     double confidenceScore = d(raw['confidence_score']);
     final detectedAt = iso(raw['detected_at']);
     final createdAt = iso(raw['created_at']);
     final status = s(raw['status']) ?? 'detected';
+    final lifecycleState =
+        s(raw['lifecycle_state']) ?? s(raw['lifecycleState']);
 
     String? imageUrl;
     if (raw['snapshots'] is Map) {
@@ -210,7 +212,6 @@ class SupabaseService {
     final contextData = normMap(raw['context_data']);
     final boundingBoxes = normMap(raw['bounding_boxes']);
 
-    // Additional lifecycle / proposal / confirm fields
     final String? verifiedAt = iso(raw['verified_at']);
     final verifiedBy = s(raw['verified_by']);
     final String? acknowledgedAt = iso(raw['acknowledged_at']);
@@ -219,9 +220,9 @@ class SupabaseService {
     bool? confirmStatus;
     try {
       final rawConfirm = raw['confirm_status'];
-      if (rawConfirm == null)
+      if (rawConfirm == null) {
         confirmStatus = null;
-      else if (rawConfirm is bool)
+      } else if (rawConfirm is bool)
         confirmStatus = rawConfirm;
       else if (rawConfirm is num)
         confirmStatus = rawConfirm != 0;
@@ -319,6 +320,7 @@ class SupabaseService {
       'image_url': imageUrl,
       'snapshot_id': snapshotId,
       'camera_id': cameraId,
+      'lifecycle_state': lifecycleState,
     };
   }
 
@@ -381,9 +383,9 @@ class SupabaseService {
   Future<List<Map<String, dynamic>>> fetchRecentEvents({int limit = 20}) async {
     try {
       final select =
-          'event_id,event_type,confidence_score,detected_at,status,snapshot_id,'
-          'event_description,notes,created_at,detection_data,ai_analysis_result,context_data,bounding_boxes,'
-          'confirm_status,confirmation_state,pending_until,proposed_status,proposed_event_type,proposed_reason,proposed_by,'
+          'event_id,event_type,confidence_score,detected_at,status,lifecycle_state,snapshot_id, '
+          'event_description,notes,created_at,detection_data,ai_analysis_result,context_data,bounding_boxes, '
+          'confirm_status,confirmation_state,pending_until,proposed_status,proposed_event_type,proposed_reason,proposed_by, '
           'verified_at,verified_by,acknowledged_at,acknowledged_by,dismissed_at,user_id,camera_id';
       // 'snapshots(cloud_url,image_path,captured_at)';
 

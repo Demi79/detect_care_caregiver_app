@@ -365,6 +365,55 @@ class _CaregiverSettingsScreenState extends State<CaregiverSettingsScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
+      appBar: AppBar(
+        centerTitle: true,
+        backgroundColor: Colors.white,
+        elevation: 0,
+        shadowColor: Colors.black.withValues(alpha: 0.1),
+        leading: Container(
+          margin: const EdgeInsets.all(8),
+          decoration: BoxDecoration(
+            color: const Color(0xFFF8FAFC),
+            borderRadius: BorderRadius.circular(12),
+            border: Border.all(color: const Color(0xFFE2E8F0)),
+          ),
+          child: IconButton(
+            onPressed: () => Navigator.pop(context),
+            icon: const Icon(
+              Icons.arrow_back_ios_new,
+              color: Color(0xFF374151),
+              size: 18,
+            ),
+          ),
+        ),
+        title: const Text(
+          'Quyền được chia sẻ',
+          style: TextStyle(
+            color: Color(0xFF1E293B),
+            fontSize: 20,
+            fontWeight: FontWeight.w700,
+            letterSpacing: -0.5,
+          ),
+        ),
+        actions: [
+          Container(
+            margin: const EdgeInsets.all(8),
+            decoration: BoxDecoration(
+              color: const Color(0xFFF8FAFC),
+              borderRadius: BorderRadius.circular(12),
+              border: Border.all(color: const Color(0xFFE2E8F0)),
+            ),
+            child: IconButton(
+              onPressed: _loadPermissions,
+              icon: const Icon(
+                Icons.refresh,
+                color: Color(0xFF64748B),
+                size: 20,
+              ),
+            ),
+          ),
+        ],
+      ),
       backgroundColor: bgColor,
       body: _loading
           ? const Center(
