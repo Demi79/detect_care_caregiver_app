@@ -19,7 +19,7 @@ class ActivityScreen extends StatelessWidget {
             case 'warning':
               Navigator.pushReplacement(
                 context,
-                MaterialPageRoute(builder: (_) => WarningLogScreen()),
+                MaterialPageRoute(builder: (_) => const WarningLogScreen()),
               );
               break;
             case 'report':
@@ -31,6 +31,20 @@ class ActivityScreen extends StatelessWidget {
           }
         },
       ),
+    );
+  }
+}
+
+// Simple placeholder for the missing WarningLogScreen. Replace or extend
+// with the real implementation if available in the project.
+class WarningLogScreen extends StatelessWidget {
+  const WarningLogScreen({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(title: const Text('Cảnh báo')),
+      body: const Center(child: Text('Màn cảnh báo - chưa triển khai')),
     );
   }
 }

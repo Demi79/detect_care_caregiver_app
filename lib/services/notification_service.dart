@@ -63,7 +63,7 @@ class NotificationService {
           ? _soundResource
           : 'default';
       AppLogger.i(
-        '[NotificationService] Prepared notification: sound=$soundName urgent=$urgent playSound=$playSound',
+        '[NotificationService] Prepared notification: sound=$soundName urgent=$urgent',
       );
       AppLogger.d(
         '[NotificationService] NotificationDetails: android=$android iOS=$iOS',

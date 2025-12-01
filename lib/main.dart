@@ -310,7 +310,6 @@ Future<void> main() async {
         auth.onAssignmentLost = () async {
           try {
             auth.status = AuthStatus.assignVerified;
-            auth.notifyListeners();
 
             WidgetsBinding.instance.addPostFrameCallback((_) {
               showDialog(
