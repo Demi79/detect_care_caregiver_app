@@ -18,4 +18,9 @@ class AppConfig {
     if (v == 'false') return false;
     return flavor.toLowerCase() != 'production';
   }
+
+  /// Alarm control endpoint.
+  static String get alarmControlUrl =>
+      dotenv.env['ALARM_CONTROL_URL'] ??
+      'https://alarm.cicca.dpdns.org/api/alarm/control';
 }

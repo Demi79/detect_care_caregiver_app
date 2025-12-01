@@ -70,8 +70,9 @@ class EventsRemoteDataSource {
     );
     if (decoded is List) {
       print('[EventsRemoteDataSource] decoded list length=${decoded.length}');
-      if (decoded.isNotEmpty)
+      if (decoded.isNotEmpty) {
         print('[EventsRemoteDataSource] sample=${decoded.take(2).toList()}');
+      }
     } else if (decoded is Map) {
       print(
         '[EventsRemoteDataSource] decoded map keys=${decoded.keys.toList()}',
@@ -118,7 +119,7 @@ class EventsRemoteDataSource {
       for (final v in data.values) {
         if (v is List) {
           try {
-            return (v as List)
+            return (v)
                 .map<Map<String, dynamic>>(
                   (e) => Map<String, dynamic>.from(e as Map),
                 )

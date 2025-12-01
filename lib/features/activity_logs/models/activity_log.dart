@@ -32,19 +32,19 @@ class ActivityLog {
   });
 
   factory ActivityLog.fromJson(Map<String, dynamic> json) {
-    DateTime _parseTs(dynamic v) {
+    DateTime parseTs(dynamic v) {
       if (v is String && v.isNotEmpty) {
         return DateTime.parse(v);
       }
       return DateTime.fromMillisecondsSinceEpoch(0, isUtc: true);
     }
 
-    Map<String, dynamic> _m(dynamic v) =>
+    Map<String, dynamic> m(dynamic v) =>
         (v is Map) ? v.cast<String, dynamic>() : <String, dynamic>{};
 
     return ActivityLog(
       id: json['id'] as String,
-      timestamp: _parseTs(json['timestamp']),
+      timestamp: parseTs(json['timestamp']),
       actorId: json['actor_id'] as String,
       actorName: json['actor_name'] as String?,
       action: json['action'] as String,
@@ -54,7 +54,7 @@ class ActivityLog {
       message: json['message'] as String,
       severity: json['severity'] as String,
       actionEnum: json['action_enum'] as String?,
-      meta: _m(json['meta']),
+      meta: m(json['meta']),
       ip: json['ip'] as String?,
     );
   }

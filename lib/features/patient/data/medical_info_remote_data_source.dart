@@ -393,8 +393,8 @@ class MedicalInfoRemoteDataSource {
       print('[getSleepCheckins] HTTP status: ${res.statusCode}');
       print('[getSleepCheckins] Raw response body: ${res.body}');
       print('[getSleepCheckins] Decoded body: $body');
-      final _extracted = _api.extractDataFromResponse(res);
-      print('[getSleepCheckins] Extracted data: $_extracted');
+      final extracted = _api.extractDataFromResponse(res);
+      print('[getSleepCheckins] Extracted data: $extracted');
     } catch (e) {
       print('[getSleepCheckins] Error printing response: $e');
     }

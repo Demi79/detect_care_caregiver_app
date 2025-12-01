@@ -229,7 +229,7 @@ class AuthRemoteDataSource {
       {"userId": userId, "token": token, "type": "caregiver"},
     ];
 
-    bool _is2xx(int code) => code >= 200 && code < 300;
+    bool is2xx(int code) => code >= 200 && code < 300;
 
     final results = await Future.wait(
       payloads.map((body) {
@@ -241,7 +241,7 @@ class AuthRemoteDataSource {
       final res = results[i];
       final type = payloads[i]['type'];
 
-      bool ok = _is2xx(res.statusCode);
+      bool ok = is2xx(res.statusCode);
       bool successField = false;
       try {
         final m = json.decode(res.body);

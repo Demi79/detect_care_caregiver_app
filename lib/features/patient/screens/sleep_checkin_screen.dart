@@ -432,7 +432,7 @@ class _SleepCheckinScreenState extends State<SleepCheckinScreen> {
 
     DateTime? lastSleep;
 
-    void _addToDay(DateTime start, Duration dur) {
+    void addToDay(DateTime start, Duration dur) {
       final key = _formatDateKey(start.toLocal());
       final prev = totals[key] ?? Duration.zero;
       totals[key] = prev + dur;
@@ -442,14 +442,14 @@ class _SleepCheckinScreenState extends State<SleepCheckinScreen> {
       final t = _toDateTime(e.checkinAt ?? e.createdAt);
       if (e.state == 'sleep') {
         // Start a new sleep interval only if not already sleeping
-        if (lastSleep == null) lastSleep = t;
+        lastSleep ??= t;
       } else if (e.state == 'awake') {
         if (lastSleep != null) {
           final start = lastSleep;
           final end = t;
           if (end.isAfter(start)) {
             final dur = end.difference(start);
-            _addToDay(start, dur);
+            addToDay(start, dur);
           }
           lastSleep = null;
         }
@@ -461,7 +461,7 @@ class _SleepCheckinScreenState extends State<SleepCheckinScreen> {
       final now = DateTime.now();
       if (now.isAfter(lastSleep)) {
         final dur = now.difference(lastSleep);
-        _addToDay(lastSleep, dur);
+        addToDay(lastSleep, dur);
         ongoing.add(_formatDateKey(lastSleep.toLocal()));
       }
     }

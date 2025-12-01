@@ -1,22 +1,13 @@
-import 'package:detect_care_caregiver_app/core/config/app_config.dart';
-import 'package:detect_care_caregiver_app/core/theme/app_theme.dart';
-import 'package:detect_care_caregiver_app/features/auth/providers/auth_provider.dart';
-import 'package:detect_care_caregiver_app/features/fcm/services/fcm_registration.dart';
 import 'package:detect_care_caregiver_app/features/profile/model/user_profile.dart';
 import 'package:detect_care_caregiver_app/features/profile/repositories/user_repositories.dart';
 import 'package:detect_care_caregiver_app/features/profile/screens/edit_user_screen.dart';
 import 'package:detect_care_caregiver_app/features/profile/services/user_services.dart';
 import 'package:flutter/material.dart';
-import 'package:provider/provider.dart';
 
 import 'package:detect_care_caregiver_app/core/network/api_client.dart';
 import 'package:detect_care_caregiver_app/features/auth/data/auth_storage.dart';
-import 'package:detect_care_caregiver_app/features/fcm/data/fcm_endpoints.dart';
-import 'package:detect_care_caregiver_app/features/fcm/data/fcm_remote_data_source.dart';
-import 'package:detect_care_caregiver_app/features/assignments/data/assignments_remote_data_source.dart';
 import 'package:detect_care_caregiver_app/features/profile/data/user_remote_data_source.dart';
 
-import 'package:flutter/material.dart';
 
 class ProfileScreen extends StatefulWidget {
   final String? userId;

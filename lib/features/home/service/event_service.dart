@@ -206,15 +206,15 @@ class EventService {
         );
       } catch (_) {}
 
-      List<String> _normalizedIds = [];
+      List<String> normalizedIds = [];
       try {
-        _normalizedIds = normalized
+        normalizedIds = normalized
             .map((e) => (e['eventId'] ?? e['event_id'] ?? e['id'])?.toString())
             .where((e) => e != null)
             .cast<String>()
             .toList();
         print(
-          '[EventService.fetchLogs] NORMALIZED_IDS len=${_normalizedIds.length} sample=${_normalizedIds.take(50).toList()}',
+          '[EventService.fetchLogs] NORMALIZED_IDS len=${normalizedIds.length} sample=${normalizedIds.take(50).toList()}',
         );
       } catch (_) {}
 
@@ -455,7 +455,7 @@ class EventService {
               .where((e) => e != null)
               .cast<String>()
               .toList();
-          final dropped = _normalizedIds
+          final dropped = normalizedIds
               .where((id) => !finalIds.contains(id))
               .toList();
           print(
@@ -464,7 +464,7 @@ class EventService {
           try {
             if (dropped.isNotEmpty) {
               // Map dropped ids back to normalized rows to see why they were removed
-              final droppedDetails = _normalizedIds
+              final droppedDetails = normalizedIds
                   .where((id) => dropped.contains(id))
                   .map((id) {
                     try {
@@ -622,7 +622,7 @@ class EventService {
         }
       }
 
-      String _messageFromResponse(http.Response r) {
+      String messageFromResponse(http.Response r) {
         try {
           final decoded = _api.extractDataFromResponse(r);
           if (decoded is Map) {
@@ -642,15 +642,15 @@ class EventService {
         return 'Lỗi không xác định (${r.statusCode}).';
       }
 
-      final serverMsg = _messageFromResponse(res);
+      final serverMsg = messageFromResponse(res);
 
       if (res.statusCode == 400) {
         throw Exception(
-          'Yêu cầu không hợp lệ hoặc dữ liệu sai định dạng. ${serverMsg}',
+          'Yêu cầu không hợp lệ hoặc dữ liệu sai định dạng. $serverMsg',
         );
       } else if (res.statusCode == 403) {
         throw Exception(
-          'Chỉ caregiver mới được phép gửi đề xuất. ${serverMsg}',
+          'Chỉ caregiver mới được phép gửi đề xuất. $serverMsg',
         );
       } else if (res.statusCode == 409) {
         // Server says there's already a pending proposal for this event.
@@ -663,7 +663,7 @@ class EventService {
           );
         } catch (_) {}
         throw Exception(
-          'Đã có đề xuất chờ duyệt cho sự kiện này. ${serverMsg}',
+          'Đã có đề xuất chờ duyệt cho sự kiện này. $serverMsg',
         );
       } else {
         throw Exception(serverMsg);

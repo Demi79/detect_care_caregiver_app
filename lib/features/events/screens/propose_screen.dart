@@ -4,8 +4,7 @@ import 'package:image_picker/image_picker.dart';
 import 'package:detect_care_caregiver_app/core/theme/app_theme.dart';
 import 'package:detect_care_caregiver_app/features/home/repository/event_repository.dart';
 import 'package:detect_care_caregiver_app/features/home/service/event_service.dart';
-import 'package:detect_care_caregiver_app/core/ui/overlay_toast.dart';
-import '../../../core/utils/backend_enums.dart' as _be;
+import '../../../core/utils/backend_enums.dart' as be;
 import 'package:detect_care_caregiver_app/features/home/models/log_entry.dart';
 
 class ProposeScreen extends StatefulWidget {
@@ -276,7 +275,7 @@ class _ProposeScreenState extends State<ProposeScreen> {
                               ),
                             ),
                             Text(
-                              _be.BackendEnums.statusToVietnamese(data.status),
+                              be.BackendEnums.statusToVietnamese(data.status),
                               style: TextStyle(
                                 fontSize: 14,
                                 fontWeight: FontWeight.w600,
@@ -296,7 +295,7 @@ class _ProposeScreenState extends State<ProposeScreen> {
                               ),
                             ),
                             Text(
-                              _be.BackendEnums.eventTypeToVietnamese(
+                              be.BackendEnums.eventTypeToVietnamese(
                                 data.eventType,
                               ),
                               style: const TextStyle(
@@ -515,7 +514,7 @@ class _ProposeScreenState extends State<ProposeScreen> {
                                         ),
                                       ),
                                     Text(
-                                      _be.BackendEnums.eventTypeToVietnamese(
+                                      be.BackendEnums.eventTypeToVietnamese(
                                         type,
                                       ),
                                       style: TextStyle(

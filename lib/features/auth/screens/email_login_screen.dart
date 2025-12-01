@@ -5,7 +5,6 @@ import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 import 'package:loading_animation_widget/loading_animation_widget.dart';
 import 'package:provider/provider.dart';
-import '../../../widgets/auth_gate.dart';
 import '../providers/auth_provider.dart';
 import '../utils/validators.dart';
 

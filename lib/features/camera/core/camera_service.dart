@@ -112,7 +112,7 @@ class CameraService {
 
     try {
       final bytes = await _controller!.takeSnapshot();
-      if (bytes == null || bytes.isEmpty) return null;
+      if (bytes.isEmpty) return null;
 
       final thumbsDir = await CameraHelpers.getThumbsDirectory();
       final timestamp = DateTime.now().millisecondsSinceEpoch;

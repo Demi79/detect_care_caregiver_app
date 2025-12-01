@@ -3,7 +3,6 @@ import 'dart:async';
 import 'package:detect_care_caregiver_app/core/services/direct_caller.dart';
 import 'package:detect_care_caregiver_app/core/utils/logger.dart';
 import 'package:detect_care_caregiver_app/features/auth/data/auth_storage.dart';
-import 'package:detect_care_caregiver_app/features/auth/screens/phone_login_screen.dart';
 import 'package:detect_care_caregiver_app/features/camera/core/camera_core.dart';
 import 'package:detect_care_caregiver_app/features/camera/models/camera_entry.dart';
 import 'package:detect_care_caregiver_app/features/camera/screens/camera_timeline_screen.dart';
@@ -14,10 +13,6 @@ import 'package:detect_care_caregiver_app/features/camera/widgets/quality_badge.
 import 'package:detect_care_caregiver_app/features/camera/widgets/status_chip.dart';
 import 'package:detect_care_caregiver_app/features/emergency_contacts/data/emergency_contacts_remote_data_source.dart';
 import 'package:detect_care_caregiver_app/features/home/service/event_service.dart';
-import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
-import 'package:flutter_vlc_player/flutter_vlc_player.dart';
-import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_vlc_player/flutter_vlc_player.dart';

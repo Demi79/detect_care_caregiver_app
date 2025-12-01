@@ -338,8 +338,9 @@ class _EventDetailScreenState extends State<EventDetailScreen> {
                               final ctxData = _event?.contextData ?? {};
                               dynamic first(Map m, List<String> keys) {
                                 for (final k in keys) {
-                                  if (m.containsKey(k) && m[k] != null)
+                                  if (m.containsKey(k) && m[k] != null) {
                                     return m[k];
+                                  }
                                 }
                                 return null;
                               }

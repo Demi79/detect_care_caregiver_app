@@ -245,8 +245,7 @@ class FilterBar extends StatelessWidget {
       builder: (context, child) {
         return Theme(
           data: Theme.of(context).copyWith(
-            colorScheme: ColorScheme.light(primary: AppTheme.primaryBlue),
-            dialogBackgroundColor: const Color(0xFFF8FAFC),
+            colorScheme: ColorScheme.light(primary: AppTheme.primaryBlue), dialogTheme: DialogThemeData(backgroundColor: const Color(0xFFF8FAFC)),
           ),
           child: child!,
         );
@@ -284,8 +283,7 @@ class FilterBar extends StatelessWidget {
       builder: (context, child) {
         return Theme(
           data: Theme.of(context).copyWith(
-            colorScheme: ColorScheme.light(primary: AppTheme.primaryBlue),
-            dialogBackgroundColor: const Color(0xFFF8FAFC),
+            colorScheme: ColorScheme.light(primary: AppTheme.primaryBlue), dialogTheme: DialogThemeData(backgroundColor: const Color(0xFFF8FAFC)),
           ),
           child: child!,
         );

@@ -149,13 +149,14 @@ Future<void> main() async {
 
     // 4) Supabase
     var supabaseUrl = AppConfig.supabaseUrl;
-    if (supabaseUrl.endsWith('/'))
+    if (supabaseUrl.endsWith('/')) {
       supabaseUrl = supabaseUrl.substring(0, supabaseUrl.length - 1);
+    }
     try {
       final uri = Uri.parse(supabaseUrl);
       if (uri.hasPort && uri.port != 0) {
       } else {
-        supabaseUrl = '${supabaseUrl}:443';
+        supabaseUrl = '$supabaseUrl:443';
       }
     } catch (_) {
       supabaseUrl = AppConfig.supabaseUrl;
@@ -249,10 +250,10 @@ Future<void> main() async {
   // call this callback. It shows a brief Vietnamese message then logs out and
   // navigates to the AuthGate. A simple reentrancy guard prevents duplicate
   // handling when multiple requests fail at once.
-  bool _unauthInProgress = false;
+  bool unauthInProgress = false;
   ApiClient.onUnauthenticated = () async {
-    if (_unauthInProgress) return;
-    _unauthInProgress = true;
+    if (unauthInProgress) return;
+    unauthInProgress = true;
     try {
       final navigator = NavigatorKey.navigatorKey.currentState;
       if (navigator == null) return;
@@ -296,7 +297,7 @@ Future<void> main() async {
     } catch (e) {
       debugPrint('ApiClient.onUnauthenticated handler failed: $e');
     } finally {
-      _unauthInProgress = false;
+      unauthInProgress = false;
     }
   };
   try {

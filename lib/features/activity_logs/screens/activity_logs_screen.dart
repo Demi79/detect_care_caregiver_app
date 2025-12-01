@@ -1,4 +1,3 @@
-import 'dart:convert';
 import 'package:flutter/material.dart';
 
 import 'package:detect_care_caregiver_app/features/activity_logs/data/activity_logs_remote_data_source.dart';
@@ -366,7 +365,9 @@ class _ActivityLogsScreenState extends State<ActivityLogsScreen> {
 
   List<String> _uniqueActions() {
     final set = <String>{};
-    for (final e in _logs) set.add(e.action);
+    for (final e in _logs) {
+      set.add(e.action);
+    }
     final list = set.toList()..sort();
     return list;
   }
@@ -1003,7 +1004,7 @@ class _ErrorView extends StatelessWidget {
               ),
             ),
             const SizedBox(height: 24),
-            Container(
+            SizedBox(
               width: double.infinity,
               height: 48,
               child: ElevatedButton.icon(

@@ -1,4 +1,3 @@
-import 'package:detect_care_caregiver_app/features/home/screens/high_confidence_events_screen.dart';
 import 'package:flutter/material.dart';
 
 import '../../../features/health_overview/screens/health_overview_screen.dart';

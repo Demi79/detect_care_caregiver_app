@@ -4,10 +4,8 @@ import 'package:provider/provider.dart';
 import 'package:detect_care_caregiver_app/features/home/screens/home_screen.dart';
 import 'package:detect_care_caregiver_app/features/assignments/data/assignments_remote_data_source.dart';
 import 'package:detect_care_caregiver_app/features/auth/providers/auth_provider.dart';
-import 'package:detect_care_caregiver_app/features/auth/data/auth_storage.dart';
 import 'package:detect_care_caregiver_app/widgets/auth_gate.dart';
 import 'package:detect_care_caregiver_app/core/utils/backend_enums.dart';
-import 'package:detect_care_caregiver_app/core/events/app_events.dart';
 
 class PendingAssignmentsScreen extends StatefulWidget {
   const PendingAssignmentsScreen({super.key});

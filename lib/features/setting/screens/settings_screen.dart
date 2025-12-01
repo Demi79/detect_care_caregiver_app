@@ -1,15 +1,7 @@
-import 'package:detect_care_caregiver_app/core/network/api_client.dart';
 import 'package:detect_care_caregiver_app/features/activity_logs/screens/activity_logs_screen.dart';
-import 'package:detect_care_caregiver_app/features/auth/data/auth_storage.dart';
-import 'package:detect_care_caregiver_app/features/home/constants/filter_constants.dart';
-import 'package:detect_care_caregiver_app/features/home/repository/event_repository.dart';
-import 'package:detect_care_caregiver_app/features/home/screens/cancel_event_log_screen.dart';
-import 'package:detect_care_caregiver_app/features/home/service/event_service.dart';
 import 'package:detect_care_caregiver_app/features/patient/screens/sleep_checkin_screen.dart';
 import 'package:detect_care_caregiver_app/features/profile/screens/profile_screen.dart';
 import 'package:flutter/material.dart';
-import 'package:provider/provider.dart';
-import 'package:detect_care_caregiver_app/core/theme/theme_provider.dart';
 
 import 'package:detect_care_caregiver_app/features/patient/screens/patient_profile_screen.dart';
 import 'package:detect_care_caregiver_app/features/shared_permissions/screens/caregiver_settings_screen.dart';
@@ -17,7 +9,6 @@ import 'package:detect_care_caregiver_app/features/shared_permissions/screens/ca
 import '../widgets/settings_card.dart';
 import '../widgets/settings_divider.dart';
 import '../widgets/settings_item.dart';
-import '../widgets/settings_switch_item.dart';
 
 class SettingsScreen extends StatefulWidget {
   const SettingsScreen({super.key});

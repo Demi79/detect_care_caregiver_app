@@ -1,12 +1,10 @@
 import 'dart:async';
-import 'dart:convert';
 
 import 'package:detect_care_caregiver_app/core/network/api_client.dart';
 import 'package:detect_care_caregiver_app/features/auth/data/auth_storage.dart';
 import 'package:detect_care_caregiver_app/features/auth/models/login_result.dart';
 import 'package:detect_care_caregiver_app/features/auth/models/user.dart';
 import 'package:detect_care_caregiver_app/features/auth/repositories/auth_repository.dart';
-import 'package:detect_care_caregiver_app/services/push_service.dart';
 import 'package:detect_care_caregiver_app/features/assignments/data/assignments_remote_data_source.dart';
 import 'package:flutter/foundation.dart';
 import 'package:supabase_flutter/supabase_flutter.dart' hide User;
@@ -405,13 +403,15 @@ class AuthProvider extends ChangeNotifier {
               if (error != null) {
                 print('[Auth] Supabase invitation channel error: $error');
                 Future.delayed(const Duration(seconds: 5), () {
-                  if (_invitationChannel != null)
+                  if (_invitationChannel != null) {
                     _invitationChannel!.subscribe();
+                  }
                 });
                 return;
               }
-              if (kDebugMode)
+              if (kDebugMode) {
                 print('[Auth] invitation channel status: $status');
+              }
             });
     } catch (e) {
       print('[Auth] _ensureInvitationSubscription failed: $e');

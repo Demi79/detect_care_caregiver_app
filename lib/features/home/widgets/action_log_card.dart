@@ -8,17 +8,17 @@ import 'package:detect_care_caregiver_app/features/events/screens/propose_screen
 import 'package:detect_care_caregiver_app/features/home/repository/event_repository.dart';
 import 'package:permission_handler/permission_handler.dart';
 import 'package:url_launcher/url_launcher.dart';
-import '../../../main.dart';
 import 'package:detect_care_caregiver_app/core/events/app_events.dart';
 import 'package:detect_care_caregiver_app/core/ui/overlay_toast.dart';
 import 'package:detect_care_caregiver_app/features/home/service/event_service.dart';
 import 'package:flutter/material.dart';
 import '../../../core/theme/app_theme.dart';
-import '../../../core/utils/backend_enums.dart' as _be;
+import '../../../core/utils/backend_enums.dart' as be;
 import 'package:detect_care_caregiver_app/features/home/models/event_log.dart';
 import 'package:detect_care_caregiver_app/features/home/service/event_images_loader.dart';
 import 'package:detect_care_caregiver_app/features/home/models/log_entry.dart';
 import 'package:detect_care_caregiver_app/features/events/data/events_remote_data_source.dart';
+import 'package:detect_care_caregiver_app/features/alarm/data/alarm_remote_data_source.dart';
 
 class _ElevatedCard extends StatelessWidget {
   final Widget child;
@@ -116,7 +116,7 @@ class ActionLogCard extends StatelessWidget {
                                 borderRadius: BorderRadius.circular(18),
                               ),
                               child: Text(
-                                _be.BackendEnums.lifecycleStateToVietnamese(
+                                be.BackendEnums.lifecycleStateToVietnamese(
                                   data.lifecycleState,
                                 ),
                                 style: const TextStyle(fontSize: 13),
@@ -165,8 +165,9 @@ class ActionLogCard extends StatelessWidget {
                                     alertLevel: 1,
                                   ),
                                 );
-                                if (any.phone.trim().isNotEmpty)
+                                if (any.phone.trim().isNotEmpty) {
                                   phoneToCall = any.phone.trim();
+                                }
                               }
                             }
                           } catch (e) {
@@ -271,7 +272,7 @@ class ActionLogCard extends StatelessWidget {
                           ),
                           const SizedBox(height: 4),
                           _eventTypeChip(
-                            _be.BackendEnums.eventTypeToVietnamese(
+                            be.BackendEnums.eventTypeToVietnamese(
                               data.eventType,
                             ),
                             typeColor,
@@ -363,7 +364,7 @@ class ActionLogCard extends StatelessWidget {
           ),
           const SizedBox(width: 6),
           Text(
-            _be.BackendEnums.statusToVietnamese(status),
+            be.BackendEnums.statusToVietnamese(status),
             style: const TextStyle(
               color: Colors.white,
               fontSize: 11,
@@ -534,7 +535,7 @@ class ActionLogCard extends StatelessWidget {
       case 'seizure':
         return 'Phát hiện co giật';
       default:
-        return _be.BackendEnums.eventTypeToVietnamese(t);
+        return be.BackendEnums.eventTypeToVietnamese(t);
     }
   }
 
@@ -562,7 +563,7 @@ class ActionLogCard extends StatelessWidget {
 
       final found = <String, dynamic>{};
 
-      void _scanMap(Map? m, String prefix) {
+      void scanMap(Map? m, String prefix) {
         if (m == null || m.isEmpty) return;
         for (final k in m.keys) {
           final lk = k.toString().toLowerCase();
@@ -576,9 +577,9 @@ class ActionLogCard extends StatelessWidget {
         }
       }
 
-      _scanMap(data.detectionData, 'detectionData');
-      _scanMap(data.contextData, 'contextData');
-      _scanMap(data.aiAnalysisResult, 'aiAnalysisResult');
+      scanMap(data.detectionData, 'detectionData');
+      scanMap(data.contextData, 'contextData');
+      scanMap(data.aiAnalysisResult, 'aiAnalysisResult');
       if (data.boundingBoxes.isNotEmpty) {
         found['boundingBoxes'] = data.boundingBoxes;
       }
@@ -703,7 +704,7 @@ class ActionLogCard extends StatelessWidget {
                                 crossAxisAlignment: CrossAxisAlignment.start,
                                 children: [
                                   _eventTypeChip(
-                                    _be.BackendEnums.eventTypeToVietnamese(
+                                    be.BackendEnums.eventTypeToVietnamese(
                                       data.eventType,
                                     ),
                                     typeColor,
@@ -721,7 +722,7 @@ class ActionLogCard extends StatelessWidget {
                                           .isNotEmpty)
                                         Tooltip(
                                           message:
-                                              _be.BackendEnums.lifecycleStateToVietnamese(
+                                              be.BackendEnums.lifecycleStateToVietnamese(
                                                 data.lifecycleState,
                                               ),
                                           child: _lifecycleChip(
@@ -854,7 +855,7 @@ class ActionLogCard extends StatelessWidget {
                                 .isNotEmpty)
                               _kvRow(
                                 'Hiện tại sự kiện',
-                                _be.BackendEnums.lifecycleStateToVietnamese(
+                                be.BackendEnums.lifecycleStateToVietnamese(
                                   _normalizeLifecycle(data.lifecycleState),
                                 ),
                                 Colors.grey.shade600,
@@ -862,14 +863,14 @@ class ActionLogCard extends StatelessWidget {
                               ),
                             _kvRow(
                               'Trạng thái',
-                              _be.BackendEnums.statusToVietnamese(data.status),
+                              be.BackendEnums.statusToVietnamese(data.status),
                               statusColor,
                               Icons.flag_outlined,
                             ),
 
                             _kvRow(
                               'Sự kiện',
-                              _be.BackendEnums.eventTypeToVietnamese(
+                              be.BackendEnums.eventTypeToVietnamese(
                                 data.eventType,
                               ),
                               typeColor,
@@ -1110,6 +1111,209 @@ class ActionLogCard extends StatelessWidget {
                     ),
                   ),
 
+                  // Alarm control buttons (activate / cancel)
+                  Padding(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 20,
+                      vertical: 8,
+                    ),
+                    child: Column(
+                      children: [
+                        SizedBox(
+                          width: double.infinity,
+                          child: ElevatedButton.icon(
+                            onPressed: () async {
+                              final messenger = ScaffoldMessenger.of(context);
+                              final confirm = await showDialog<bool>(
+                                context: context,
+                                builder: (dCtx) => AlertDialog(
+                                  title: const Text('Xác nhận'),
+                                  content: const Text(
+                                    'Bạn có muốn kích hoạt báo động cho sự kiện này không?',
+                                  ),
+                                  actions: [
+                                    TextButton(
+                                      onPressed: () =>
+                                          Navigator.of(dCtx).pop(false),
+                                      child: const Text('Hủy'),
+                                    ),
+                                    ElevatedButton(
+                                      onPressed: () =>
+                                          Navigator.of(dCtx).pop(true),
+                                      child: const Text('Xác nhận'),
+                                    ),
+                                  ],
+                                ),
+                              );
+                              if (confirm != true) return;
+
+                              try {
+                                final userId =
+                                    await AuthStorage.getUserId() ?? '';
+                                final ds = AlarmRemoteDataSource();
+                                final ok = await ds.setAlarm(
+                                  eventId: data.eventId,
+                                  userId: userId,
+                                  cameraId: data.cameraId,
+                                  enabled: true,
+                                );
+
+                                if (ok) {
+                                  try {
+                                    await EventsRemoteDataSource()
+                                        .updateEventLifecycle(
+                                          eventId: data.eventId,
+                                          lifecycleState: 'ALARM_ACTIVATED',
+                                        );
+                                  } catch (_) {}
+
+                                  messenger.showSnackBar(
+                                    SnackBar(
+                                      content: const Text(
+                                        'Đã kích hoạt báo động',
+                                      ),
+                                      backgroundColor: Colors.green.shade600,
+                                    ),
+                                  );
+
+                                  try {
+                                    AppEvents.instance.notifyEventsChanged();
+                                  } catch (_) {}
+                                  if (onUpdated != null) onUpdated!('alarm');
+                                } else {
+                                  messenger.showSnackBar(
+                                    SnackBar(
+                                      content: const Text(
+                                        'Kích hoạt báo động thất bại',
+                                      ),
+                                      backgroundColor: Colors.red.shade600,
+                                    ),
+                                  );
+                                }
+                              } catch (e) {
+                                final messenger = ScaffoldMessenger.of(context);
+                                messenger.showSnackBar(
+                                  SnackBar(
+                                    content: Text(
+                                      'Lỗi khi kích hoạt báo động: $e',
+                                    ),
+                                    backgroundColor: Colors.red.shade600,
+                                  ),
+                                );
+                              }
+                            },
+                            icon: const Icon(
+                              Icons.notifications_active_outlined,
+                              size: 18,
+                            ),
+                            label: const Text('Kích hoạt báo động'),
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: Colors.red.shade600,
+                              foregroundColor: Colors.white,
+                              elevation: 0,
+                              padding: const EdgeInsets.symmetric(vertical: 12),
+                              shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(12),
+                              ),
+                            ),
+                          ),
+                        ),
+                        const SizedBox(height: 8),
+                        SizedBox(
+                          width: double.infinity,
+                          child: OutlinedButton.icon(
+                            onPressed: () async {
+                              final messenger = ScaffoldMessenger.of(context);
+                              final confirm = await showDialog<bool>(
+                                context: context,
+                                builder: (dCtx) => AlertDialog(
+                                  title: const Text('Xác nhận'),
+                                  content: const Text(
+                                    'Bạn có muốn dừng báo động cho sự kiện này không?',
+                                  ),
+                                  actions: [
+                                    TextButton(
+                                      onPressed: () =>
+                                          Navigator.of(dCtx).pop(false),
+                                      child: const Text('Hủy'),
+                                    ),
+                                    ElevatedButton(
+                                      onPressed: () =>
+                                          Navigator.of(dCtx).pop(true),
+                                      child: const Text('Xác nhận'),
+                                    ),
+                                  ],
+                                ),
+                              );
+                              if (confirm != true) return;
+
+                              try {
+                                final userId =
+                                    await AuthStorage.getUserId() ?? '';
+                                final ds = AlarmRemoteDataSource();
+                                final ok = await ds.cancelAlarm(
+                                  eventId: data.eventId,
+                                  userId: userId,
+                                  cameraId: data.cameraId,
+                                );
+
+                                if (ok) {
+                                  try {
+                                    await EventsRemoteDataSource().cancelEvent(
+                                      eventId: data.eventId,
+                                    );
+                                  } catch (_) {}
+
+                                  messenger.showSnackBar(
+                                    SnackBar(
+                                      content: const Text('Đã dừng báo động'),
+                                      backgroundColor: Colors.green.shade600,
+                                    ),
+                                  );
+
+                                  try {
+                                    AppEvents.instance.notifyEventsChanged();
+                                  } catch (_) {}
+                                  if (onUpdated != null)
+                                    onUpdated!('cancel_alarm');
+                                } else {
+                                  messenger.showSnackBar(
+                                    SnackBar(
+                                      content: const Text(
+                                        'Dừng báo động thất bại',
+                                      ),
+                                      backgroundColor: Colors.red.shade600,
+                                    ),
+                                  );
+                                }
+                              } catch (e) {
+                                messenger.showSnackBar(
+                                  SnackBar(
+                                    content: Text('Lỗi khi dừng báo động: $e'),
+                                    backgroundColor: Colors.red.shade600,
+                                  ),
+                                );
+                              }
+                            },
+                            icon: const Icon(
+                              Icons.notifications_off_outlined,
+                              size: 18,
+                            ),
+                            label: const Text('Dừng báo động'),
+                            style: OutlinedButton.styleFrom(
+                              foregroundColor: Colors.grey.shade800,
+                              padding: const EdgeInsets.symmetric(vertical: 12),
+                              side: BorderSide(color: Colors.grey.shade300),
+                              shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(12),
+                              ),
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+
                   // // Confirm toggle
                   // Padding(
                   //   padding: const EdgeInsets.fromLTRB(20, 6, 20, 8),
@@ -1238,7 +1442,7 @@ class ActionLogCard extends StatelessWidget {
   Widget _lifecycleChip(String? lifecycle) {
     final norm = _normalizeLifecycle(lifecycle);
     if (norm.isEmpty) return const SizedBox.shrink();
-    final label = _be.BackendEnums.lifecycleStateToVietnamese(norm);
+    final label = be.BackendEnums.lifecycleStateToVietnamese(norm);
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
       decoration: BoxDecoration(
@@ -1456,7 +1660,7 @@ class ActionLogCard extends StatelessWidget {
                     const SizedBox(height: 18),
 
                     Text(
-                      'Trạng thái hiện tại: ${_be.BackendEnums.statusToVietnamese(data.status)}',
+                      'Trạng thái hiện tại: ${be.BackendEnums.statusToVietnamese(data.status)}',
                       style: TextStyle(
                         fontWeight: FontWeight.w600,
                         color: AppTheme.getStatusColor(data.status),
@@ -1526,7 +1730,7 @@ class ActionLogCard extends StatelessWidget {
                     const SizedBox(height: 20),
 
                     Text(
-                      'Loại hiện tại: ${_be.BackendEnums.eventTypeToVietnamese(data.eventType)}',
+                      'Loại hiện tại: ${be.BackendEnums.eventTypeToVietnamese(data.eventType)}',
                       style: TextStyle(
                         fontWeight: FontWeight.w600,
                         color: Colors.blue.shade600,
@@ -1552,7 +1756,7 @@ class ActionLogCard extends StatelessWidget {
                             runSpacing: 10,
                             children: availableEventTypes.map((type) {
                               final label =
-                                  _be.BackendEnums.eventTypeToVietnamese(type);
+                                  be.BackendEnums.eventTypeToVietnamese(type);
                               final isSelected = selectedEventType == type;
 
                               return GestureDetector(

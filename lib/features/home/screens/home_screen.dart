@@ -4,7 +4,6 @@ import 'dart:developer' as dev;
 import 'package:detect_care_caregiver_app/core/network/api_client.dart';
 import 'package:detect_care_caregiver_app/core/theme/app_theme.dart';
 import 'package:detect_care_caregiver_app/core/widgets/custom_bottom_nav_bar.dart';
-import 'package:detect_care_caregiver_app/features/activity_logs/screens/activity_logs_screen.dart';
 import 'package:detect_care_caregiver_app/features/assignments/screens/assignments_screen.dart';
 import 'package:detect_care_caregiver_app/features/home/screens/pending_assignment_screen.dart';
 import 'package:detect_care_caregiver_app/features/auth/data/auth_storage.dart';

@@ -115,7 +115,7 @@ class _CaregiverSettingsScreenState extends State<CaregiverSettingsScreen> {
       } else {
         // payload shape unknown, try accessing common fields
         try {
-          data = payload.newRecord ?? payload.record ?? null;
+          data = payload.newRecord ?? payload.record;
         } catch (_) {
           data = null;
         }

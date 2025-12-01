@@ -1,5 +1,4 @@
 import 'package:detect_care_caregiver_app/features/patient/models/medical_info.dart';
-import 'package:detect_care_caregiver_app/features/patient/screens/update_patient_info_screen.dart';
 import 'package:detect_care_caregiver_app/core/utils/date_utils.dart';
 import 'package:flutter/material.dart';
 
