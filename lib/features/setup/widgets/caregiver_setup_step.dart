@@ -457,7 +457,7 @@ class _CaregiverSetupStepState extends State<CaregiverSetupStep>
     required ValueChanged<String?> onChanged,
   }) {
     return DropdownButtonFormField<String>(
-      value: value,
+      initialValue: value,
       onChanged: onChanged,
       items: items.map((item) {
         return DropdownMenuItem(value: item, child: Text(item));

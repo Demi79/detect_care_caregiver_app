@@ -8,8 +8,7 @@ plugins {
 android {
     namespace = "com.example.detect_care_caregiver_app"
     compileSdk = flutter.compileSdkVersion
-    // 1. Nâng NDK lên 27.0.12077973
-    ndkVersion = "27.0.12077973"
+    ndkVersion = flutter.ndkVersion
 
     compileOptions {
         // Java 11

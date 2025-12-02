@@ -306,7 +306,7 @@ class _NotificationSettingsScreenState extends State<NotificationSettingsScreen>
                 }
               });
             },
-            activeColor: Colors.white,
+            activeThumbColor: Colors.white,
             activeTrackColor: const Color(0xFF2E7BF0),
             inactiveThumbColor: const Color(0xFFD1D5DB),
             inactiveTrackColor: const Color(0xFFF3F4F6),
@@ -526,7 +526,7 @@ class _NotificationSettingsScreenState extends State<NotificationSettingsScreen>
           Switch(
             value: value,
             onChanged: onChanged,
-            activeColor: Colors.white,
+            activeThumbColor: Colors.white,
             activeTrackColor: color,
             inactiveThumbColor: const Color(0xFFD1D5DB),
             inactiveTrackColor: const Color(0xFFF3F4F6),

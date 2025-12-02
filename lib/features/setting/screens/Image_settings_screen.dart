@@ -696,7 +696,7 @@ class _ImageSettingsScreenState extends State<ImageSettingsScreen>
           Switch(
             value: value,
             onChanged: onChanged,
-            activeColor: Colors.white,
+            activeThumbColor: Colors.white,
             activeTrackColor: color,
             inactiveThumbColor: const Color(0xFFD1D5DB),
             inactiveTrackColor: const Color(0xFFF3F4F6),

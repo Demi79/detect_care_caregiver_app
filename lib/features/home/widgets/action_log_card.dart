@@ -1274,8 +1274,9 @@ class ActionLogCard extends StatelessWidget {
                                   try {
                                     AppEvents.instance.notifyEventsChanged();
                                   } catch (_) {}
-                                  if (onUpdated != null)
+                                  if (onUpdated != null) {
                                     onUpdated!('cancel_alarm');
+                                  }
                                 } else {
                                   messenger.showSnackBar(
                                     SnackBar(

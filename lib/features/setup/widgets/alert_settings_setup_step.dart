@@ -219,7 +219,7 @@ class _AlertSettingsSetupStepState extends State<AlertSettingsSetupStep>
                 }
               });
             },
-            activeColor: Colors.white,
+            activeThumbColor: Colors.white,
             activeTrackColor: const Color(0xFFF59E0B),
           ),
         ],
@@ -380,7 +380,7 @@ class _AlertSettingsSetupStepState extends State<AlertSettingsSetupStep>
             children: [
               Expanded(
                 child: DropdownButtonFormField<String>(
-                  value: _selectedContactRelation,
+                  initialValue: _selectedContactRelation,
                   onChanged: (value) =>
                       setState(() => _selectedContactRelation = value!),
                   items: _contactRelations.map((relation) {
@@ -622,7 +622,7 @@ class _AlertSettingsSetupStepState extends State<AlertSettingsSetupStep>
               ],
             ),
           ),
-          Switch(value: value, onChanged: onChanged, activeColor: color),
+          Switch(value: value, onChanged: onChanged, activeThumbColor: color),
         ],
       ),
     );
