@@ -36,6 +36,12 @@ android {
             signingConfig = signingConfigs.getByName("debug")
         }
     }
+
+    packaging {
+        resources.excludes += setOf("META-INF/DEPENDENCIES")
+        // Ensure native libs align to 16 KB for compatibility with newer Android devices.
+        jniLibs.useLegacyPackaging = false
+    }
 }
 
 dependencies {
