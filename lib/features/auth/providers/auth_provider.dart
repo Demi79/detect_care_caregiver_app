@@ -1,5 +1,7 @@
 import 'dart:async';
 
+// ignore_for_file: unused_field
+
 import 'package:detect_care_caregiver_app/core/network/api_client.dart';
 import 'package:detect_care_caregiver_app/features/auth/data/auth_storage.dart';
 import 'package:detect_care_caregiver_app/features/auth/models/login_result.dart';

@@ -1,3 +1,4 @@
+/// Data models for camera functionality
 class CameraSettings {
   final bool isHd;
   final int fps;

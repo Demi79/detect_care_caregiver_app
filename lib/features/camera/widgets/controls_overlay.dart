@@ -14,6 +14,8 @@ class CameraControlsOverlay extends StatefulWidget {
   final VoidCallback onSnapshot;
   final Future<void> Function()? onAlarm;
   final Future<void> Function()? onEmergency;
+  final Future<void> Function()? onCancelAlarm;
+  final bool initialAlarmActive;
 
   const CameraControlsOverlay({
     super.key,
@@ -28,6 +30,8 @@ class CameraControlsOverlay extends StatefulWidget {
     required this.onSnapshot,
     this.onAlarm,
     this.onEmergency,
+    this.onCancelAlarm,
+    this.initialAlarmActive = false,
   });
 
   @override
@@ -36,6 +40,9 @@ class CameraControlsOverlay extends StatefulWidget {
 
 class _CameraControlsOverlayState extends State<CameraControlsOverlay>
     with TickerProviderStateMixin {
+  bool _alarmRunning = false;
+  bool _emergencyRunning = false;
+  bool _alarmActive = false;
   late final AnimationController _pressController = AnimationController(
     vsync: this,
     duration: const Duration(milliseconds: 140),
@@ -53,7 +60,145 @@ class _CameraControlsOverlayState extends State<CameraControlsOverlay>
   @override
   void initState() {
     super.initState();
+    _alarmActive = widget.initialAlarmActive;
     _fadeController.forward();
+  }
+
+  Widget _buildLargeActionRow(bool compact) {
+    if (compact) {
+      return Wrap(
+        spacing: 6,
+        runSpacing: 6,
+        alignment: WrapAlignment.center,
+        children: [
+          _buildLargeActionButton(
+            icon: Icons.warning_amber_rounded,
+            label: _alarmRunning ? 'Đang...' : 'BÁO ĐỘNG',
+            background: const LinearGradient(
+              colors: [Color(0xFFFF7043), Color(0xFFEF5350)],
+            ),
+            onTap: () async => _handleAlarm(),
+            loading: _alarmRunning,
+          ),
+          _buildLargeActionButton(
+            icon: Icons.phone_in_talk_rounded,
+            label: _emergencyRunning ? 'Đang...' : 'GỌI KHẨN CẤP',
+            background: const LinearGradient(
+              colors: [Color(0xFF26C6DA), Color(0xFF00ACC1)],
+            ),
+            onTap: () async => _handleEmergency(),
+            loading: _emergencyRunning,
+          ),
+        ],
+      );
+    }
+
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        _buildLargeActionButton(
+          icon: Icons.warning_amber_rounded,
+          label: _alarmRunning ? 'Đang...' : 'BÁO ĐỘNG',
+          background: const LinearGradient(
+            colors: [Color(0xFFFF7043), Color(0xFFEF5350)],
+          ),
+          onTap: () async => _handleAlarm(),
+          loading: _alarmRunning,
+        ),
+        const SizedBox(width: 8),
+        _buildLargeActionButton(
+          icon: Icons.phone_in_talk_rounded,
+          label: _emergencyRunning ? 'Đang...' : 'GỌI KHẨN CẤP',
+          background: const LinearGradient(
+            colors: [Color(0xFF26C6DA), Color(0xFF00ACC1)],
+          ),
+          onTap: () async => _handleEmergency(),
+          loading: _emergencyRunning,
+        ),
+      ],
+    );
+  }
+
+  Future<void> _handleAlarm() async {
+    if (_alarmRunning || widget.onAlarm == null) return;
+    setState(() => _alarmRunning = true);
+    try {
+      await _doPressAnimation();
+      await widget.onAlarm!();
+      if (mounted) setState(() => _alarmActive = true);
+    } finally {
+      if (mounted) setState(() => _alarmRunning = false);
+    }
+  }
+
+  Future<void> _handleEmergency() async {
+    if (_emergencyRunning) return;
+    setState(() => _emergencyRunning = true);
+    try {
+      await _doPressAnimation();
+      if (widget.onEmergency != null) await widget.onEmergency!();
+    } finally {
+      if (mounted) setState(() => _emergencyRunning = false);
+    }
+  }
+
+  Widget _buildLargeActionButton({
+    required IconData icon,
+    required String label,
+    required LinearGradient background,
+    required Future<void> Function() onTap,
+    bool loading = false,
+  }) {
+    return GestureDetector(
+      onTap: loading ? null : onTap,
+      child: Container(
+        constraints: const BoxConstraints(
+          minWidth: 120,
+          maxWidth: 160,
+          minHeight: 44,
+        ),
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+        decoration: BoxDecoration(
+          gradient: background,
+          borderRadius: BorderRadius.circular(32),
+          boxShadow: [
+            BoxShadow(
+              color: background.colors.last.withOpacity(0.4),
+              blurRadius: 14,
+              spreadRadius: 2,
+              offset: const Offset(0, 6),
+            ),
+          ],
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(icon, color: Colors.white, size: 20),
+            const SizedBox(width: 8),
+            Text(
+              label,
+              style: const TextStyle(
+                color: Colors.white,
+                fontWeight: FontWeight.w700,
+                letterSpacing: 0.2,
+                fontSize: 12,
+              ),
+            ),
+            if (loading) ...[
+              const SizedBox(width: 8),
+              const SizedBox(
+                height: 14,
+                width: 14,
+                child: CircularProgressIndicator(
+                  strokeWidth: 2,
+                  color: Colors.white,
+                ),
+              ),
+            ],
+          ],
+        ),
+      ),
+    );
   }
 
   @override
@@ -151,30 +296,7 @@ class _CameraControlsOverlayState extends State<CameraControlsOverlay>
                         );
                       }
 
-                      final controls = <Widget>[
-                        _buildControlButton(
-                          icon: widget.isPlaying
-                              ? Icons.pause_rounded
-                              : Icons.play_arrow_rounded,
-                          label: widget.isPlaying ? 'Tạm dừng' : 'Phát',
-                          onTap: () async {
-                            await _doPressAnimation();
-                            widget.onPlayPause();
-                          },
-                          color: Colors.white,
-                          size: 28,
-                          showLabel: !compact,
-                        ),
-                        _buildControlButton(
-                          icon: widget.isMuted
-                              ? Icons.volume_off_rounded
-                              : Icons.volume_up_rounded,
-                          label: widget.isMuted ? 'Bật tiếng' : 'Tắt tiếng',
-                          onTap: widget.onMute,
-                          color: Colors.white,
-                          size: 24,
-                          showLabel: !compact,
-                        ),
+                      final primaryControls = <Widget>[
                         _buildControlButton(
                           icon: widget.isFullscreen
                               ? Icons.fullscreen_exit_rounded
@@ -198,33 +320,42 @@ class _CameraControlsOverlayState extends State<CameraControlsOverlay>
                           size: 22,
                           showLabel: !compact,
                         ),
-                        _buildControlButton(
-                          icon: Icons.camera_alt_outlined,
-                          label: 'Chụp & Báo động',
-                          onTap: () async {
-                            await _doPressAnimation();
-                            if (widget.onAlarm != null) await widget.onAlarm!();
-                          },
-                          color: Colors.redAccent,
-                          size: 20,
-                          showLabel: !compact,
-                        ),
-                        _buildControlButton(
-                          icon: Icons.phone_in_talk_rounded,
-                          label: 'Gọi khẩn cấp',
-                          onTap: () async {
-                            await _doPressAnimation();
-                            if (widget.onEmergency != null) {
-                              await widget.onEmergency!();
-                            }
-                          },
-                          color: Colors.orangeAccent,
-                          size: 20,
-                          showLabel: !compact,
-                        ),
+                        // _buildControlButton(
+                        //   icon: _emergencyRunning
+                        //       ? Icons.hourglass_top
+                        //       : Icons.phone_in_talk_rounded,
+                        //   label: _emergencyRunning ? 'Đang...' : 'GỌI KHẨN CẤP',
+                        //   onTap: () async {
+                        //     if (_emergencyRunning) return;
+                        //     setState(() => _emergencyRunning = true);
+                        //     try {
+                        //       await _doPressAnimation();
+                        //       if (widget.onEmergency != null) {
+                        //         await widget.onEmergency!();
+                        //       }
+                        //     } finally {
+                        //       if (mounted)
+                        //         setState(() => _emergencyRunning = false);
+                        //     }
+                        //   },
+                        //   color: Colors.orangeAccent,
+                        //   size: 20,
+                        //   showLabel: !compact,
+                        // ),
                       ];
 
-                      return buildWithDividers(controls);
+                      final actionRow = _alarmActive
+                          ? _buildActiveAlarmRow(compact)
+                          : _buildLargeActionRow(compact);
+
+                      return Column(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          buildWithDividers(primaryControls),
+                          const SizedBox(height: 8),
+                          actionRow,
+                        ],
+                      );
                     },
                   ),
                 ),
@@ -233,6 +364,61 @@ class _CameraControlsOverlayState extends State<CameraControlsOverlay>
           ),
         ),
       ),
+    );
+  }
+
+  Widget _buildActiveAlarmRow(bool compact) {
+    final buttons = [
+      _buildControlButton(
+        icon: Icons.cancel_outlined,
+        label: 'HỦY BÁO ĐỘNG',
+        onTap: () async {
+          if (widget.onCancelAlarm == null) return;
+          try {
+            await _doPressAnimation();
+            await widget.onCancelAlarm!();
+            if (mounted) setState(() => _alarmActive = false);
+          } catch (_) {}
+        },
+        color: Colors.white,
+        size: 20,
+        showLabel: !compact,
+      ),
+      _buildControlButton(
+        icon: _emergencyRunning
+            ? Icons.hourglass_top
+            : Icons.phone_in_talk_rounded,
+        label: _emergencyRunning ? 'Đang...' : 'GỌI KHẨN CẤP',
+        onTap: () async {
+          if (_emergencyRunning) return;
+          setState(() => _emergencyRunning = true);
+          try {
+            await _doPressAnimation();
+            if (widget.onEmergency != null) {
+              await widget.onEmergency!();
+            }
+          } finally {
+            if (mounted) setState(() => _emergencyRunning = false);
+          }
+        },
+        color: Colors.orangeAccent,
+        size: 20,
+        showLabel: !compact,
+      ),
+    ];
+
+    if (compact) {
+      return Wrap(
+        spacing: 8,
+        runSpacing: 6,
+        alignment: WrapAlignment.center,
+        children: buttons,
+      );
+    }
+
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [buttons[0], const SizedBox(width: 8), buttons[1]],
     );
   }
 

@@ -161,6 +161,28 @@ class BackendEnums {
     }
   }
 
+  static String businessTypeToVietnamese(String? type) {
+    if (type == null) return 'Không xác định';
+    switch (type) {
+      case 'event_alert':
+        return 'Cảnh báo sự kiện';
+      case 'confirmation_request':
+        return 'Yêu cầu xác nhận';
+      case 'caregiver_invitation':
+        return 'Mời người chăm sóc';
+      case 'system_update':
+        return 'Cập nhật hệ thống';
+      case 'emergency_alert':
+        return 'Cảnh báo khẩn cấp';
+      case 'subscription_renewal':
+        return 'Gia hạn gói dịch vụ';
+      case 'quota_warning':
+        return 'Cảnh báo giới hạn';
+      default:
+        return type;
+    }
+  }
+
   static const List<String> skipDurations = [
     '15m',
     '1h',

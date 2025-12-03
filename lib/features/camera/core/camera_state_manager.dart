@@ -9,8 +9,11 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'camera_constants.dart';
 import 'camera_helpers.dart';
 import 'camera_models.dart';
+import 'camera_service.dart';
 
+/// State management for camera functionality
 class CameraStateManager {
+  // ... existing code ...
   bool _isDisposed = false;
   bool get isDisposed => _isDisposed;
   final TextEditingController urlController = TextEditingController();
@@ -26,6 +29,7 @@ class CameraStateManager {
 
   CameraState get state => _state;
 
+  // Getters for easy access
   bool get isPlaying => _state.isPlaying;
   bool get isMuted => _state.isMuted;
   bool get isFullscreen => _state.isFullscreen;
@@ -38,6 +42,7 @@ class CameraStateManager {
   double? get videoAspectRatio => _state.videoAspectRatio;
   CameraSettings get settings => _state.settings;
 
+  // Stream for state changes
   final StreamController<CameraState> _stateController =
       StreamController<CameraState>.broadcast();
   Stream<CameraState> get stateStream => _stateController.stream;
@@ -49,6 +54,7 @@ class CameraStateManager {
       _updateState(_state.copyWith(initLoading: false));
     }
 
+    // Only start polling timer if not in test environment
     if (!Platform.environment.containsKey('FLUTTER_TEST')) {
       _startStatusPolling();
     }
@@ -57,6 +63,7 @@ class CameraStateManager {
   void dispose() {
     _isDisposed = true;
 
+    // Cancel all timers to prevent memory leaks
     _statusTimer?.cancel();
     _statusTimer = null;
 
@@ -66,7 +73,12 @@ class CameraStateManager {
     _controlsTimer?.cancel();
     _controlsTimer = null;
 
-    _controller = null;
+    // Only dispose controller if we created it ourselves, not if it was set from outside
+    // The service that created the controller should dispose it
+    _controller = null; // Clear reference
+
+    // Don't dispose urlController here as it might still be used by widgets
+    // Let the widget that owns it dispose it properly
 
     if (!_stateController.isClosed) {
       _stateController.close();
@@ -115,6 +127,7 @@ class CameraStateManager {
     _statusTimer = Timer.periodic(CameraConstants.statusPollInterval, (
       timer,
     ) async {
+      // Don't poll if disposed or controller is null
       if (_isDisposed || _controller == null) {
         timer.cancel();
         return;
@@ -123,7 +136,7 @@ class CameraStateManager {
       if (isStarting && !isPlaying) return;
 
       try {
-        final playing = await _controller!.isPlaying();
+        final playing = await cameraService.safeIsPlaying(_controller);
         if (playing == true &&
             (statusMessage == null ||
                 statusMessage != CameraConstants.playingMessage)) {
@@ -207,6 +220,30 @@ class CameraStateManager {
     }
 
     HapticFeedback.selectionClick();
+    // Khi chuyển sang fullscreen, thử resume playback nếu controller đã
+    // tồn tại nhưng playback bị tạm dừng do thay đổi UI/orientation.
+    if (newFullscreen && _controller != null) {
+      try {
+        _controller!.play();
+        // Log playback state shortly after trying to resume (async)
+        // Avoid unhandled exceptions from isPlaying() if the controller
+        // is not yet initialized by the native side. Attach a catchError
+        // so any failure is swallowed and doesn't crash the UI.
+        cameraService
+            .safeIsPlaying(_controller)
+            .then((playing) {
+              try {
+                // ignore: avoid_print
+                print(
+                  '🐛 [CameraStateManager] fullscreen resume play -> isPlaying=$playing',
+                );
+              } catch (_) {}
+            })
+            .catchError((_) {
+              // ignore errors from safeIsPlaying (shouldn't be necessary)
+            });
+      } catch (_) {}
+    }
   }
 
   void setVideoAspectRatio(double? aspectRatio) {
@@ -234,8 +271,10 @@ class CameraStateManager {
       await prefs.remove(CameraConstants.kPrefRetention);
       await prefs.remove(CameraConstants.kPrefChannels);
 
+      // Clear URL controller
       urlController.clear();
 
+      // Reset state with default settings
       _updateState(
         _state.copyWith(
           isHd: false,

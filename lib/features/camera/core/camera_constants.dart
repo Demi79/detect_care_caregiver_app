@@ -1,3 +1,4 @@
+/// Camera-related constants and configuration values
 class CameraConstants {
   // Preference keys
   static const String kPrefHd = 'camera_hd_pref';

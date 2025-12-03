@@ -1,8 +1,9 @@
-import 'package:flutter/foundation.dart';
 import 'package:detect_care_caregiver_app/core/models/notification.dart';
 import 'package:detect_care_caregiver_app/core/network/api_client.dart';
+import 'package:detect_care_caregiver_app/core/utils/logger.dart';
 import 'package:detect_care_caregiver_app/features/auth/data/auth_storage.dart';
 
+/// Service để xử lý API calls cho notifications
 class NotificationApiService {
   final ApiClient _apiClient;
 
@@ -17,7 +18,7 @@ class NotificationApiService {
     NotificationFilter? filter,
     String? searchQuery,
   }) async {
-    debugPrint(
+    AppLogger.d(
       '🔔 NotificationApiService: getNotifications called with page=$page, pageSize=$pageSize',
     );
     try {
@@ -43,26 +44,42 @@ class NotificationApiService {
 
       if (response.statusCode == 200) {
         final data = _apiClient.extractDataFromResponse(response);
-        debugPrint('🔔 Notification API Response: $data');
+        AppLogger.d('🔔 Notification API Response: $data');
 
-        // Handle API response format: { success, data, message, timestamp }
-        if (data is Map<String, dynamic> && data.containsKey('data')) {
-          final actualData = data['data'];
+        // API may return either:
+        // - top-level Map { data: { data: [...], total: ... } }
+        // - top-level Map with notifications/list fields
+        // - top-level List of notification objects
+        if (data is List) {
+          AppLogger.d('🔔 Notification API returns a List — chuẩn hoá về Map');
+          return NotificationListResponse.fromJson({'data': data});
+        }
+
+        if (data is Map<String, dynamic>) {
+          final actualData = data.containsKey('data') ? data['data'] : data;
+          if (actualData is List) {
+            // { data: [ ... ] }
+            return NotificationListResponse.fromJson({'data': actualData});
+          }
+
           if (actualData is Map<String, dynamic>) {
             return NotificationListResponse.fromJson(actualData);
-          } else {
-            // If data is not a map, assume it's the direct response
-            return NotificationListResponse.fromJson(data);
           }
-        } else {
-          // Fallback for direct response format
+
+          // Fallback: try parsing using top-level map
           return NotificationListResponse.fromJson(data);
         }
+
+        // Unknown shape — throw with diagnostic log
+        AppLogger.e(
+          '🔔 Dữ liệu trả về không đúng định dạng: ${data.runtimeType}',
+        );
+        throw Exception('Dữ liệu thông báo không hợp lệ');
       } else {
         throw Exception('Failed to load notifications: ${response.statusCode}');
       }
-    } catch (e) {
-      debugPrint('Error fetching notifications: $e');
+    } catch (e, st) {
+      AppLogger.e('Error fetching notifications: $e', e, st);
       throw Exception('Không thể tải danh sách thông báo: $e');
     }
   }
@@ -80,8 +97,8 @@ class NotificationApiService {
       } else {
         throw Exception('Failed to load notification: ${response.statusCode}');
       }
-    } catch (e) {
-      debugPrint('Error fetching notification $notificationId: $e');
+    } catch (e, st) {
+      AppLogger.e('Error fetching notification $notificationId: $e', e, st);
       throw Exception('Không thể tải thông báo: $e');
     }
   }
@@ -101,8 +118,12 @@ class NotificationApiService {
           'Failed to mark notification as read: ${response.statusCode}',
         );
       }
-    } catch (e) {
-      debugPrint('Error marking notification $notificationId as read: $e');
+    } catch (e, st) {
+      AppLogger.e(
+        'Error marking notification $notificationId as read: $e',
+        e,
+        st,
+      );
       throw Exception('Không thể đánh dấu đã đọc: $e');
     }
   }
@@ -122,8 +143,12 @@ class NotificationApiService {
           'Failed to mark notification as unread: ${response.statusCode}',
         );
       }
-    } catch (e) {
-      debugPrint('Error marking notification $notificationId as unread: $e');
+    } catch (e, st) {
+      AppLogger.e(
+        'Error marking notification $notificationId as unread: $e',
+        e,
+        st,
+      );
       throw Exception('Không thể đánh dấu chưa đọc: $e');
     }
   }
@@ -151,8 +176,8 @@ class NotificationApiService {
           'Failed to delete notification: ${response.statusCode}',
         );
       }
-    } catch (e) {
-      debugPrint('Error deleting notification $notificationId: $e');
+    } catch (e, st) {
+      AppLogger.e('Error deleting notification $notificationId: $e', e, st);
       throw Exception('Không thể xóa thông báo: $e');
     }
   }
@@ -168,14 +193,14 @@ class NotificationApiService {
       final uuidV4Regex = RegExp(
         r'^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-5][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}$',
       );
-      debugPrint('🔔 markAllAsRead userId raw: "$rawUserId"');
-      debugPrint(
+      AppLogger.d('🔔 markAllAsRead userId raw: "$rawUserId"');
+      AppLogger.d(
         '🔔 markAllAsRead userId trimmed: "$trimmed" (length=${trimmed.length})',
       );
-      debugPrint(
+      AppLogger.d(
         '🔔 markAllAsRead userId matches v4 regex: ${uuidV4Regex.hasMatch(trimmed)}',
       );
-      debugPrint(
+      AppLogger.d(
         '🔔 markAllAsRead userId codeUnits: ${trimmed.codeUnits.map((c) => c.toRadixString(16)).toList()}',
       );
 
@@ -196,8 +221,8 @@ class NotificationApiService {
           'Failed to mark all notifications as read: ${response.statusCode}',
         );
       }
-    } catch (e) {
-      debugPrint('Error marking all notifications as read: $e');
+    } catch (e, st) {
+      AppLogger.e('Error marking all notifications as read: $e', e, st);
       throw Exception('Không thể đánh dấu tất cả đã đọc: $e');
     }
   }
@@ -217,8 +242,8 @@ class NotificationApiService {
           'Failed to delete notifications: ${response.statusCode}',
         );
       }
-    } catch (e) {
-      debugPrint('Error deleting multiple notifications: $e');
+    } catch (e, st) {
+      AppLogger.e('Error deleting multiple notifications: $e', e, st);
       throw Exception('Không thể xóa thông báo: $e');
     }
   }
@@ -231,7 +256,7 @@ class NotificationApiService {
       final rawUserId = userId ?? '';
       final trimmed = rawUserId.trim();
       if (trimmed.isEmpty) {
-        debugPrint('🔔 NotificationApiService: no userId, returning 0 unread');
+        AppLogger.d('🔔 NotificationApiService: no userId, returning 0 unread');
         return 0;
       }
 
@@ -239,22 +264,18 @@ class NotificationApiService {
       final uuidV4Regex = RegExp(
         r'^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-5][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}$',
       );
-      debugPrint('🔔 getUnreadCount userId raw: "$rawUserId"');
-      debugPrint(
+      AppLogger.d('🔔 getUnreadCount userId raw: "$rawUserId"');
+      AppLogger.d(
         '🔔 getUnreadCount userId trimmed: "$trimmed" (length=${trimmed.length})',
       );
-      debugPrint(
+      AppLogger.d(
         '🔔 getUnreadCount userId matches v4 regex: ${uuidV4Regex.hasMatch(trimmed)}',
       );
-      debugPrint(
+      AppLogger.d(
         '🔔 getUnreadCount userId codeUnits: ${trimmed.codeUnits.map((c) => c.toRadixString(16)).toList()}',
       );
 
-      final response = await _apiClient.get(
-        '/notifications/unread-count',
-        query: {'user_id': trimmed},
-        extraHeaders: {'X-User-Id': trimmed},
-      );
+      final response = await _apiClient.get('/notifications/unread-count');
 
       if (response.statusCode == 200) {
         final data = _apiClient.extractDataFromResponse(response);
@@ -262,8 +283,8 @@ class NotificationApiService {
       } else {
         throw Exception('Failed to get unread count: ${response.statusCode}');
       }
-    } catch (e) {
-      debugPrint('Error getting unread count: $e');
+    } catch (e, st) {
+      AppLogger.e('Error getting unread count: $e', e, st);
       return 0; // Return 0 on error to avoid breaking UI
     }
   }
@@ -299,8 +320,8 @@ class NotificationApiService {
           'Failed to create notification: ${response.statusCode}',
         );
       }
-    } catch (e) {
-      debugPrint('Error creating notification: $e');
+    } catch (e, st) {
+      AppLogger.e('Error creating notification: $e', e, st);
       throw Exception('Không thể tạo thông báo: $e');
     }
   }
@@ -338,8 +359,8 @@ class NotificationApiService {
           'Failed to update notification: ${response.statusCode}',
         );
       }
-    } catch (e) {
-      debugPrint('Error updating notification $notificationId: $e');
+    } catch (e, st) {
+      AppLogger.e('Error updating notification $notificationId: $e', e, st);
       throw Exception('Không thể cập nhật thông báo: $e');
     }
   }
@@ -376,8 +397,12 @@ class NotificationApiService {
           'Failed to load patient notifications: ${response.statusCode}',
         );
       }
-    } catch (e) {
-      debugPrint('Error fetching notifications for patient $patientId: $e');
+    } catch (e, st) {
+      AppLogger.e(
+        'Error fetching notifications for patient $patientId: $e',
+        e,
+        st,
+      );
       throw Exception('Không thể tải thông báo của bệnh nhân: $e');
     }
   }
@@ -407,8 +432,8 @@ class NotificationApiService {
           'Failed to load notification stats: ${response.statusCode}',
         );
       }
-    } catch (e) {
-      debugPrint('Error fetching notification stats: $e');
+    } catch (e, st) {
+      AppLogger.e('Error fetching notification stats: $e', e, st);
       throw Exception('Không thể tải thống kê thông báo: $e');
     }
   }

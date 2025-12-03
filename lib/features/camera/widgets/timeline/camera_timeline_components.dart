@@ -40,9 +40,10 @@ class CameraTimelineClip {
   });
 
   String get timeLabel {
-    final h = startTime.hour.toString().padLeft(2, '0');
-    final m = startTime.minute.toString().padLeft(2, '0');
-    final s = startTime.second.toString().padLeft(2, '0');
+    final tz = startTime.toUtc().add(const Duration(hours: 7));
+    final h = tz.hour.toString().padLeft(2, '0');
+    final m = tz.minute.toString().padLeft(2, '0');
+    final s = tz.second.toString().padLeft(2, '0');
     return '$h:$m:$s';
   }
 
@@ -61,8 +62,9 @@ class CameraTimelineEntry {
   const CameraTimelineEntry({required this.time, this.clip});
 
   String get timeLabel {
-    final h = time.hour.toString().padLeft(2, '0');
-    final m = time.minute.toString().padLeft(2, '0');
+    final tz = time.toUtc().add(const Duration(hours: 7));
+    final h = tz.hour.toString().padLeft(2, '0');
+    final m = tz.minute.toString().padLeft(2, '0');
     return '$h:$m';
   }
 }
@@ -271,6 +273,8 @@ class CameraTimelineRow extends StatelessWidget {
                   clip: entry.clip!,
                   selected: isSelected,
                   onTap: onClipTap,
+                  showPlayButton: false,
+                  showCameraIcon: false,
                 )
               : CameraTimelineEmptyCard(timeLabel: entry.timeLabel),
         ),
@@ -284,6 +288,8 @@ class CameraTimelineClipCard extends StatelessWidget {
   final bool selected;
   final VoidCallback? onTap;
   final VoidCallback? onPlay;
+  final bool showPlayButton;
+  final bool showCameraIcon;
 
   const CameraTimelineClipCard({
     super.key,
@@ -291,12 +297,14 @@ class CameraTimelineClipCard extends StatelessWidget {
     required this.selected,
     this.onTap,
     this.onPlay,
+    this.showPlayButton = true,
+    this.showCameraIcon = true,
   });
 
   @override
   Widget build(BuildContext context) {
     return GestureDetector(
-      onTap: onTap,
+      onTap: () => _handleTap(context),
       child: ConstrainedBox(
         constraints: const BoxConstraints(maxWidth: 180),
         child: AnimatedContainer(
@@ -362,39 +370,42 @@ class CameraTimelineClipCard extends StatelessWidget {
                             placeholder,
 
                           // small overlay icon in the bottom-right
-                          Align(
-                            alignment: Alignment.bottomRight,
-                            child: Padding(
-                              padding: const EdgeInsets.only(
-                                left: 8,
-                                top: 8,
-                                right: 8,
-                                bottom: 8,
-                              ),
-                              child: Container(
-                                padding: const EdgeInsets.symmetric(
-                                  horizontal: 6,
-                                  vertical: 4,
+                          if (showCameraIcon)
+                            Align(
+                              alignment: Alignment.bottomRight,
+                              child: Padding(
+                                padding: const EdgeInsets.only(
+                                  left: 8,
+                                  top: 8,
+                                  right: 8,
+                                  bottom: 8,
                                 ),
-                                decoration: BoxDecoration(
-                                  color: Colors.black.withOpacitySafe(0.35),
-                                  borderRadius: BorderRadius.circular(14),
-                                  boxShadow: [
-                                    BoxShadow(
-                                      color: Colors.black.withOpacitySafe(0.18),
-                                      blurRadius: 8,
-                                      offset: const Offset(0, 3),
-                                    ),
-                                  ],
-                                ),
-                                child: const Icon(
-                                  Icons.videocam,
-                                  color: Colors.white,
-                                  size: 20,
+                                child: Container(
+                                  padding: const EdgeInsets.symmetric(
+                                    horizontal: 6,
+                                    vertical: 4,
+                                  ),
+                                  decoration: BoxDecoration(
+                                    color: Colors.black.withOpacitySafe(0.35),
+                                    borderRadius: BorderRadius.circular(14),
+                                    boxShadow: [
+                                      BoxShadow(
+                                        color: Colors.black.withOpacitySafe(
+                                          0.18,
+                                        ),
+                                        blurRadius: 8,
+                                        offset: const Offset(0, 3),
+                                      ),
+                                    ],
+                                  ),
+                                  child: const Icon(
+                                    Icons.videocam,
+                                    color: Colors.white,
+                                    size: 20,
+                                  ),
                                 ),
                               ),
                             ),
-                          ),
                         ],
                       );
                     },
@@ -441,16 +452,60 @@ class CameraTimelineClipCard extends StatelessWidget {
                           ),
                         ),
                         const SizedBox(width: 8),
-                        // animated switch between pill and icon-only using global breakpoint
-                        PlayActionButton(
-                          key: ValueKey(useCompact ? 'icon_only' : 'pill'),
-                          useCompact: useCompact,
-                          maxWidth: maxBtn,
-                          onPressed: onPlay ?? onTap,
-                        ),
+                        if (showPlayButton)
+                          // animated switch between pill and icon-only using global breakpoint
+                          PlayActionButton(
+                            key: ValueKey(useCompact ? 'icon_only' : 'pill'),
+                            useCompact: useCompact,
+                            maxWidth: maxBtn,
+                            onPressed: onPlay ?? onTap,
+                          ),
                       ],
                     );
                   },
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  void _handleTap(BuildContext context) {
+    onTap?.call();
+    final url = clip.thumbnailUrl?.trim();
+    if (url == null || url.isEmpty) return;
+    showDialog<void>(
+      context: context,
+      builder: (ctx) => GestureDetector(
+        onTap: () => Navigator.of(ctx).maybePop(),
+        child: Dialog(
+          backgroundColor: Colors.black.withOpacity(0.85),
+          insetPadding: const EdgeInsets.symmetric(
+            horizontal: 20,
+            vertical: 48,
+          ),
+          child: Stack(
+            children: [
+              InteractiveViewer(
+                clipBehavior: Clip.antiAlias,
+                child: CachedNetworkImage(
+                  imageUrl: url,
+                  fit: BoxFit.contain,
+                  placeholder: (ctx, _) =>
+                      const Center(child: CircularProgressIndicator()),
+                  errorWidget: (ctx, _, __) => const Center(
+                    child: Icon(Icons.broken_image, color: Colors.white),
+                  ),
+                ),
+              ),
+              Positioned(
+                top: 8,
+                right: 8,
+                child: IconButton(
+                  icon: const Icon(Icons.close, color: Colors.white),
+                  onPressed: () => Navigator.of(ctx).maybePop(),
                 ),
               ),
             ],

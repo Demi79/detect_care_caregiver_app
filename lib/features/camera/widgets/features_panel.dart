@@ -1,4 +1,8 @@
 import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
+import 'package:detect_care_caregiver_app/features/camera/controllers/camera_timeline_controller.dart';
+import 'package:detect_care_caregiver_app/features/camera/models/camera_entry.dart';
+import 'package:detect_care_caregiver_app/features/camera/screens/camera_timeline_screen.dart';
 
 /// Panel hiển thị các tuỳ chỉnh camera (FPS, retention, mở timeline).
 class CameraFeaturesPanel extends StatelessWidget {
@@ -9,8 +13,10 @@ class CameraFeaturesPanel extends StatelessWidget {
   final bool showRetention;
   final Set<String> channels;
   final ValueChanged<Set<String>> onChannelsChanged;
-  final Widget? timelineContent;
+  final Widget? Function(BuildContext context)? timelineContentBuilder;
   final VoidCallback? onOpenTimeline;
+  final VoidCallback? onRefresh;
+  final CameraEntry? camera;
 
   const CameraFeaturesPanel({
     super.key,
@@ -21,8 +27,10 @@ class CameraFeaturesPanel extends StatelessWidget {
     this.showRetention = false,
     required this.channels,
     required this.onChannelsChanged,
-    this.timelineContent,
+    this.timelineContentBuilder,
     this.onOpenTimeline,
+    this.onRefresh,
+    this.camera,
   });
 
   @override
@@ -38,6 +46,8 @@ class CameraFeaturesPanel extends StatelessWidget {
         final constrainedBox = hasBoundedHeight
             ? BoxConstraints(minHeight: minHeight)
             : const BoxConstraints();
+
+        final timelineContent = timelineContentBuilder?.call(context);
 
         return Container(
           decoration: const BoxDecoration(
@@ -64,7 +74,7 @@ class CameraFeaturesPanel extends StatelessWidget {
                     ],
                     if (timelineContent != null) ...[
                       const SizedBox(height: 20),
-                      _buildTimelineCard(context, timelineContent!),
+                      _buildTimelineCard(context, timelineContent),
                     ],
                   ],
                 ),
@@ -215,7 +225,7 @@ class CameraFeaturesPanel extends StatelessWidget {
   Widget _buildTimelineCard(BuildContext context, Widget timeline) {
     return _buildSettingCard(
       icon: Icons.view_timeline_outlined,
-      title: 'Lịch thời gian ghi hình (Timeline)',
+      title: 'Lịch thời gian ghi hình',
       subtitle: 'Xem lại bản ghi và sự kiện theo khung giờ',
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -236,30 +246,238 @@ class CameraFeaturesPanel extends StatelessWidget {
               child: timeline,
             ),
           ),
-          if (onOpenTimeline != null) ...[
+          if (onOpenTimeline != null ||
+              onRefresh != null ||
+              camera != null) ...[
             const SizedBox(height: 12),
             Align(
               alignment: Alignment.centerRight,
-              child: FilledButton.icon(
-                onPressed: onOpenTimeline,
-                icon: const Icon(Icons.fullscreen_rounded),
-                label: const Text('Xem toàn màn hình'),
-                style: FilledButton.styleFrom(
-                  backgroundColor: const Color(0xFF5C6BC0),
-                  foregroundColor: Colors.white,
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 20,
-                    vertical: 12,
-                  ),
-                  textStyle: const TextStyle(
-                    fontWeight: FontWeight.w600,
-                    fontSize: 14,
-                  ),
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(18),
-                  ),
-                  elevation: 2,
-                ),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  if (onRefresh != null || camera != null) ...[
+                    OutlinedButton.icon(
+                      onPressed:
+                          onRefresh ??
+                          () async {
+                            debugPrint(
+                              '🔁 CameraFeaturesPanel: refresh pressed. onRefresh=${onRefresh != null}, camera=${camera != null}',
+                            );
+                            final messenger = ScaffoldMessenger.of(context);
+                            // If parent provided explicit handler, call it.
+                            if (onRefresh != null) {
+                              try {
+                                onRefresh?.call();
+                                messenger.showSnackBar(
+                                  const SnackBar(
+                                    content: Text('Đã gửi lệnh làm mới'),
+                                  ),
+                                );
+                              } catch (e) {
+                                messenger.showSnackBar(
+                                  SnackBar(
+                                    content: Text('Làm mới thất bại: $e'),
+                                  ),
+                                );
+                              }
+                              return;
+                            }
+
+                            // fallback: try to find a CameraTimelineController in the widget tree
+                            try {
+                              final ctl = Provider.of<CameraTimelineController>(
+                                context,
+                                listen: false,
+                              );
+                              await ctl.loadTimeline();
+                              messenger.showSnackBar(
+                                const SnackBar(
+                                  content: Text('Đang làm mới timeline...'),
+                                ),
+                              );
+                              return;
+                            } catch (e) {
+                              debugPrint(
+                                '🔁 CameraFeaturesPanel: no CameraTimelineController found: $e',
+                              );
+                            }
+
+                            // If we reach here, there was nothing we could refresh directly.
+                            if (camera != null) {
+                              // Suggest opening full screen where a controller is available.
+                              messenger.showSnackBar(
+                                const SnackBar(
+                                  content: Text(
+                                    'Không thể làm mới tại chỗ. Mở toàn màn hình để tải dữ liệu.',
+                                  ),
+                                ),
+                              );
+                              return;
+                            }
+
+                            messenger.showSnackBar(
+                              const SnackBar(
+                                content: Text(
+                                  'Không có dữ liệu timeline để làm mới.',
+                                ),
+                              ),
+                            );
+                          },
+                      icon: const Icon(Icons.refresh),
+                      label: const Text('Làm mới'),
+                      style: OutlinedButton.styleFrom(
+                        backgroundColor: Colors.white,
+                        foregroundColor: const Color(0xFF5C6BC0),
+                        side: const BorderSide(color: Color(0xFF5C6BC0)),
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 14,
+                          vertical: 10,
+                        ),
+                        textStyle: const TextStyle(
+                          fontWeight: FontWeight.w600,
+                          fontSize: 14,
+                        ),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(16),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                  ],
+                  // Show fullscreen button if caller provided an explicit handler or
+                  // we have something to show in full screen (camera or timeline content).
+                  if (onOpenTimeline != null ||
+                      camera != null ||
+                      timelineContentBuilder != null)
+                    FilledButton.icon(
+                      onPressed: () async {
+                        // If parent provided a custom handler, let it handle opening.
+                        if (onOpenTimeline != null) {
+                          try {
+                            onOpenTimeline?.call();
+                          } catch (_) {}
+                          return;
+                        }
+
+                        // If a CameraEntry is available, open the full CameraTimelineScreen
+                        if (camera != null) {
+                          await Navigator.of(context).push(
+                            MaterialPageRoute(
+                              builder: (_) =>
+                                  CameraTimelineScreen(camera: camera!),
+                            ),
+                          );
+                          return;
+                        }
+
+                        // Last fallback: render the provided timelineContent full-screen.
+                        if (timelineContentBuilder != null) {
+                          await Navigator.of(context).push(
+                            MaterialPageRoute(
+                              builder: (ctx) {
+                                final fullscreenContent =
+                                    timelineContentBuilder!.call(ctx);
+                                return Scaffold(
+                                  appBar: AppBar(
+                                    backgroundColor: Colors.white,
+                                    elevation: 0,
+                                    iconTheme: const IconThemeData(
+                                      color: Colors.black87,
+                                    ),
+                                    actions: [
+                                      IconButton(
+                                        icon: const Icon(
+                                          Icons.refresh,
+                                          color: Colors.black87,
+                                        ),
+                                        tooltip: 'Làm mới',
+                                        onPressed: () async {
+                                          debugPrint(
+                                            '🔁 CameraFeaturesPanel(fullscreen): refresh pressed. onRefresh=${onRefresh != null}, camera=${camera != null}',
+                                          );
+                                          final fullscreenMessenger =
+                                              ScaffoldMessenger.of(ctx);
+                                          if (fullscreenContent != null) {
+                                            // Prefer explicit onRefresh if provided
+                                            if (onRefresh != null) {
+                                              try {
+                                                onRefresh?.call();
+                                              } catch (e) {
+                                                fullscreenMessenger.showSnackBar(
+                                                  SnackBar(
+                                                    content: Text(
+                                                      'Làm mới thất bại: $e',
+                                                    ),
+                                                  ),
+                                                );
+                                              }
+                                              return;
+                                            }
+
+                                            try {
+                                              final ctl =
+                                                  Provider.of<
+                                                    CameraTimelineController
+                                                  >(context, listen: false);
+                                              await ctl.loadTimeline();
+                                              fullscreenMessenger.showSnackBar(
+                                                const SnackBar(
+                                                  content: Text(
+                                                    'Đang làm mới timeline...',
+                                                  ),
+                                                ),
+                                              );
+                                              return;
+                                            } catch (e) {
+                                              debugPrint(
+                                                '🔁 CameraFeaturesPanel(fullscreen): no CameraTimelineController found: $e',
+                                              );
+                                            }
+                                          }
+
+                                          fullscreenMessenger.showSnackBar(
+                                            const SnackBar(
+                                              content: Text(
+                                                'Không thể làm mới tại chỗ. Mở toàn màn hình để tải dữ liệu.',
+                                              ),
+                                            ),
+                                          );
+                                        },
+                                      ),
+                                    ],
+                                  ),
+                                  body: SafeArea(
+                                    child:
+                                        fullscreenContent ??
+                                        const SizedBox.shrink(),
+                                  ),
+                                );
+                              },
+                            ),
+                          );
+                          return;
+                        }
+                      },
+                      icon: const Icon(Icons.fullscreen_rounded),
+                      label: const Text('Xem toàn màn hình'),
+                      style: FilledButton.styleFrom(
+                        backgroundColor: const Color(0xFF5C6BC0),
+                        foregroundColor: Colors.white,
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 20,
+                          vertical: 12,
+                        ),
+                        textStyle: const TextStyle(
+                          fontWeight: FontWeight.w600,
+                          fontSize: 14,
+                        ),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(18),
+                        ),
+                        elevation: 2,
+                      ),
+                    ),
+                ],
               ),
             ),
           ],

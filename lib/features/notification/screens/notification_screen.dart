@@ -1,8 +1,43 @@
+// ignore_for_file: dead_code
+
+import 'dart:async';
+
+import 'package:detect_care_caregiver_app/core/models/notification.dart';
+import 'package:detect_care_caregiver_app/core/services/direct_caller.dart';
+import 'package:detect_care_caregiver_app/core/utils/backend_enums.dart';
+import 'package:detect_care_caregiver_app/features/alarm/data/alarm_remote_data_source.dart';
+import 'package:detect_care_caregiver_app/features/auth/data/auth_storage.dart';
+import 'package:detect_care_caregiver_app/features/emergency_contacts/data/emergency_contacts_remote_data_source.dart';
+import 'package:detect_care_caregiver_app/features/events/data/events_remote_data_source.dart';
+import 'package:detect_care_caregiver_app/features/notification/screens/notification_detail_screen.dart';
 import 'package:detect_care_caregiver_app/features/notification/utils/notification_translator.dart';
+import 'package:detect_care_caregiver_app/features/notification/widgets/notification_filter_panel.dart';
 import 'package:detect_care_caregiver_app/services/notification_api_service.dart';
+import 'package:detect_care_caregiver_app/services/notification_manager.dart';
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
-import 'package:detect_care_caregiver_app/core/models/notification.dart';
+import 'package:permission_handler/permission_handler.dart';
+import 'package:url_launcher/url_launcher.dart';
+
+enum _NotificationSeverity { danger, warning, normal, info }
+
+class _SeverityActionItem {
+  final IconData icon;
+  final String label;
+  final VoidCallback onPressed;
+  final Color? color;
+  final String? subtitle;
+  final bool enabled;
+
+  _SeverityActionItem({
+    required this.icon,
+    required this.label,
+    required this.onPressed,
+    this.color,
+    this.subtitle,
+    this.enabled = true,
+  });
+}
 
 class NotificationScreen extends StatefulWidget {
   const NotificationScreen({super.key});
@@ -16,9 +51,10 @@ class _NotificationScreenState extends State<NotificationScreen> {
   bool _loading = true;
   List<NotificationModel> _notifications = [];
   List<NotificationModel> _filteredNotifications = [];
-  String _selectedFilter = 'Tất cả loại';
-  String _selectedStatus = 'Tất cả trạng thái';
+  String? _selectedFilterValue;
+  String? _selectedStatusValue;
   String _searchQuery = '';
+  final TextEditingController _searchController = TextEditingController();
   int _unreadCount = 0;
   bool _isSelectionMode = false;
   Set<String> _selectedIds = {};
@@ -46,7 +82,25 @@ class _NotificationScreenState extends State<NotificationScreen> {
     super.initState();
     _loadNotifications();
     _fetchUnreadCount();
+
+    try {
+      _notificationSubscription = NotificationManager().onNewNotification
+          .listen((event) {
+            // Debounce rapid events: batch refreshes into 800ms window
+            try {
+              _debounceTimer?.cancel();
+            } catch (_) {}
+            _debounceTimer = Timer(const Duration(milliseconds: 800), () async {
+              if (!mounted) return;
+              await _loadNotifications();
+              await _fetchUnreadCount();
+            });
+          });
+    } catch (_) {}
   }
+
+  StreamSubscription<Map<String, dynamic>?>? _notificationSubscription;
+  Timer? _debounceTimer;
 
   Future<void> _loadNotifications() async {
     setState(() => _loading = true);
@@ -62,12 +116,14 @@ class _NotificationScreenState extends State<NotificationScreen> {
         _filteredNotifications = _notifications;
       });
     } catch (e) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('Lỗi tải thông báo: $e'),
-          backgroundColor: Colors.red.shade400,
-        ),
-      );
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Lỗi tải thông báo: $e'),
+            backgroundColor: Colors.red.shade400,
+          ),
+        );
+      }
     } finally {
       setState(() => _loading = false);
     }
@@ -79,23 +135,23 @@ class _NotificationScreenState extends State<NotificationScreen> {
   }
 
   void _applyFilter() {
-    final selectedType = _filterOptions.firstWhere(
-      (e) => e['label'] == _selectedFilter,
-    )['type'];
-    final selectedStatus = _statusOptions.firstWhere(
-      (e) => e['label'] == _selectedStatus,
-    )['value'];
+    // Use the pre-computed selected value fields for more robust matching.
+    final selectedType = _selectedFilterValue;
+    final selectedStatus = _selectedStatusValue;
 
     setState(() {
       _filteredNotifications = _notifications.where((n) {
         final businessMatch =
             selectedType == null || n.businessType == selectedType;
+        // metadata status may be String or other; coerce to string for comparison
+        final metaStatus = n.metadata?['status']?.toString();
         final statusMatch =
-            selectedStatus == null || (n.metadata?['status'] == selectedStatus);
+            selectedStatus == null || metaStatus == selectedStatus;
+        final q = _searchQuery.trim().toLowerCase();
         final searchMatch =
-            _searchQuery.isEmpty ||
-            n.title.toLowerCase().contains(_searchQuery.toLowerCase()) ||
-            n.message.toLowerCase().contains(_searchQuery.toLowerCase());
+            q.isEmpty ||
+            n.title.toLowerCase().contains(q) ||
+            n.message.toLowerCase().contains(q);
         return businessMatch && statusMatch && searchMatch;
       }).toList();
     });
@@ -361,7 +417,7 @@ class _NotificationScreenState extends State<NotificationScreen> {
                     _selectedIds.clear();
                   } else {
                     _selectedIds = _filteredNotifications
-                        .map((n) => n.id ?? '')
+                        .map((n) => n.id)
                         .where((id) => id.isNotEmpty)
                         .toSet();
                   }
@@ -383,125 +439,28 @@ class _NotificationScreenState extends State<NotificationScreen> {
       ),
       body: Column(
         children: [
-          // Search bar
-          Container(
-            color: Colors.white,
-            padding: const EdgeInsets.fromLTRB(16, 12, 16, 16),
-            child: Container(
-              decoration: BoxDecoration(
-                color: const Color(0xFFF8FAFC),
-                borderRadius: BorderRadius.circular(12),
-                border: Border.all(color: const Color(0xFFE2E8F0)),
-              ),
-              child: TextField(
-                decoration: const InputDecoration(
-                  hintText: 'Tìm kiếm thông báo...',
-                  hintStyle: TextStyle(color: Color(0xFF94A3B8)),
-                  prefixIcon: Icon(Icons.search, color: Color(0xFF64748B)),
-                  border: InputBorder.none,
-                  contentPadding: EdgeInsets.symmetric(
-                    horizontal: 16,
-                    vertical: 12,
-                  ),
-                ),
-                onChanged: (v) {
-                  _searchQuery = v;
-                  _applyFilter();
-                },
-              ),
-            ),
-          ),
-
-          // Filter business_type
-          Container(
-            color: Colors.white,
-            height: 52,
-            child: ListView.builder(
-              scrollDirection: Axis.horizontal,
-              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
-              itemCount: _filterOptions.length,
-              itemBuilder: (context, index) {
-                final o = _filterOptions[index];
-                final isSelected = _selectedFilter == o['label'];
-                return Padding(
-                  padding: const EdgeInsets.only(right: 8),
-                  child: FilterChip(
-                    label: Text(
-                      o['label'],
-                      style: TextStyle(
-                        color: isSelected
-                            ? Colors.white
-                            : const Color(0xFF64748B),
-                        fontWeight: isSelected
-                            ? FontWeight.w600
-                            : FontWeight.w500,
-                        fontSize: 13,
-                      ),
-                    ),
-                    selected: isSelected,
-                    backgroundColor: const Color(0xFFF1F5F9),
-                    selectedColor: const Color(0xFF3B82F6),
-                    side: BorderSide(
-                      color: isSelected
-                          ? const Color(0xFF3B82F6)
-                          : const Color(0xFFE2E8F0),
-                    ),
-                    onSelected: (s) {
-                      setState(() {
-                        _selectedFilter = o['label'];
-                        _applyFilter();
-                      });
-                    },
-                  ),
-                );
-              },
-            ),
-          ),
-
-          // Filter status
-          Container(
-            color: Colors.white,
-            height: 52,
-            child: ListView.builder(
-              scrollDirection: Axis.horizontal,
-              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
-              itemCount: _statusOptions.length,
-              itemBuilder: (context, i) {
-                final o = _statusOptions[i];
-                final isSelected = _selectedStatus == o['label'];
-                return Padding(
-                  padding: const EdgeInsets.only(right: 8),
-                  child: FilterChip(
-                    label: Text(
-                      o['label'],
-                      style: TextStyle(
-                        color: isSelected
-                            ? Colors.white
-                            : const Color(0xFF64748B),
-                        fontWeight: isSelected
-                            ? FontWeight.w600
-                            : FontWeight.w500,
-                        fontSize: 13,
-                      ),
-                    ),
-                    selected: isSelected,
-                    backgroundColor: const Color(0xFFF1F5F9),
-                    selectedColor: const Color(0xFF3B82F6),
-                    side: BorderSide(
-                      color: isSelected
-                          ? const Color(0xFF3B82F6)
-                          : const Color(0xFFE2E8F0),
-                    ),
-                    onSelected: (s) {
-                      setState(() {
-                        _selectedStatus = o['label'];
-                        _applyFilter();
-                      });
-                    },
-                  ),
-                );
-              },
-            ),
+          NotificationFilterPanel(
+            searchController: _searchController,
+            filterOptions: _filterOptions,
+            statusOptions: _statusOptions,
+            selectedFilterValue: _selectedFilterValue,
+            selectedStatusValue: _selectedStatusValue,
+            onSearchChanged: (value) {
+              _searchQuery = value;
+              _applyFilter();
+            },
+            onFilterSelected: (value) {
+              setState(() {
+                _selectedFilterValue = value;
+                _applyFilter();
+              });
+            },
+            onStatusSelected: (value) {
+              setState(() {
+                _selectedStatusValue = value;
+                _applyFilter();
+              });
+            },
           ),
 
           const SizedBox(height: 8),
@@ -539,16 +498,36 @@ class _NotificationScreenState extends State<NotificationScreen> {
                     itemBuilder: (context, i) {
                       final n = _filteredNotifications[i];
                       final isUnread = n.isRead == false || n.readAt == null;
-                      final typeVN = NotificationTranslator.businessType(
+                      final typeVN = BackendEnums.businessTypeToVietnamese(
                         n.businessType,
                       );
-                      final statusVN = NotificationTranslator.status(
-                        n.metadata?['status']?.toString(),
+                      // Determine status key (prefer explicit metadata.status, fallback to priority)
+                      String? statusKey = n.metadata?['status']
+                          ?.toString()
+                          .toLowerCase();
+                      if (statusKey == null || statusKey.isEmpty) {
+                        final pr = n.priority ?? 0;
+                        if (pr >= 8) {
+                          statusKey = 'danger';
+                        } else if (pr >= 4) {
+                          statusKey = 'warning';
+                        } else {
+                          statusKey = 'normal';
+                        }
+                      }
+                      final statusVN = NotificationTranslator.status(statusKey);
+                      final severity = _severityFromStatus(statusKey);
+                      final statusColor = NotificationTranslator.statusColor(
+                        statusKey,
                       );
-                      final isSelected = _selectedIds.contains(n.id ?? '');
+                      final borderColor = _notificationBorderColor(
+                        severity,
+                        isUnread,
+                      );
+                      final isSelected = _selectedIds.contains(n.id);
 
                       return Dismissible(
-                        key: Key(n.id ?? i.toString()),
+                        key: Key(n.id),
                         direction: _isSelectionMode
                             ? DismissDirection.none
                             : DismissDirection.endToStart,
@@ -592,7 +571,7 @@ class _NotificationScreenState extends State<NotificationScreen> {
                           );
                         },
                         onDismissed: (direction) async {
-                          await _apiService.deleteNotification(n.id ?? '');
+                          await _apiService.deleteNotification(n.id);
                           await _loadNotifications();
                           await _fetchUnreadCount();
                         },
@@ -602,14 +581,14 @@ class _NotificationScreenState extends State<NotificationScreen> {
                             color: Colors.white,
                             borderRadius: BorderRadius.circular(16),
                             border: Border.all(
-                              color: isUnread
-                                  ? const Color(0xFF3B82F6)
-                                  : const Color(0xFFE2E8F0),
+                              color: borderColor,
                               width: isUnread ? 2 : 1,
                             ),
                             boxShadow: [
                               BoxShadow(
-                                color: Colors.black.withOpacity(0.04),
+                                color: Colors.black.withAlpha(
+                                  (0.04 * 255).round(),
+                                ),
                                 blurRadius: 8,
                                 offset: const Offset(0, 2),
                               ),
@@ -617,13 +596,17 @@ class _NotificationScreenState extends State<NotificationScreen> {
                           ),
                           child: InkWell(
                             onTap: _isSelectionMode
-                                ? () => _toggleSelection(n.id ?? '')
-                                : null,
+                                ? () => _toggleSelection(n.id)
+                                : () => _handleNotificationTap(
+                                    context,
+                                    n,
+                                    severity,
+                                  ),
                             onLongPress: () {
                               if (!_isSelectionMode) {
                                 setState(() {
                                   _isSelectionMode = true;
-                                  _selectedIds.add(n.id ?? '');
+                                  _selectedIds.add(n.id);
                                 });
                               }
                             },
@@ -639,7 +622,7 @@ class _NotificationScreenState extends State<NotificationScreen> {
                                       child: Checkbox(
                                         value: isSelected,
                                         onChanged: (v) =>
-                                            _toggleSelection(n.id ?? ''),
+                                            _toggleSelection(n.id),
                                         activeColor: const Color(0xFF3B82F6),
                                         shape: RoundedRectangleBorder(
                                           borderRadius: BorderRadius.circular(
@@ -741,19 +724,27 @@ class _NotificationScreenState extends State<NotificationScreen> {
                                                     vertical: 4,
                                                   ),
                                               decoration: BoxDecoration(
-                                                color: const Color(0xFFF1F5F9),
+                                                color: statusColor.withOpacity(
+                                                  0.12,
+                                                ),
                                                 borderRadius:
                                                     BorderRadius.circular(6),
+                                                // border: Border.all(
+                                                //   color: statusColor
+                                                //       .withOpacitySafe(0.24),
+                                                // ),
                                               ),
                                               child: Text(
                                                 statusVN,
-                                                style: const TextStyle(
+                                                style: TextStyle(
                                                   fontSize: 11,
-                                                  color: Color(0xFF64748B),
+                                                  color: statusColor,
                                                   fontWeight: FontWeight.w500,
                                                 ),
                                               ),
                                             ),
+                                            if (!_isSelectionMode)
+                                              _buildSeverityIndicator(severity),
                                           ],
                                         ),
                                         const SizedBox(height: 8),
@@ -768,10 +759,21 @@ class _NotificationScreenState extends State<NotificationScreen> {
                                             Text(
                                               _formatTime(n.createdAt),
                                               style: TextStyle(
-                                                fontSize: 12,
+                                                fontSize: 11,
                                                 color: Colors.grey.shade500,
                                               ),
                                             ),
+                                            const Spacer(),
+                                            if (!_isSelectionMode &&
+                                                _shouldShowSeverityActionButton(
+                                                  n,
+                                                  severity,
+                                                ))
+                                              _buildSeverityActionButton(
+                                                context,
+                                                n,
+                                                severity,
+                                              ),
                                           ],
                                         ),
                                       ],
@@ -788,10 +790,10 @@ class _NotificationScreenState extends State<NotificationScreen> {
                                         borderRadius: BorderRadius.circular(12),
                                       ),
                                       itemBuilder: (context) => [
-                                        const PopupMenuItem(
+                                        PopupMenuItem(
                                           value: 'delete',
                                           child: Row(
-                                            children: [
+                                            children: const [
                                               Icon(
                                                 Icons.delete_outline,
                                                 color: Colors.red,
@@ -805,7 +807,7 @@ class _NotificationScreenState extends State<NotificationScreen> {
                                       ],
                                       onSelected: (value) {
                                         if (value == 'delete') {
-                                          _deleteSingle(n.id ?? '');
+                                          _deleteSingle(n.id);
                                         }
                                       },
                                     ),
@@ -821,5 +823,779 @@ class _NotificationScreenState extends State<NotificationScreen> {
         ],
       ),
     );
+  }
+
+  @override
+  void dispose() {
+    try {
+      _notificationSubscription?.cancel();
+    } catch (_) {}
+    try {
+      _debounceTimer?.cancel();
+    } catch (_) {}
+    _searchController.dispose();
+    super.dispose();
+  }
+
+  void _handleNotificationTap(
+    BuildContext context,
+    NotificationModel notification,
+    _NotificationSeverity severity,
+  ) {
+    if (_shouldShowSeverityActionButton(notification, severity)) {
+      _showNotificationActionSheet(context, notification, severity);
+    } else if (notification.businessType == 'confirmation_request') {
+      _showConfirmationRequestSheet(context, notification);
+    } else {
+      _openNotificationDetail(context, notification);
+    }
+  }
+
+  Widget _buildSeverityIndicator(_NotificationSeverity severity) {
+    final color = _severityColor(severity);
+    return Container(
+      padding: const EdgeInsets.all(6),
+      decoration: BoxDecoration(
+        color: color.withOpacity(0.12),
+        borderRadius: BorderRadius.circular(10),
+      ),
+      child: Icon(_severityIndicatorIcon(severity), size: 11, color: color),
+    );
+  }
+
+  Widget _buildSeverityActionButton(
+    BuildContext context,
+    NotificationModel notification,
+    _NotificationSeverity severity,
+  ) {
+    final color = _severityColor(severity);
+    return TextButton.icon(
+      onPressed: () =>
+          _showNotificationActionSheet(context, notification, severity),
+      icon: Icon(_severityActionIcon(severity), size: 16, color: color),
+      label: Text(
+        _severityActionLabel(severity),
+        style: TextStyle(color: color, fontWeight: FontWeight.w600),
+      ),
+      style: TextButton.styleFrom(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+        backgroundColor: color.withOpacity(0.08),
+        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+      ),
+    );
+  }
+
+  bool _hasSeverityActions(_NotificationSeverity severity) {
+    return severity == _NotificationSeverity.danger ||
+        severity == _NotificationSeverity.warning;
+  }
+
+  void _showNotificationActionSheet(
+    BuildContext context,
+    NotificationModel notification,
+    _NotificationSeverity severity,
+  ) {
+    final actions = _notificationActionItems(context, notification, severity);
+    final severityColor = _severityColor(severity);
+    if (actions.isEmpty) {
+      _openNotificationDetail(context, notification);
+      return;
+    }
+    showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (modalCtx) {
+        return SafeArea(
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+            child: ClipRRect(
+              borderRadius: BorderRadius.circular(20),
+              child: Container(
+                color: Colors.white,
+                child: SingleChildScrollView(
+                  child: Padding(
+                    padding: const EdgeInsets.fromLTRB(20, 24, 20, 24),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Row(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Container(
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 10,
+                                vertical: 4,
+                              ),
+                              decoration: BoxDecoration(
+                                color: severityColor.withOpacity(0.15),
+                                borderRadius: BorderRadius.circular(12),
+                              ),
+                              child: Text(
+                                _severityLabel(severity),
+                                style: TextStyle(
+                                  color: severityColor,
+                                  fontWeight: FontWeight.w700,
+                                  letterSpacing: 0.2,
+                                ),
+                              ),
+                            ),
+                            const SizedBox(width: 12),
+                            Expanded(
+                              child: Text(
+                                notification.title,
+                                style: const TextStyle(
+                                  fontSize: 18,
+                                  fontWeight: FontWeight.w700,
+                                ),
+                              ),
+                            ),
+                            IconButton(
+                              onPressed: () => Navigator.of(modalCtx).pop(),
+                              icon: const Icon(Icons.close),
+                              splashRadius: 18,
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 8),
+                        Text(
+                          'Chọn hành động phù hợp để xử lý thông báo này.',
+                          style: TextStyle(
+                            color: Colors.grey.shade600,
+                            fontSize: 13,
+                          ),
+                        ),
+                        const SizedBox(height: 16),
+                        ...actions.map(
+                          (action) => Padding(
+                            padding: const EdgeInsets.only(bottom: 10),
+                            child: _buildNotificationActionTile(
+                              action,
+                              modalCtx,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              ),
+            ),
+          ),
+        );
+      },
+    );
+  }
+
+  Widget _buildNotificationActionTile(
+    _SeverityActionItem action,
+    BuildContext modalCtx,
+  ) {
+    return ListTile(
+      enabled: action.enabled,
+      onTap: action.enabled
+          ? () {
+              Navigator.of(modalCtx).pop();
+              action.onPressed();
+            }
+          : null,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+      tileColor: Colors.grey.shade50,
+      contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+      leading: Icon(
+        action.icon,
+        size: 22,
+        color: action.color ?? Colors.grey.shade800,
+      ),
+      title: Text(
+        action.label,
+        style: TextStyle(
+          fontWeight: FontWeight.w600,
+          color: action.enabled ? Colors.black87 : Colors.grey.shade500,
+        ),
+      ),
+      subtitle: action.subtitle != null
+          ? Text(
+              action.subtitle!,
+              style: TextStyle(color: Colors.grey.shade600, fontSize: 12),
+            )
+          : null,
+      trailing: Icon(
+        Icons.chevron_right_outlined,
+        size: 18,
+        color: action.enabled ? Colors.grey.shade500 : Colors.grey.shade400,
+      ),
+    );
+  }
+
+  List<_SeverityActionItem> _notificationActionItems(
+    BuildContext context,
+    NotificationModel notification,
+    _NotificationSeverity severity,
+  ) {
+    final eventId = _extractEventId(notification);
+    final hasEvent = eventId != null;
+    final items = <_SeverityActionItem>[];
+
+    if (severity == _NotificationSeverity.danger) {
+      items.addAll([
+        _SeverityActionItem(
+          icon: Icons.call,
+          label: 'Gọi khẩn cấp',
+          color: Colors.red.shade600,
+          onPressed: () => _initiateEmergencyCall(context),
+        ),
+        _SeverityActionItem(
+          icon: Icons.notifications_active,
+          label: 'Kích hoạt báo động',
+          color: Colors.orange.shade700,
+          enabled: hasEvent,
+          subtitle: hasEvent ? null : 'Không có sự kiện liên quan',
+          onPressed: () {
+            if (!hasEvent) {
+              _showSnackBar(context, 'Không tìm thấy sự kiện liên quan');
+              return;
+            }
+            _activateAlarmForNotification(context, eventId);
+          },
+        ),
+        _SeverityActionItem(
+          icon: Icons.visibility_outlined,
+          label: 'Xem chi tiết',
+          onPressed: () => _openNotificationDetail(context, notification),
+        ),
+        _SeverityActionItem(
+          icon: Icons.check_circle_outline,
+          label: 'Đã xử lý',
+          subtitle: notification.hasBeenRead ? 'Đã đánh dấu là đã đọc' : null,
+          color: Colors.green.shade600,
+          enabled: !notification.hasBeenRead,
+          onPressed: () => _markNotificationAsRead(context, notification),
+        ),
+        if (hasEvent)
+          _SeverityActionItem(
+            icon: Icons.flag_outlined,
+            label: 'Đã xử lý sự kiện',
+            subtitle: 'Gọi API xác nhận sự kiện',
+            onPressed: () =>
+                _confirmEventForNotification(context, eventId, confirm: true),
+          ),
+      ]);
+    } else if (severity == _NotificationSeverity.warning) {
+      items.addAll([
+        _SeverityActionItem(
+          icon: Icons.visibility_outlined,
+          label: 'Xem chi tiết',
+          onPressed: () => _openNotificationDetail(context, notification),
+        ),
+        _SeverityActionItem(
+          icon: Icons.notifications_active,
+          label: 'Báo động',
+          color: Colors.orange.shade700,
+          enabled: hasEvent,
+          subtitle: hasEvent ? null : 'Không có sự kiện liên quan',
+          onPressed: () {
+            if (!hasEvent) {
+              _showSnackBar(context, 'Không tìm thấy sự kiện liên quan');
+              return;
+            }
+            _activateAlarmForNotification(context, eventId);
+          },
+        ),
+        _SeverityActionItem(
+          icon: Icons.call,
+          label: 'Gọi khẩn cấp',
+          color: Colors.red.shade600,
+          onPressed: () => _initiateEmergencyCall(context),
+        ),
+        _SeverityActionItem(
+          icon: Icons.check_circle_outline,
+          label: 'Đã xử lý',
+          subtitle: notification.hasBeenRead ? 'Đã đánh dấu là đã đọc' : null,
+          color: Colors.green.shade600,
+          enabled: !notification.hasBeenRead,
+          onPressed: () => _markNotificationAsRead(context, notification),
+        ),
+      ]);
+    }
+
+    return items;
+  }
+
+  void _showConfirmationRequestSheet(
+    BuildContext context,
+    NotificationModel notification,
+  ) {
+    final eventId = _extractEventId(notification);
+    final subtitle = eventId == null ? 'Không tìm thấy mã sự kiện' : null;
+    showModalBottomSheet<void>(
+      context: context,
+      backgroundColor: Colors.transparent,
+      isScrollControlled: true,
+      builder: (modalCtx) {
+        return SafeArea(
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+            child: ClipRRect(
+              borderRadius: BorderRadius.circular(20),
+              child: Container(
+                color: Colors.white,
+                padding: const EdgeInsets.fromLTRB(20, 24, 20, 24),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Text(
+                      'Yêu cầu xác nhận',
+                      style: TextStyle(
+                        fontSize: 18,
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
+                    const SizedBox(height: 8),
+                    Text(
+                      notification.message,
+                      style: TextStyle(
+                        color: Colors.grey.shade600,
+                        fontSize: 13,
+                      ),
+                    ),
+                    const SizedBox(height: 16),
+                    _buildNotificationActionTile(
+                      _SeverityActionItem(
+                        icon: Icons.visibility,
+                        label: 'Xem đề xuất',
+                        onPressed: () =>
+                            _openNotificationDetail(context, notification),
+                      ),
+                      modalCtx,
+                    ),
+                    _buildNotificationActionTile(
+                      _SeverityActionItem(
+                        icon: Icons.check,
+                        label: 'Chấp nhận',
+                        enabled: eventId != null,
+                        subtitle: subtitle,
+                        color: Colors.green.shade600,
+                        onPressed: () {
+                          if (eventId == null) {
+                            _showSnackBar(
+                              context,
+                              'Không tìm thấy sự kiện liên quan',
+                            );
+                            return;
+                          }
+                          _confirmEventForNotification(
+                            context,
+                            eventId,
+                            confirm: true,
+                          );
+                        },
+                      ),
+                      modalCtx,
+                    ),
+                    _buildNotificationActionTile(
+                      _SeverityActionItem(
+                        icon: Icons.close,
+                        label: 'Từ chối',
+                        enabled: eventId != null,
+                        subtitle: subtitle,
+                        color: Colors.red.shade600,
+                        onPressed: () {
+                          if (eventId == null) {
+                            _showSnackBar(
+                              context,
+                              'Không tìm thấy sự kiện liên quan',
+                            );
+                            return;
+                          }
+                          _confirmEventForNotification(
+                            context,
+                            eventId,
+                            confirm: false,
+                          );
+                        },
+                      ),
+                      modalCtx,
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ),
+        );
+      },
+    );
+  }
+
+  void _openNotificationDetail(
+    BuildContext context,
+    NotificationModel notification,
+  ) async {
+    final changed = await Navigator.push<bool?>(
+      context,
+      MaterialPageRoute(
+        builder: (_) => NotificationDetailScreen(notification: notification),
+      ),
+    );
+    if (changed == true) {
+      await _loadNotifications();
+      await _fetchUnreadCount();
+    }
+  }
+
+  String _severityLabel(_NotificationSeverity severity) {
+    switch (severity) {
+      case _NotificationSeverity.danger:
+        return 'NGUY HIỂM';
+      case _NotificationSeverity.warning:
+        return 'CẢNH BÁO';
+      case _NotificationSeverity.info:
+        return 'THÔNG TIN';
+      case _NotificationSeverity.normal:
+      default:
+        return 'Bình thường';
+    }
+  }
+
+  String _severityActionLabel(_NotificationSeverity severity) {
+    switch (severity) {
+      case _NotificationSeverity.danger:
+        return 'Xử lý khẩn cấp';
+      case _NotificationSeverity.warning:
+        return 'Xử lý cảnh báo';
+      default:
+        return 'Xử lý';
+    }
+  }
+
+  IconData _severityActionIcon(_NotificationSeverity severity) {
+    switch (severity) {
+      case _NotificationSeverity.danger:
+        return Icons.dangerous_rounded;
+      case _NotificationSeverity.warning:
+        return Icons.warning_amber_rounded;
+      default:
+        return Icons.chevron_right;
+    }
+  }
+
+  IconData _severityIndicatorIcon(_NotificationSeverity severity) {
+    switch (severity) {
+      case _NotificationSeverity.normal:
+        return Icons.check_circle_outline;
+      case _NotificationSeverity.info:
+        return Icons.info_outline;
+      default:
+        return Icons.circle;
+    }
+  }
+
+  Color _severityColor(_NotificationSeverity severity) {
+    switch (severity) {
+      case _NotificationSeverity.danger:
+        return Colors.red.shade600;
+      case _NotificationSeverity.warning:
+        return Colors.orange.shade700;
+      case _NotificationSeverity.info:
+        return Colors.blue.shade600;
+      case _NotificationSeverity.normal:
+      default:
+        return Colors.blue.shade300;
+    }
+  }
+
+  Color _notificationBorderColor(
+    _NotificationSeverity severity,
+    bool isUnread,
+  ) {
+    final base = _severityColor(severity);
+    if (isUnread) return base.withAlpha(200);
+    return base.withAlpha(80);
+  }
+
+  _NotificationSeverity _severityFromStatus(String? statusKey) {
+    final key = statusKey?.toLowerCase().trim() ?? '';
+    if (key.isEmpty) return _NotificationSeverity.normal;
+    if (['danger', 'critical', 'emergency'].contains(key)) {
+      return _NotificationSeverity.danger;
+    }
+    if (['warning', 'abnormal', 'suspect', 'alert'].contains(key)) {
+      return _NotificationSeverity.warning;
+    }
+    if (['info', 'neutral'].contains(key)) {
+      return _NotificationSeverity.info;
+    }
+    return _NotificationSeverity.normal;
+  }
+
+  bool _shouldShowSeverityActionButton(
+    NotificationModel notification,
+    _NotificationSeverity severity,
+  ) {
+    if (!_hasSeverityActions(severity)) return false;
+    if (_isNotificationOlderThanThreshold(notification)) return false;
+    final lifecycle = _extractNotificationLifecycle(notification);
+    if (lifecycle == null || lifecycle.isEmpty) return true;
+    return !_terminalLifecycleStates.contains(lifecycle);
+  }
+
+  static const Set<String> _terminalLifecycleStates = {
+    'RESOLVED',
+    'CANCELED',
+    'ACKNOWLEDGED',
+    'EMERGENCY_RESPONSE_RECEIVED',
+    'EMERGENCY_ESCALATION_FAILED',
+    'FORWARDED',
+  };
+
+  String? _extractNotificationLifecycle(NotificationModel notification) {
+    return _extractLifecycleFromCandidate(notification.metadata);
+  }
+
+  String? _extractLifecycleFromCandidate(dynamic candidate) {
+    if (candidate == null) return null;
+    if (candidate is Map) {
+      for (final entry in candidate.entries) {
+        final key = entry.key.toString().toLowerCase();
+        if (_lifecycleKeyNames.contains(key)) {
+          final normalized = _normalizeLifecycleValue(entry.value?.toString());
+          if (normalized != null && normalized.isNotEmpty) {
+            return normalized;
+          }
+        }
+      }
+      for (final value in candidate.values) {
+        final nested = _extractLifecycleFromCandidate(value);
+        if (nested != null && nested.isNotEmpty) return nested;
+      }
+    } else if (candidate is Iterable) {
+      for (final item in candidate) {
+        final nested = _extractLifecycleFromCandidate(item);
+        if (nested != null && nested.isNotEmpty) return nested;
+      }
+    }
+    return null;
+  }
+
+  static const Set<String> _lifecycleKeyNames = {
+    'lifecycle_state',
+    'lifecyclestate',
+  };
+
+  bool _isNotificationOlderThanThreshold(NotificationModel notification) {
+    final createdAt = notification.createdAt ?? notification.timestamp;
+    final age = DateTime.now().difference(createdAt);
+    return age.inMinutes >= 15;
+  }
+
+  String? _normalizeLifecycleValue(String? raw) {
+    if (raw == null) return null;
+    final trimmed = raw.trim();
+    if (trimmed.isEmpty) return null;
+    if (trimmed.contains('_') ||
+        trimmed.contains('-') ||
+        trimmed.contains(' ')) {
+      return trimmed
+          .replaceAll('-', '_')
+          .replaceAll(RegExp(r'\s+'), '_')
+          .toUpperCase();
+    }
+    final withUnderscores = trimmed.replaceAllMapped(
+      RegExp(r'([a-z0-9])([A-Z])'),
+      (m) => '${m[1]}_${m[2]}',
+    );
+    return withUnderscores.toUpperCase();
+  }
+
+  Future<void> _initiateEmergencyCall(BuildContext context) async {
+    final messenger = ScaffoldMessenger.of(context);
+    String normalized = '112';
+    try {
+      final rawPhone = await _resolveEmergencyPhoneNumber();
+      normalized = _normalizePhoneNumber(rawPhone);
+      final status = await Permission.phone.request();
+      if (status.isGranted) {
+        final success = await DirectCaller.call(normalized);
+        if (success) return;
+        await _fallbackDial(messenger, normalized);
+        return;
+      }
+      if (status.isPermanentlyDenied) {
+        messenger.showSnackBar(
+          SnackBar(
+            content: const Text(
+              'Quyền gọi điện bị từ chối vĩnh viễn. Vui lòng bật quyền trong cài đặt.',
+            ),
+            action: SnackBarAction(
+              label: 'Cài đặt',
+              onPressed: () => openAppSettings(),
+            ),
+          ),
+        );
+        await _fallbackDial(messenger, normalized);
+        return;
+      }
+      await _fallbackDial(messenger, normalized);
+    } catch (e) {
+      messenger.showSnackBar(
+        SnackBar(
+          content: Text('Lỗi khi gọi: $e'),
+          backgroundColor: Colors.red.shade600,
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
+    }
+  }
+
+  Future<String> _resolveEmergencyPhoneNumber() async {
+    String? phoneToCall;
+    try {
+      final userId = await AuthStorage.getUserId();
+      if (userId != null && userId.isNotEmpty) {
+        final contacts = await EmergencyContactsRemoteDataSource().list(userId);
+        final p1 = contacts
+            .where((c) => (c.alertLevel == 1) && c.phone.trim().isNotEmpty)
+            .toList();
+        if (p1.isNotEmpty) {
+          phoneToCall = p1.first.phone.trim();
+        } else {
+          final any = contacts.firstWhere(
+            (c) => c.phone.trim().isNotEmpty,
+            orElse: () => EmergencyContactDto(
+              id: '',
+              name: '',
+              relation: '',
+              phone: '',
+              alertLevel: 1,
+            ),
+          );
+          if (any.phone.trim().isNotEmpty) {
+            phoneToCall = any.phone.trim();
+          }
+        }
+      }
+    } catch (e) {
+      print('[NotificationScreen] load contacts error: $e');
+    }
+    if (phoneToCall == null || phoneToCall.isEmpty) {
+      return '112';
+    }
+    return phoneToCall;
+  }
+
+  String _normalizePhoneNumber(String phone) {
+    var normalized = phone.replaceAll(RegExp(r'[\s\-\(\)]'), '');
+    if (normalized.startsWith('+84')) {
+      normalized = '0${normalized.substring(3)}';
+    } else if (normalized.startsWith('84')) {
+      normalized = '0${normalized.substring(2)}';
+    }
+    return normalized;
+  }
+
+  Future<void> _fallbackDial(
+    ScaffoldMessengerState messenger,
+    String normalized,
+  ) async {
+    try {
+      await launchUrl(Uri.parse('tel:$normalized'));
+    } catch (_) {
+      messenger.showSnackBar(
+        SnackBar(
+          content: const Text('Không thể thực hiện cuộc gọi'),
+          backgroundColor: Colors.red.shade600,
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
+    }
+  }
+
+  String? _extractEventId(NotificationModel notification) {
+    final meta = notification.metadata ?? {};
+    final candidates = [
+      meta['event_id'],
+      meta['eventId'],
+      meta['event_id'],
+      meta['eventId'],
+      meta['id'],
+      meta['event'],
+    ];
+    for (final candidate in candidates) {
+      if (candidate == null) continue;
+      final value = candidate.toString().trim();
+      if (value.isNotEmpty) return value;
+    }
+    return null;
+  }
+
+  void _showSnackBar(BuildContext context, String message) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(message),
+        backgroundColor: Colors.grey.shade900,
+        behavior: SnackBarBehavior.floating,
+      ),
+    );
+  }
+
+  Future<void> _activateAlarmForNotification(
+    BuildContext context,
+    String eventId,
+  ) async {
+    final messenger = ScaffoldMessenger.of(context);
+    final userId = await AuthStorage.getUserId();
+    if (userId == null || userId.isEmpty) {
+      _showSnackBar(context, 'Không xác thực được người dùng');
+      return;
+    }
+    try {
+      await AlarmRemoteDataSource().setAlarm(
+        eventId: eventId,
+        userId: userId,
+        enabled: true,
+      );
+      messenger.showSnackBar(
+        const SnackBar(
+          content: Text('Đã kích hoạt báo động'),
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
+    } catch (e) {
+      _showSnackBar(context, 'Kích hoạt báo động thất bại: $e');
+    }
+  }
+
+  Future<void> _markNotificationAsRead(
+    BuildContext context,
+    NotificationModel notification,
+  ) async {
+    try {
+      await _apiService.markAsRead(notification.id);
+      _showSnackBar(context, 'Đã đánh dấu là đã đọc');
+      await _loadNotifications();
+      await _fetchUnreadCount();
+    } catch (e) {
+      _showSnackBar(context, 'Lỗi: $e');
+    }
+  }
+
+  Future<void> _confirmEventForNotification(
+    BuildContext context,
+    String eventId, {
+    required bool confirm,
+  }) async {
+    try {
+      await EventsRemoteDataSource().confirmEvent(
+        eventId: eventId,
+        confirmStatusBool: confirm,
+      );
+      _showSnackBar(
+        context,
+        confirm ? 'Đã xác nhận sự kiện' : 'Đã từ chối sự kiện',
+      );
+    } catch (e) {
+      _showSnackBar(context, 'Không thể cập nhật sự kiện: $e');
+    }
   }
 }

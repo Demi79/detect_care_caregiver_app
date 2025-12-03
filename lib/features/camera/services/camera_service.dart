@@ -3,40 +3,29 @@ import 'dart:async';
 import 'package:detect_care_caregiver_app/core/network/api_client.dart';
 import 'package:detect_care_caregiver_app/features/auth/data/auth_storage.dart';
 import 'package:detect_care_caregiver_app/features/camera/data/camera_api.dart';
+import 'package:detect_care_caregiver_app/features/camera/data/camera_timeline_api.dart';
 import 'package:detect_care_caregiver_app/features/camera/models/camera_entry.dart';
 import 'package:detect_care_caregiver_app/features/camera/services/camera_quota_service.dart';
+import 'package:detect_care_caregiver_app/features/camera/widgets/timeline/camera_timeline_parser.dart';
 import 'package:detect_care_caregiver_app/features/subscription/data/service_package_api.dart';
-import 'package:detect_care_caregiver_app/features/assignments/data/assignments_remote_data_source.dart';
 import 'package:flutter/foundation.dart';
 
 class CameraService {
   final CameraApi _cameraApi;
   final CameraQuotaService _quotaService;
+  final CameraTimelineApi _timelineApi;
 
   CameraService()
     : _cameraApi = CameraApi(
         ApiClient(tokenProvider: AuthStorage.getAccessToken),
       ),
-      _quotaService = CameraQuotaService(ServicePackageApi());
+      _quotaService = CameraQuotaService(ServicePackageApi()),
+      _timelineApi = CameraTimelineApi();
 
   Future<List<CameraEntry>> loadCameras() async {
     try {
-      // Resolve the customer id linked to this caregiver (if any).
-      String? customerId;
-      try {
-        final assignmentsDs = AssignmentsRemoteDataSource();
-        final assignments = await assignmentsDs.listPending(status: 'accepted');
-        final active = assignments
-            .where((a) => a.isActive && (a.status.toLowerCase() == 'accepted'))
-            .toList();
-        if (active.isNotEmpty) customerId = active.first.customerId;
-      } catch (_) {}
-
-      customerId ??= await AuthStorage.getUserId();
-
-      final result = await _cameraApi.getCamerasByUser(
-        customerId: customerId ?? '',
-      );
+      final userId = await AuthStorage.getUserId();
+      final result = await _cameraApi.getCamerasByUser(userId: userId ?? '');
       final List<dynamic> data = result['data'] ?? [];
       return data.map((e) => CameraEntry.fromJson(e)).toList();
     } catch (e) {
@@ -131,6 +120,27 @@ class CameraService {
     // TODO: Implement actual thumbnail refresh when API supports it
     // For now, just add a small delay to simulate network call
     await Future.delayed(const Duration(milliseconds: 50));
+  }
+
+  Future<String?> fetchTimelineThumbnail(String cameraId) async {
+    try {
+      final dateStr = DateTime.now().toIso8601String().split('T').first;
+      final data = await _timelineApi.listRecordings(
+        cameraId,
+        date: dateStr,
+        limit: 1,
+      );
+      final clips = parseRecordingClips(data);
+      if (clips.isEmpty) return null;
+      final clip = clips.firstWhere(
+        (c) => c.thumbnailUrl?.isNotEmpty == true,
+        orElse: () => clips.first,
+      );
+      return clip.thumbnailUrl;
+    } catch (e) {
+      debugPrint('Timeline thumbnail fetch failed for $cameraId: $e');
+      return null;
+    }
   }
 
   String cacheBustThumb(String? thumb) {

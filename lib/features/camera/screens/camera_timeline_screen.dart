@@ -101,6 +101,11 @@ class _CameraTimelineScreenState extends State<CameraTimelineScreen> {
               ),
               actions: [
                 IconButton(
+                  icon: const Icon(Icons.refresh, color: Colors.black87),
+                  tooltip: 'Làm mới timeline',
+                  onPressed: () => unawaited(_controller.loadTimeline()),
+                ),
+                IconButton(
                   icon: const Icon(
                     Icons.settings_outlined,
                     color: Colors.black87,
@@ -163,6 +168,19 @@ class _CameraTimelineScreenState extends State<CameraTimelineScreen> {
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.stretch,
                       children: [
+                        Padding(
+                          padding: const EdgeInsets.fromLTRB(12, 12, 12, 4),
+                          child: Text(
+                            'Timeline',
+                            style: TextStyle(
+                              fontSize: 14,
+                              fontWeight: FontWeight.w600,
+                              color: Colors.grey.shade800,
+                            ),
+                          ),
+                        ),
+                        const SizedBox(height: 8),
+                        _buildTimelineHero(context, ctl),
                         CameraTimelineEmptyPreview(
                           clips: ctl.clips,
                           isLoading: ctl.isLoading,
@@ -293,6 +311,133 @@ class _CameraTimelineScreenState extends State<CameraTimelineScreen> {
           ),
         ),
       ],
+    );
+  }
+
+  Widget _buildTimelineHero(
+    BuildContext context,
+    CameraTimelineController ctl,
+  ) {
+    final clipCount = ctl.clips.length;
+    final snippetCount = ctl.entries.length;
+    final statusText = ctl.isLoading
+        ? 'Đang tải dữ liệu...'
+        : clipCount == 0
+        ? 'Chưa có ghi hình hôm nay'
+        : 'Đã ghi $clipCount clip';
+
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 12),
+      child: Container(
+        decoration: BoxDecoration(
+          gradient: const LinearGradient(
+            colors: [Color(0xFF1A1F33), Color(0xFF363E6B)],
+            begin: Alignment.topLeft,
+            end: Alignment.bottomRight,
+          ),
+          borderRadius: BorderRadius.circular(26),
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withOpacity(0.18),
+              blurRadius: 18,
+              offset: const Offset(0, 8),
+            ),
+          ],
+        ),
+        padding: const EdgeInsets.all(18),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              crossAxisAlignment: CrossAxisAlignment.center,
+              children: [
+                Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'Lịch ghi hình',
+                      style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                        color: Colors.white,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      'Ngày ${_formatDay(ctl.selectedDay)}',
+                      style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                        color: Colors.white.withOpacity(0.75),
+                      ),
+                    ),
+                  ],
+                ),
+                const Spacer(),
+                IconButton(
+                  onPressed: () => unawaited(ctl.loadTimeline()),
+                  icon: const Icon(Icons.sync, color: Colors.white),
+                  tooltip: 'Làm mới timeline',
+                ),
+              ],
+            ),
+            const SizedBox(height: 8),
+            Text(
+              statusText,
+              style: Theme.of(
+                context,
+              ).textTheme.bodySmall?.copyWith(color: Colors.white70),
+            ),
+            const SizedBox(height: 16),
+            Row(
+              children: [
+                _buildStatBadge(
+                  label: 'Bản ghi',
+                  value: '$clipCount clip',
+                  accent: Colors.orangeAccent,
+                ),
+                const SizedBox(width: 8),
+                _buildStatBadge(
+                  label: 'Đoạn xem lại',
+                  value: '$snippetCount đoạn',
+                  accent: Colors.tealAccent,
+                ),
+              ],
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildStatBadge({
+    required String label,
+    required String value,
+    required Color accent,
+  }) {
+    return Expanded(
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+        decoration: BoxDecoration(
+          color: accent.withOpacity(0.2),
+          borderRadius: BorderRadius.circular(16),
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              label,
+              style: TextStyle(fontSize: 12, color: accent.withOpacity(0.9)),
+            ),
+            const SizedBox(height: 4),
+            Text(
+              value,
+              style: TextStyle(
+                fontSize: 14,
+                fontWeight: FontWeight.bold,
+                color: accent.withOpacity(0.95),
+              ),
+            ),
+          ],
+        ),
+      ),
     );
   }
 }

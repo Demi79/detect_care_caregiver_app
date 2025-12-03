@@ -2,6 +2,7 @@ import 'dart:io';
 
 import 'package:path_provider/path_provider.dart';
 
+/// Utility functions for camera operations
 class CameraHelpers {
   /// Parse subtype from URL query parameters
   static int readSubtype(String url) {

@@ -6,7 +6,7 @@ plugins {
 }
 
 android {
-    namespace = "com.example.detect_care_caregiver_app"
+    namespace = "com.detect_care_caregiver.app"
     compileSdk = flutter.compileSdkVersion
     ndkVersion = flutter.ndkVersion
 
@@ -23,7 +23,7 @@ android {
     }
 
     defaultConfig {
-        applicationId = "com.example.detect_care_caregiver_app"
+        applicationId = "com.detect_care_caregiver.app"
         minSdk     = flutter.minSdkVersion
         targetSdk  = flutter.targetSdkVersion
         versionCode = flutter.versionCode

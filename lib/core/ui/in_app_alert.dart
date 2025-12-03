@@ -1,3 +1,5 @@
+// ignore_for_file: unused_element, unused_field, dead_code, unnecessary_null_comparison
+
 import 'dart:async';
 
 import 'package:detect_care_caregiver_app/core/utils/backend_enums.dart';

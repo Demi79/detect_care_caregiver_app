@@ -7,9 +7,47 @@
   "client": [
     {
       "client_info": {
+        "mobilesdk_app_id": "1:961808917290:android:1d1313a7b9823671f33453",
+        "android_client_info": {
+          "package_name": "com.detect_care_caregiver.app"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyBTBDyDDLnYSPdScjCUCeWDwtGOOIx8Zi4"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    },
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:961808917290:android:6a076982c7da332ef33453",
+        "android_client_info": {
+          "package_name": "com.detectcare.app"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyBTBDyDDLnYSPdScjCUCeWDwtGOOIx8Zi4"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    },
+    {
+      "client_info": {
         "mobilesdk_app_id": "1:961808917290:android:7f9bf304cb314b44f33453",
         "android_client_info": {
-          "package_name": "com.example.detect_care_caregiver_app"
+          "package_name": "com.example.detect_care_app"
         }
       },
       "oauth_client": [],

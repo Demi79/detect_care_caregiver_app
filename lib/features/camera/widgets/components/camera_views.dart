@@ -41,9 +41,9 @@ class LoadingView extends StatelessWidget {
 }
 
 class EmptyView extends StatefulWidget {
-  final VoidCallback? onAddCamera;
+  final VoidCallback onAddCamera;
 
-  const EmptyView({super.key, this.onAddCamera});
+  const EmptyView({super.key, required this.onAddCamera});
 
   @override
   State<EmptyView> createState() => _EmptyViewState();

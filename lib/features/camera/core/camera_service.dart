@@ -1,20 +1,24 @@
 import 'dart:async';
 import 'dart:io';
-import 'package:flutter/foundation.dart';
 
 import 'package:flutter_vlc_player/flutter_vlc_player.dart';
 import 'package:wakelock_plus/wakelock_plus.dart';
 
 import 'camera_constants.dart';
 import 'camera_helpers.dart';
+import 'package:detect_care_caregiver_app/core/utils/logger.dart';
 
+/// Lớp dịch vụ cho các thao tác liên quan đến camera
 class CameraService {
   VlcPlayerController? _controller;
   String? _lastUrl;
 
+  /// Tạo VlcPlayerController với các tùy chọn tối ưu
   Future<VlcPlayerController> createController(String url) async {
+    // Huỷ controller hiện có (nếu có)
     await _disposeController();
 
+    // Bật wakelock để tránh thiết bị ngủ trong lúc phát
     await WakelockPlus.enable();
 
     try {
@@ -36,12 +40,15 @@ class CameraService {
         ),
       );
 
-      print('🐛 [CameraService] created VlcPlayerController for $url');
+      AppLogger.i('🐛 [CameraService] created VlcPlayerController for $url');
 
       return _controller!;
     } catch (e, st) {
-      print('❌ [CameraService] createController failed for $url: $e');
-      if (kDebugMode) print(st.toString());
+      AppLogger.e(
+        '❌ [CameraService] createController failed for $url: $e',
+        e,
+        st,
+      );
       try {
         await WakelockPlus.disable();
       } catch (_) {}
@@ -49,6 +56,10 @@ class CameraService {
     }
   }
 
+  /// Ensure a controller exists for the given URL. If an existing controller
+  /// is for a different URL or missing, recreate it and optionally wait for
+  /// playback to start. Returns the created/ensured controller or null on
+  /// failure.
   Future<VlcPlayerController?> ensureControllerFor(
     String url, {
     Duration waitFor = const Duration(seconds: 2),
@@ -57,18 +68,24 @@ class CameraService {
       if (_controller == null || (_lastUrl != null && _lastUrl != url)) {
         final c = await createController(url);
         _lastUrl = url;
+        // Try to wait briefly for playback
         final started = await waitForPlayback(waitFor);
         if (started) return c;
+        // Even if not started, return the controller so caller can decide
         return c;
       }
       return _controller;
     } catch (e, st) {
-      print('❌ [CameraService] ensureControllerFor failed for $url: $e');
-      if (kDebugMode) print(st.toString());
+      AppLogger.e(
+        '❌ [CameraService] ensureControllerFor failed for $url: $e',
+        e,
+        st,
+      );
       return null;
     }
   }
 
+  /// Huỷ (dispose) controller hiện tại
   Future<void> _disposeController() async {
     if (_controller != null) {
       try {
@@ -97,6 +114,8 @@ class CameraService {
     return false;
   }
 
+  /// Safe wrapper around controller.isPlaying() which may throw if the
+  /// native player isn't fully initialized yet. Returns false on any error.
   Future<bool> safeIsPlaying(VlcPlayerController? controller) async {
     if (controller == null) return false;
     try {
@@ -107,6 +126,7 @@ class CameraService {
     }
   }
 
+  /// Chụp snapshot từ video và lưu thành thumbnail
   Future<String?> takeSnapshot() async {
     if (_controller == null) return null;
 

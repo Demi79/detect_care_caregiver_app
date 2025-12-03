@@ -1,17 +1,22 @@
 import 'dart:async';
+import 'dart:ui';
+
+// ignore_for_file: unused_element
 
 import 'package:detect_care_caregiver_app/core/services/direct_caller.dart';
 import 'package:detect_care_caregiver_app/core/utils/logger.dart';
+import 'package:detect_care_caregiver_app/features/alarm/data/alarm_remote_data_source.dart';
 import 'package:detect_care_caregiver_app/features/auth/data/auth_storage.dart';
 import 'package:detect_care_caregiver_app/features/camera/core/camera_core.dart';
 import 'package:detect_care_caregiver_app/features/camera/models/camera_entry.dart';
 import 'package:detect_care_caregiver_app/features/camera/screens/camera_timeline_screen.dart';
 import 'package:detect_care_caregiver_app/features/camera/services/camera_access_guard.dart';
-import 'package:detect_care_caregiver_app/features/camera/widgets/controls_overlay.dart';
 import 'package:detect_care_caregiver_app/features/camera/widgets/features_panel.dart';
-import 'package:detect_care_caregiver_app/features/camera/widgets/quality_badge.dart';
 import 'package:detect_care_caregiver_app/features/camera/widgets/status_chip.dart';
 import 'package:detect_care_caregiver_app/features/emergency_contacts/data/emergency_contacts_remote_data_source.dart';
+
+import 'package:detect_care_caregiver_app/features/alarm/services/active_alarm_notifier.dart';
+import 'package:detect_care_caregiver_app/features/events/data/events_remote_data_source.dart';
 import 'package:detect_care_caregiver_app/features/home/service/event_service.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -23,12 +28,14 @@ class LiveCameraScreen extends StatefulWidget {
   final String? initialUrl;
   final bool loadCache;
   final CameraEntry? camera;
+  final String? mappedEventId;
 
   const LiveCameraScreen({
     super.key,
     this.initialUrl,
     this.loadCache = true,
     this.camera,
+    this.mappedEventId,
   });
 
   @override
@@ -45,6 +52,9 @@ class _LiveCameraScreenState extends State<LiveCameraScreen> {
   bool _streamDisposed = false;
   bool _stateDisposed = false;
   bool _alarming = false;
+  bool _emergencyCalling = false;
+  bool _infraredEnabled = false;
+  bool _cancelingAlarm = false;
 
   @override
   void initState() {
@@ -246,6 +256,24 @@ class _LiveCameraScreenState extends State<LiveCameraScreen> {
     _stateManager.setStarting(false);
   }
 
+  String? _extractCameraIdFromUrl(String? url) {
+    if (url == null || url.isEmpty) return null;
+    try {
+      final uri = Uri.tryParse(url);
+      if (uri != null) {
+        final q = uri.queryParameters['camera'] ?? uri.queryParameters['cam'];
+        if (q != null && q.isNotEmpty) return q;
+        final seg = uri.pathSegments.isNotEmpty ? uri.pathSegments.last : null;
+        if (seg != null && seg.isNotEmpty) return seg;
+      }
+    } catch (_) {}
+    final m1 = RegExp(r'camera=([A-Za-z0-9\-_.]+)').firstMatch(url);
+    if (m1 != null) return m1.group(1);
+    final m2 = RegExp(r'/camera/([A-Za-z0-9\-_.]+)').firstMatch(url);
+    if (m2 != null) return m2.group(1);
+    return null;
+  }
+
   Future<void> _toggleQuality() async {
     if (_stateManager.isStarting) {
       context.showCameraMessage(CameraConstants.connectingWaitMessage);
@@ -293,55 +321,6 @@ class _LiveCameraScreenState extends State<LiveCameraScreen> {
 
   Future<void> _changeChannels(Set<String> channels) async {
     _stateManager.updateSettings(channels: channels);
-  }
-
-  Future<void> _togglePlayPause() async {
-    await _cameraService.togglePlayPause(_stateManager.isPlaying);
-    _stateManager.showControlsTemporarily();
-  }
-
-  Future<void> _reloadStream() async {
-    // Explicit user-triggered reload: dispose current resources and restart.
-    if (_stateManager.isStarting) {
-      context.showCameraMessage('Đang thực hiện thao tác. Vui lòng chờ.');
-      return;
-    }
-
-    try {
-      await _disposeStreamResources();
-      // small delay to allow native resources to free
-      await Future.delayed(const Duration(milliseconds: 250));
-      await _startPlay();
-    } catch (e, st) {
-      AppLogger.e('🐛 [Camera] reloadStream error', e, st);
-      context.showCameraMessage('Không thể tải lại luồng.');
-    }
-  }
-
-  String? _extractCameraIdFromUrl(String? url) {
-    if (url == null || url.isEmpty) return null;
-    try {
-      final uri = Uri.tryParse(url);
-      if (uri != null) {
-        final q = uri.queryParameters['camera'] ?? uri.queryParameters['cam'];
-        if (q != null && q.isNotEmpty) return q;
-        final seg = uri.pathSegments.isNotEmpty ? uri.pathSegments.last : null;
-        if (seg != null && seg.isNotEmpty) return seg;
-      }
-    } catch (_) {}
-    final m1 = RegExp(r'camera=([A-Za-z0-9\-_.]+)').firstMatch(url);
-    if (m1 != null) return m1.group(1);
-    final m2 = RegExp(r'/camera/([A-Za-z0-9\-_.]+)').firstMatch(url);
-    if (m2 != null) return m2.group(1);
-    return null;
-  }
-
-  Future<void> _onCaptureAndAlarm() async {
-    if (_alarming) return;
-    if (_cameraService.controller == null) {
-      context.showCameraMessage('Chưa có luồng camera để chụp.');
-      return;
-    }
 
     setState(() => _alarming = true);
     String? snapshotPath;
@@ -356,7 +335,7 @@ class _LiveCameraScreenState extends State<LiveCameraScreen> {
         _stateManager.currentUrl ?? _stateManager.urlController.text,
       );
       final uuidRegex = RegExp(
-        r'^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12} '
+        r'^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}\u0000'
             .replaceAll('\u0000', ''),
       );
       final cameraId = (extracted != null && uuidRegex.hasMatch(extracted))
@@ -368,18 +347,196 @@ class _LiveCameraScreenState extends State<LiveCameraScreen> {
         );
       }
 
-      final svc = EventService.withDefaultClient();
-      await svc.sendManualAlarm(
-        cameraId: cameraId,
-        snapshotPath: snapshotPath,
-        cameraName: "Phòng khách",
-        streamUrl: _stateManager.currentUrl,
-      );
+      if (widget.mappedEventId != null && widget.mappedEventId!.isNotEmpty) {
+        final eventId = widget.mappedEventId!;
+        try {
+          await EventsRemoteDataSource().updateEventLifecycle(
+            eventId: eventId,
+            lifecycleState: 'ALARM_ACTIVATED',
+            notes: 'Activated from camera live view',
+          );
 
-      if (!mounted) return;
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(const SnackBar(content: Text('Gửi báo động thành công.')));
+          // Try to notify external alarm control as well.
+          try {
+            final userId = await AuthStorage.getUserId();
+            if (userId != null && userId.isNotEmpty) {
+              await AlarmRemoteDataSource().setAlarm(
+                eventId: eventId,
+                userId: userId,
+                cameraId: cameraId,
+                enabled: true,
+              );
+            }
+          } catch (e) {
+            AppLogger.e('External alarm call failed for mapped event: $e');
+          }
+
+          if (mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(content: Text('Kích hoạt báo động cho sự kiện.')),
+            );
+          }
+        } catch (e, st) {
+          AppLogger.e('Failed to activate mapped event alarm: $e', e, st);
+          if (mounted) {
+            context.showCameraMessage('Kích hoạt báo động thất bại.');
+          }
+        }
+      } else {
+        final svc = EventService.withDefaultClient();
+        final createdEvent = await svc.sendManualAlarm(
+          cameraId: cameraId,
+          snapshotPath: snapshotPath,
+          cameraName: widget.camera?.name ?? 'Camera',
+          streamUrl: _stateManager.currentUrl,
+        );
+
+        try {
+          final userId = await AuthStorage.getUserId();
+          if (userId != null && userId.isNotEmpty) {
+            try {
+              await AlarmRemoteDataSource().setAlarm(
+                eventId: createdEvent.eventId,
+                userId: userId,
+                cameraId: cameraId,
+                enabled: true,
+              );
+            } catch (e) {
+              AppLogger.e('External alarm call failed from camera overlay: $e');
+            }
+          } else {
+            AppLogger.d('Cannot call external alarm: userId not available');
+          }
+        } catch (e) {
+          AppLogger.e('Failed to resolve userId for external alarm: $e');
+        }
+
+        if (!mounted) return;
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Gửi báo động thành công.')),
+        );
+      }
+    } catch (e, st) {
+      AppLogger.e('❌ [Camera] send manual alarm failed', e, st);
+      if (mounted) context.showCameraMessage('Gửi báo động thất bại.');
+    } finally {
+      if (mounted) setState(() => _alarming = false);
+    }
+  }
+
+  Future<void> _togglePlayPause() async {
+    try {
+      final isPlaying = _stateManager.state.isPlaying;
+      await _cameraService.togglePlayPause(isPlaying);
+    } catch (e, st) {
+      AppLogger.e('Failed to toggle play/pause', e, st);
+    }
+  }
+
+  Future<void> _reloadStream() async {
+    try {
+      await _disposeStreamResources();
+      await Future.delayed(const Duration(milliseconds: 150));
+      await _startPlay();
+    } catch (e, st) {
+      AppLogger.e('Failed to reload stream', e, st);
+    }
+  }
+
+  Future<void> _onCaptureAndAlarm() async {
+    setState(() => _alarming = true);
+    String? snapshotPath;
+    try {
+      snapshotPath = await _cameraService.takeSnapshot();
+      if (snapshotPath == null) {
+        if (mounted) context.showCameraMessage('Không chụp được khung hình.');
+        return;
+      }
+
+      final extracted = _extractCameraIdFromUrl(
+        _stateManager.currentUrl ?? _stateManager.urlController.text,
+      );
+      final uuidRegex = RegExp(
+        r'^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}\u0000'
+            .replaceAll('\u0000', ''),
+      );
+      final cameraId = (extracted != null && uuidRegex.hasMatch(extracted))
+          ? extracted
+          : '0fd3f12d-ef70-4d41-a622-79fa5db67a49';
+      if (cameraId == '0fd3f12d-ef70-4d41-a622-79fa5db67a49') {
+        AppLogger.d(
+          '🐛 [Camera] using default cameraId fallback (extracted=$extracted)',
+        );
+      }
+
+      if (widget.mappedEventId != null && widget.mappedEventId!.isNotEmpty) {
+        final eventId = widget.mappedEventId!;
+        try {
+          await EventsRemoteDataSource().updateEventLifecycle(
+            eventId: eventId,
+            lifecycleState: 'ALARM_ACTIVATED',
+            notes: 'Activated from camera live view',
+          );
+
+          try {
+            final userId = await AuthStorage.getUserId();
+            if (userId != null && userId.isNotEmpty) {
+              await AlarmRemoteDataSource().setAlarm(
+                eventId: eventId,
+                userId: userId,
+                cameraId: cameraId,
+                enabled: true,
+              );
+            }
+          } catch (e) {
+            AppLogger.e('External alarm call failed for mapped event: $e');
+          }
+
+          if (mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(content: Text('Kích hoạt báo động cho sự kiện.')),
+            );
+          }
+        } catch (e, st) {
+          AppLogger.e('Failed to activate mapped event alarm: $e', e, st);
+          if (mounted) {
+            context.showCameraMessage('Kích hoạt báo động thất bại.');
+          }
+        }
+      } else {
+        final svc = EventService.withDefaultClient();
+        final createdEvent = await svc.sendManualAlarm(
+          cameraId: cameraId,
+          snapshotPath: snapshotPath,
+          cameraName: widget.camera?.name ?? 'Camera',
+          streamUrl: _stateManager.currentUrl,
+        );
+
+        try {
+          final userId = await AuthStorage.getUserId();
+          if (userId != null && userId.isNotEmpty) {
+            try {
+              await AlarmRemoteDataSource().setAlarm(
+                eventId: createdEvent.eventId,
+                userId: userId,
+                cameraId: cameraId,
+                enabled: true,
+              );
+            } catch (e) {
+              AppLogger.e('External alarm call failed from camera overlay: $e');
+            }
+          } else {
+            AppLogger.d('Cannot call external alarm: userId not available');
+          }
+        } catch (e) {
+          AppLogger.e('Failed to resolve userId for external alarm: $e');
+        }
+
+        if (!mounted) return;
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Gửi báo động thành công.')),
+        );
+      }
     } catch (e, st) {
       AppLogger.e('❌ [Camera] send manual alarm failed', e, st);
       if (mounted) context.showCameraMessage('Gửi báo động thất bại.');
@@ -392,7 +549,16 @@ class _LiveCameraScreenState extends State<LiveCameraScreen> {
     await _cameraService.toggleMute(_stateManager.isMuted);
   }
 
+  void _toggleInfrared() {
+    setState(() => _infraredEnabled = !_infraredEnabled);
+    if (!mounted) return;
+    context.showCameraMessage(
+      _infraredEnabled ? 'Đã bật hồng ngoại.' : 'Đã tắt hồng ngoại.',
+    );
+  }
+
   Future<void> _handleEmergencyCall() async {
+    setState(() => _emergencyCalling = true);
     try {
       String phone = '115';
 
@@ -472,6 +638,47 @@ class _LiveCameraScreenState extends State<LiveCameraScreen> {
     } catch (e, st) {
       AppLogger.e('[Camera] emergency call failed', e, st);
       if (mounted) context.showCameraMessage('Không thể thực hiện cuộc gọi.');
+    } finally {
+      if (mounted) setState(() => _emergencyCalling = false);
+    }
+  }
+
+  Future<void> _onCancelAlarm() async {
+    final eventId = widget.mappedEventId;
+    if (eventId == null || eventId.isEmpty) return;
+    if (_cancelingAlarm) return;
+    setState(() => _cancelingAlarm = true);
+    try {
+      final messenger = ScaffoldMessenger.of(context);
+      messenger.showSnackBar(
+        const SnackBar(content: Text('Đang hủy báo động...')),
+      );
+
+      await EventsRemoteDataSource().cancelEvent(eventId: eventId);
+
+      try {
+        final userId = await AuthStorage.getUserId();
+        if (userId != null && userId.isNotEmpty) {
+          await AlarmRemoteDataSource().cancelAlarm(
+            eventId: eventId,
+            userId: userId,
+            cameraId: null,
+          );
+        }
+      } catch (e) {
+        AppLogger.e('External cancel alarm failed: $e');
+      }
+
+      if (mounted) {
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(const SnackBar(content: Text('Đã hủy báo động.')));
+      }
+    } catch (e, st) {
+      AppLogger.e('Failed to cancel mapped event alarm: $e', e, st);
+      if (mounted) context.showCameraMessage('Hủy báo động thất bại.');
+    } finally {
+      if (mounted) setState(() => _cancelingAlarm = false);
     }
   }
 
@@ -566,9 +773,9 @@ class _LiveCameraScreenState extends State<LiveCameraScreen> {
       child: CustomScrollView(
         slivers: [
           SliverToBoxAdapter(
-            child: CameraWidgets.buildNormalContainer(
-              aspectRatio: state.videoAspectRatio,
-              child: _buildVideoContent(state),
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+              child: _buildCameraCard(state),
             ),
           ),
           SliverToBoxAdapter(
@@ -581,10 +788,8 @@ class _LiveCameraScreenState extends State<LiveCameraScreen> {
                 onRetentionChanged: _changeRetentionDays,
                 channels: state.settings.channels,
                 onChannelsChanged: _changeChannels,
-                // Lưu ý: thời gian lưu trữ được cấu hình ở Image settings; ẩn
-                // tuỳ chọn này trong panel camera để tránh trùng lặp.
                 showRetention: false,
-                timelineContent: _buildEmbeddedTimeline(context),
+                timelineContentBuilder: (ctx) => _buildEmbeddedTimeline(ctx),
                 onOpenTimeline: widget.camera != null ? _openTimeline : null,
               ),
             ),
@@ -612,86 +817,519 @@ class _LiveCameraScreenState extends State<LiveCameraScreen> {
     );
   }
 
-  Widget _buildVideoContent(CameraState state) {
-    if (state.initLoading) {
-      return const Center(child: CircularProgressIndicator());
-    }
+  Widget _buildCameraCard(CameraState state) {
+    final cameraName = widget.camera?.name ?? 'Camera trực tiếp';
+    final isOnline = _cameraService.controller != null && !state.initLoading;
 
-    if (_cameraService.controller == null) {
-      return GestureDetector(
-        behavior: HitTestBehavior.opaque,
-        onTap: () {
-          // Nếu người dùng nhấn placeholder, thử khởi phát (nếu có URL)
-          _startPlay();
-        },
-        child: CameraWidgets.buildPlaceholder(),
-      );
-    }
-
-    return GestureDetector(
-      behavior: HitTestBehavior.opaque,
-      onTap: _stateManager.showControlsTemporarily,
-      onDoubleTap: _stateManager.toggleFullscreen,
-      child: Stack(
-        fit: StackFit.expand,
+    return Container(
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(22),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.08),
+            blurRadius: 14,
+            spreadRadius: -2,
+            offset: const Offset(0, 6),
+          ),
+        ],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          ClipRRect(
-            borderRadius: BorderRadius.circular(18),
-            child: VlcPlayer(
-              controller: _cameraService.controller!,
-              aspectRatio: state.videoAspectRatio ?? 16 / 9,
-              placeholder: const Center(child: CircularProgressIndicator()),
+          _buildCameraHeader(cameraName, isOnline),
+          _buildCameraVideoSection(state),
+          _buildInlineActionPanel(state),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildCameraHeader(String cameraName, bool isOnline) {
+    final statusColor = isOnline
+        ? const Color(0xFF22C55E)
+        : const Color(0xFF94A3B8);
+
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(16, 16, 16, 8),
+      child: Row(
+        children: [
+          Expanded(
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.start,
+              children: [
+                Text(
+                  cameraName,
+                  style: const TextStyle(
+                    fontSize: 17,
+                    fontWeight: FontWeight.w600,
+                    color: Color(0xFF0F172A),
+                  ),
+                ),
+                const SizedBox(width: 10),
+                Row(
+                  children: [
+                    Container(
+                      width: 8,
+                      height: 8,
+                      decoration: BoxDecoration(
+                        color: statusColor,
+                        shape: BoxShape.circle,
+                      ),
+                    ),
+                    const SizedBox(width: 6),
+                    Text(
+                      isOnline ? 'Online' : 'Offline',
+                      style: TextStyle(
+                        fontSize: 12,
+                        fontWeight: FontWeight.w500,
+                        color: statusColor.withOpacity(0.9),
+                      ),
+                    ),
+                  ],
+                ),
+              ],
             ),
           ),
-          if (state.statusMessage != null)
-            // Chỉ hiển thị status chip lớn cho các thông báo không tạm thời
-            // (ví dụ: lỗi). Các thông báo tạm thời như "Đang kết nối" hoặc
-            // "Đang phát" sẽ che video, nên bỏ qua hiển thị chip cho chúng.
-            (() {
-              final msg = state.statusMessage!.toLowerCase();
-              final transient =
-                  msg.contains('đang kết nối') ||
-                  msg.contains('connecting') ||
-                  msg.contains('đang phát') ||
-                  msg.contains('playing');
-              if (transient) return const SizedBox.shrink();
-              return CameraStatusChip(text: state.statusMessage!);
-            })(),
-          Positioned(
-            top: 12,
-            right: 12,
-            child: QualityBadge(isHd: state.isHd, onTap: _toggleQuality),
-          ),
-          if (state.isStarting)
-            Container(
-              color: Colors.black38,
-              child: const Center(child: CircularProgressIndicator()),
-            ),
-          if (state.controlsVisible)
-            Builder(
-              builder: (context) => CameraControlsOverlay(
-                isPlaying: state.isPlaying,
-                isMuted: state.isMuted,
-                isFullscreen: state.isFullscreen,
-                onPlayPause: _togglePlayPause,
-                onMute: _toggleMute,
-                onFullscreen: _stateManager.toggleFullscreen,
-                onReload: _reloadStream,
-                onRecord: () {
-                  context.showCameraMessage(
-                    CameraConstants.recordNotSupportedMessage,
-                  );
-                },
-                onSnapshot: () {
-                  context.showCameraMessage(
-                    CameraConstants.snapshotNotSupportedMessage,
-                  );
-                },
-                onAlarm: _onCaptureAndAlarm,
-                onEmergency: _handleEmergencyCall,
+        ],
+      ),
+    );
+  }
+
+  Widget _buildCameraVideoSection(CameraState state) {
+    final hasController = _cameraService.controller != null;
+
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(16, 8, 16, 4),
+      child: AspectRatio(
+        aspectRatio: 16 / 9,
+        child: ClipRRect(
+          borderRadius: BorderRadius.circular(16),
+          child: Container(
+            color: Colors.black,
+            child: GestureDetector(
+              behavior: HitTestBehavior.opaque,
+              onDoubleTap: _stateManager.toggleFullscreen,
+              child: Stack(
+                fit: StackFit.expand,
+                children: [
+                  if (hasController)
+                    VlcPlayer(
+                      controller: _cameraService.controller!,
+                      aspectRatio: state.videoAspectRatio ?? 16 / 9,
+                      placeholder: const Center(
+                        child: CircularProgressIndicator(),
+                      ),
+                    )
+                  else
+                    GestureDetector(
+                      behavior: HitTestBehavior.opaque,
+                      onTap: () {
+                        _startPlay();
+                      },
+                      child: CameraWidgets.buildPlaceholder(),
+                    ),
+                  if (state.statusMessage != null)
+                    (() {
+                      final msg = state.statusMessage!.toLowerCase();
+                      final transient =
+                          msg.contains('đang kết nối') ||
+                          msg.contains('connecting') ||
+                          msg.contains('đang phát') ||
+                          msg.contains('playing');
+                      if (transient) return const SizedBox.shrink();
+                      return CameraStatusChip(text: state.statusMessage!);
+                    })(),
+                  // Positioned(
+                  //   top: 12,
+                  //   right: 12,
+                  //   child: QualityBadge(isHd: state.isHd, onTap: _toggleQuality),
+                  // ),
+                  if (state.isStarting)
+                    Container(
+                      color: Colors.black38,
+                      child: const Center(child: CircularProgressIndicator()),
+                    ),
+                  Positioned(
+                    bottom: 12,
+                    left: 12,
+                    child: _buildLiveBadge(state),
+                  ),
+                  _buildVideoIconOverlay(state),
+                ],
               ),
             ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildVideoIconOverlay(CameraState state) {
+    return Positioned(
+      bottom: 16,
+      right: 16,
+      child: SafeArea(
+        top: false,
+        bottom: false,
+        child: ClipRRect(
+          borderRadius: BorderRadius.circular(20),
+          child: BackdropFilter(
+            filter: ImageFilter.blur(sigmaX: 10, sigmaY: 10),
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+              decoration: BoxDecoration(
+                color: Colors.black.withOpacity(0.45),
+                borderRadius: BorderRadius.circular(20),
+                border: Border.all(color: Colors.white.withOpacity(0.16)),
+              ),
+              child: _buildCornerIconButtons(state),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildCornerIconButtons(CameraState state) {
+    return Row(
+      children: [
+        _buildCircleIconButton(
+          icon: state.isFullscreen
+              ? Icons.fullscreen_exit_rounded
+              : Icons.fullscreen_rounded,
+          tooltip: state.isFullscreen ? 'Thoát toàn màn hình' : 'Toàn màn hình',
+          onTap: _stateManager.toggleFullscreen,
+        ),
+        const SizedBox(width: 8),
+        _buildCircleIconButton(
+          icon: Icons.refresh_rounded,
+          tooltip: 'Tải lại luồng',
+          onTap: () => unawaited(_reloadStream()),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildLiveBadge(CameraState state) {
+    // final resolution = state.isHd ? '1080p' : '720p';
+    // final fps = '${state.settings.fps}fps';
+
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+      decoration: BoxDecoration(
+        color: Colors.black.withOpacity(0.6),
+        borderRadius: BorderRadius.circular(12),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Container(
+            width: 6,
+            height: 6,
+            decoration: const BoxDecoration(
+              color: Colors.redAccent,
+              shape: BoxShape.circle,
+            ),
+          ),
+          const SizedBox(width: 6),
+          Text(
+            'LIVE',
+            style: const TextStyle(
+              color: Colors.white,
+              fontSize: 12,
+              fontWeight: FontWeight.w600,
+            ),
+          ),
         ],
+      ),
+    );
+  }
+
+  // Widget _buildLiveStatusRow(CameraState state) {
+  //   final resolution = state.isHd ? '1080p' : '720p';
+  //   final fps = '${state.settings.fps}fps';
+  //   return Padding(
+  //     padding: const EdgeInsets.fromLTRB(16, 8, 16, 16),
+  //     child: Row(
+  //       children: [
+  //         Text(
+  //           '$resolution • $fps',
+  //           style: TextStyle(
+  //             fontSize: 12,
+  //             color: Colors.grey[700],
+  //             letterSpacing: 0.2,
+  //           ),
+  //         ),
+  //         const Spacer(),
+  //         IconButton(
+  //           padding: const EdgeInsets.all(6),
+  //           constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
+  //           iconSize: 20,
+  //           icon: Icon(state.isMuted ? Icons.volume_off : Icons.volume_up),
+  //           color: const Color(0xFF0F172A),
+  //           tooltip: state.isMuted ? 'Mở tiếng' : 'Tắt tiếng',
+  //           onPressed: _toggleMute,
+  //         ),
+  //         IconButton(
+  //           padding: const EdgeInsets.all(6),
+  //           constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
+  //           iconSize: 20,
+  //           icon: Icon(
+  //             _infraredEnabled ? Icons.light_mode : Icons.light_mode_outlined,
+  //           ),
+  //           color: const Color(0xFF0F172A),
+  //           tooltip: _infraredEnabled ? 'Tắt hồng ngoại' : 'Bật hồng ngoại',
+  //           onPressed: _toggleInfrared,
+  //         ),
+  //       ],
+  //     ),
+  //   );
+  // }
+
+  Widget _buildCameraActionOverlay(
+    CameraState state, {
+    bool fullscreen = false,
+  }) {
+    final horizontalPadding = fullscreen ? 20.0 : 12.0;
+    final verticalPadding = fullscreen ? 24.0 : 14.0;
+
+    return Align(
+      alignment: Alignment.bottomCenter,
+      child: Padding(
+        padding: EdgeInsets.only(
+          left: horizontalPadding,
+          right: horizontalPadding,
+          bottom: verticalPadding,
+        ),
+        child: ClipRRect(
+          borderRadius: BorderRadius.circular(20),
+          child: BackdropFilter(
+            filter: ImageFilter.blur(sigmaX: 16, sigmaY: 16),
+            child: _buildActionPanelBackground(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  _buildActionIconRow(state, fullscreen),
+                  const SizedBox(height: 12),
+                  _buildActionPanelButtons(state),
+                ],
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildActionIconRow(CameraState state, bool fullscreen) {
+    return Row(
+      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+      children: [
+        Row(
+          children: [
+            const SizedBox(width: 8),
+            _buildCircleIconButton(
+              icon: fullscreen
+                  ? Icons.fullscreen_exit_rounded
+                  : Icons.fullscreen_rounded,
+              tooltip: fullscreen ? 'Thoát toàn màn hình' : 'Toàn màn hình',
+              onTap: _stateManager.toggleFullscreen,
+            ),
+          ],
+        ),
+        Row(
+          children: [
+            _buildCircleIconButton(
+              icon: Icons.refresh_rounded,
+              tooltip: 'Tải lại luồng',
+              onTap: () => unawaited(_reloadStream()),
+            ),
+          ],
+        ),
+      ],
+    );
+  }
+
+  Widget _buildCircleIconButton({
+    required IconData icon,
+    required String tooltip,
+    required VoidCallback onTap,
+  }) {
+    return Tooltip(
+      message: tooltip,
+      child: Material(
+        color: Colors.white.withOpacity(0.10),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+        child: InkWell(
+          onTap: onTap,
+          borderRadius: BorderRadius.circular(12),
+          child: Padding(
+            padding: const EdgeInsets.all(8),
+            child: Icon(icon, size: 20, color: Colors.white),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildGradientActionButton({
+    required IconData icon,
+    required String label,
+    required List<Color> colors,
+    required Future<void> Function() onTap,
+    bool loading = false,
+  }) {
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        onTap: loading ? null : () => unawaited(onTap()),
+        borderRadius: BorderRadius.circular(18),
+        splashColor: Colors.white24,
+        child: Container(
+          height: 48,
+          padding: const EdgeInsets.symmetric(horizontal: 10),
+          decoration: BoxDecoration(
+            gradient: LinearGradient(
+              colors: colors,
+              begin: Alignment.topLeft,
+              end: Alignment.bottomRight,
+            ),
+            borderRadius: BorderRadius.circular(18),
+            boxShadow: [
+              BoxShadow(
+                color: colors.last.withOpacity(0.45),
+                blurRadius: 14,
+                offset: const Offset(0, 6),
+              ),
+            ],
+          ),
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Icon(icon, color: Colors.white, size: 20),
+              const SizedBox(width: 8),
+              Text(
+                label,
+                style: const TextStyle(
+                  color: Colors.white,
+                  fontWeight: FontWeight.w700,
+                  letterSpacing: 0.3,
+                ),
+              ),
+              if (loading) ...[
+                const SizedBox(width: 8),
+                const SizedBox(
+                  width: 14,
+                  height: 14,
+                  child: CircularProgressIndicator(
+                    strokeWidth: 2,
+                    color: Colors.white,
+                  ),
+                ),
+              ],
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildActionPanelBackground({required Widget child}) {
+    return Container(
+      padding: const EdgeInsets.fromLTRB(12, 10, 12, 12),
+      decoration: BoxDecoration(
+        gradient: LinearGradient(
+          begin: Alignment.topCenter,
+          end: Alignment.bottomCenter,
+          colors: [
+            Colors.black.withOpacity(0.18),
+            Colors.black.withOpacity(0.45),
+          ],
+        ),
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(color: Colors.white.withOpacity(0.12)),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.3),
+            blurRadius: 12,
+            offset: const Offset(0, 6),
+          ),
+        ],
+      ),
+      child: child,
+    );
+  }
+
+  Widget _buildActionPanelButtons(CameraState state) {
+    const spacing = SizedBox(width: 12);
+    return ValueListenableBuilder<bool>(
+      valueListenable: ActiveAlarmNotifier.instance,
+      builder: (context, alarmActive, _) {
+        final mainGradient = alarmActive
+            ? const [Color(0xFFB0BEC5), Color(0xFF78909C)]
+            : const [Color(0xFFFF7043), Color(0xFFEF4444)];
+        final mainLabel = alarmActive
+            ? (_cancelingAlarm ? 'Đang hủy...' : 'HỦY BÁO ĐỘNG')
+            : (_alarming ? 'Đang...' : 'BÁO ĐỘNG');
+        final showCancelButton =
+            widget.mappedEventId?.isNotEmpty == true && !alarmActive;
+        final onMainTap = alarmActive ? _onCancelAlarm : _onCaptureAndAlarm;
+        final mainLoading = alarmActive ? _cancelingAlarm : _alarming;
+
+        return Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Row(
+              children: [
+                Expanded(
+                  child: _buildGradientActionButton(
+                    icon: Icons.warning_amber_rounded,
+                    label: mainLabel,
+                    colors: mainGradient,
+                    onTap: onMainTap,
+                    loading: mainLoading,
+                  ),
+                ),
+                spacing,
+                Expanded(
+                  child: _buildGradientActionButton(
+                    icon: Icons.phone_in_talk,
+                    label: _emergencyCalling ? 'Đang...' : 'GỌI KHẨN CẤP',
+                    colors: const [Color(0xFF26C6DA), Color(0xFF00ACC1)],
+                    onTap: _handleEmergencyCall,
+                    loading: _emergencyCalling,
+                  ),
+                ),
+              ],
+            ),
+            if (showCancelButton) ...[
+              const SizedBox(height: 10),
+              _buildGradientActionButton(
+                icon: Icons.cancel_presentation_rounded,
+                label: _cancelingAlarm ? 'Đang hủy...' : 'HỦY BÁO ĐỘNG',
+                colors: const [Color(0xFFB0BEC5), Color(0xFF78909C)],
+                onTap: _onCancelAlarm,
+                loading: _cancelingAlarm,
+              ),
+            ],
+          ],
+        );
+      },
+    );
+  }
+
+  Widget _buildInlineActionPanel(CameraState state) {
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(16, 8, 16, 12),
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(20),
+        child: BackdropFilter(
+          filter: ImageFilter.blur(sigmaX: 16, sigmaY: 16),
+          child: _buildActionPanelBackground(
+            child: _buildActionPanelButtons(state),
+          ),
+        ),
       ),
     );
   }
@@ -699,86 +1337,66 @@ class _LiveCameraScreenState extends State<LiveCameraScreen> {
   Widget _buildVideoStack(CameraState state) {
     return ClipRRect(
       borderRadius: BorderRadius.circular(18),
-      child: Stack(
-        fit: StackFit.expand,
-        children: [
-          if (_cameraService.controller != null)
-            VlcPlayer(
-              controller: _cameraService.controller!,
-              aspectRatio: state.videoAspectRatio ?? 16 / 9,
-              placeholder: const Center(child: CircularProgressIndicator()),
-            )
-          else
-            GestureDetector(
-              behavior: HitTestBehavior.opaque,
-              onTap: () {
-                _startPlay();
-              },
-              child: CameraWidgets.buildPlaceholder(),
-            ),
-          if (state.statusMessage != null)
-            // Tương tự ở chế độ toàn màn hình: tránh hiển thị status chip
-            // tạm thời gây che video.
-            (() {
-              final msg = state.statusMessage!.toLowerCase();
-              final transient =
-                  msg.contains('đang kết nối') ||
-                  msg.contains('connecting') ||
-                  msg.contains('đang phát') ||
-                  msg.contains('playing');
-              if (transient) return const SizedBox.shrink();
-              return CameraStatusChip(text: state.statusMessage!);
-            })(),
-          Positioned(
-            top: 16,
-            right: 16,
-            child: QualityBadge(isHd: state.isHd, onTap: _toggleQuality),
-          ),
-          if (state.isStarting)
-            Container(
-              color: Colors.black38,
-              child: const Center(child: CircularProgressIndicator()),
-            ),
-          Positioned(
-            top: 16,
-            left: 16,
-            child: SafeArea(
-              child: IconButton(
-                icon: const Icon(
-                  Icons.arrow_back,
-                  color: Colors.white,
-                  size: 32,
+      child: Container(
+        color: Colors.black,
+        child: Stack(
+          fit: StackFit.expand,
+          children: [
+            if (_cameraService.controller != null)
+              VlcPlayer(
+                controller: _cameraService.controller!,
+                aspectRatio: state.videoAspectRatio ?? 16 / 9,
+                placeholder: const Center(child: CircularProgressIndicator()),
+              )
+            else
+              GestureDetector(
+                behavior: HitTestBehavior.opaque,
+                onTap: () {
+                  _startPlay();
+                },
+                child: CameraWidgets.buildPlaceholder(),
+              ),
+            if (state.statusMessage != null)
+              // Tương tự ở chế độ toàn màn hình: tránh hiển thị status chip
+              // tạm thời gây che video.
+              (() {
+                final msg = state.statusMessage!.toLowerCase();
+                final transient =
+                    msg.contains('đang kết nối') ||
+                    msg.contains('connecting') ||
+                    msg.contains('đang phát') ||
+                    msg.contains('playing');
+                if (transient) return const SizedBox.shrink();
+                return CameraStatusChip(text: state.statusMessage!);
+              })(),
+            // Positioned(
+            //   top: 16,
+            //   right: 16,
+            //   child: QualityBadge(isHd: state.isHd, onTap: _toggleQuality),
+            // ),
+            if (state.isStarting)
+              Container(
+                color: Colors.black38,
+                child: const Center(child: CircularProgressIndicator()),
+              ),
+            Positioned(
+              top: 16,
+              left: 16,
+              child: SafeArea(
+                child: IconButton(
+                  icon: const Icon(
+                    Icons.arrow_back,
+                    color: Colors.white,
+                    size: 32,
+                  ),
+                  onPressed: () => Navigator.of(context).pop(),
+                  tooltip: 'Quay về',
                 ),
-                onPressed: () => Navigator.of(context).pop(),
-                tooltip: 'Quay về',
               ),
             ),
-          ),
-          if (state.controlsVisible)
-            Builder(
-              builder: (context) => CameraControlsOverlay(
-                isPlaying: state.isPlaying,
-                isMuted: state.isMuted,
-                isFullscreen: state.isFullscreen,
-                onPlayPause: _togglePlayPause,
-                onMute: _toggleMute,
-                onFullscreen: _stateManager.toggleFullscreen,
-                onReload: _reloadStream,
-                onRecord: () {
-                  context.showCameraMessage(
-                    CameraConstants.recordNotSupportedMessage,
-                  );
-                },
-                onSnapshot: () {
-                  context.showCameraMessage(
-                    CameraConstants.snapshotNotSupportedMessage,
-                  );
-                },
-                onAlarm: _onCaptureAndAlarm,
-                onEmergency: _handleEmergencyCall,
-              ),
-            ),
-        ],
+            _buildCameraActionOverlay(state, fullscreen: true),
+          ],
+        ),
       ),
     );
   }

@@ -1,4 +1,4 @@
-package com.example.detect_care_caregiver_app
+package com.detect_care_caregiver.app
 
 import io.flutter.embedding.android.FlutterActivity
 

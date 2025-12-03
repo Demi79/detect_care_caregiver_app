@@ -238,18 +238,14 @@ class CameraHomeState extends ChangeNotifier {
     notifyListeners();
   }
 
-  void refreshCameraThumb(CameraEntry camera) {
+  Future<void> refreshCameraThumb(CameraEntry camera) async {
     if (_isDisposed) return;
 
     final index = _cameras.indexWhere((c) => c.id == camera.id);
     if (index != -1) {
-      final updatedCamera = CameraEntry(
-        id: camera.id,
-        name: camera.name,
-        url: camera.url,
-        thumb: _cameraService.cacheBustThumb(camera.thumb),
-        isOnline: camera.isOnline,
-      );
+      final thumb = await _cameraService.fetchTimelineThumbnail(camera.id);
+      if (thumb == null || thumb.isEmpty) return;
+      final updatedCamera = camera.copyWith(thumb: thumb);
       _cameras[index] = updatedCamera;
       notifyListeners();
     }

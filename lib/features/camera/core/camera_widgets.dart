@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+/// UI components for camera functionality
 class CameraWidgets {
   /// Build the placeholder widget when no camera is connected
   static Widget buildPlaceholder() {
@@ -81,7 +82,11 @@ class CameraWidgets {
                   ),
                 ],
               ),
-
+              // Giảm margin bên ngoài và dùng padding khiêm tốn hơn để
+              // phần tử con (video stack) có thể chiếm gần như toàn bộ
+              // diện tích màn hình khi ở fullscreen. Điều này giảm các
+              // khoảng đen hai bên khi xoay màn hình trên các thiết bị
+              // có tỉ lệ màn hình khác nhau.
               margin: EdgeInsets.zero,
               width: double.infinity,
               height: double.infinity,
@@ -166,17 +171,6 @@ class CameraWidgets {
           letterSpacing: -0.5,
         ),
       ),
-      actions: [
-        IconButton(
-          onPressed: onFullscreenToggle,
-          icon: Icon(
-            isFullscreen ? Icons.fullscreen_exit : Icons.fullscreen,
-            color: Colors.deepOrange,
-            size: 28,
-          ),
-          tooltip: 'Toàn màn hình',
-        ),
-      ],
     );
   }
 

@@ -26,6 +26,7 @@ class CameraTimelineApi {
         'date': date,
         if (page != null) 'page': page,
         if (limit != null) 'limit': limit,
+        'all': true,
         ...?extraQuery,
       },
     );

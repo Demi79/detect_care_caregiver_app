@@ -1,11 +1,10 @@
+import 'package:detect_care_caregiver_app/core/config/app_config.dart';
+import 'package:detect_care_caregiver_app/core/utils/logger.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 
-import 'package:detect_care_caregiver_app/core/config/app_config.dart';
 import './alert_settings_manager.dart';
-
-import 'package:detect_care_caregiver_app/core/utils/logger.dart';
 
 class NotificationService {
   static final FlutterLocalNotificationsPlugin _instance =
@@ -59,11 +58,10 @@ class NotificationService {
 
       final detail = NotificationDetails(android: android, iOS: iOS);
 
-      final soundName = AppConfig.useCustomNotificationSounds
-          ? _soundResource
-          : 'default';
+      final playSound = AppConfig.useCustomNotificationSounds;
+      final soundName = playSound ? _soundResource : 'default';
       AppLogger.i(
-        '[NotificationService] Prepared notification: sound=$soundName urgent=$urgent',
+        '[NotificationService] Prepared notification: sound=$soundName urgent=$urgent playSound=$playSound',
       );
       AppLogger.d(
         '[NotificationService] NotificationDetails: android=$android iOS=$iOS',
