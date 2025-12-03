@@ -26,7 +26,7 @@ class AlertCoordinator {
     if (_isDuplicate(e.eventId)) return;
 
     if (AppLifecycle.isForeground) {
-      final status = (e.status ?? '').toLowerCase();
+      final status = e.status.toLowerCase();
       print(
         '\n[AlertCoordinator] Received event id=${e.eventId} status="$status" foreground=${AppLifecycle.isForeground}',
       );

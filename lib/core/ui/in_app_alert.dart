@@ -1,25 +1,23 @@
-// ignore_for_file: unused_element, unused_field, dead_code, unnecessary_null_comparison
-
 import 'dart:async';
 
 import 'package:detect_care_caregiver_app/core/utils/backend_enums.dart';
 import 'package:detect_care_caregiver_app/core/utils/logger.dart';
 import 'package:detect_care_caregiver_app/features/home/service/event_service.dart';
 import 'package:detect_care_caregiver_app/features/home/widgets/alert_new_event_card.dart';
-import 'package:detect_care_caregiver_app/services/alert_settings_manager.dart';
-import 'package:detect_care_caregiver_app/services/audio_service.dart';
 import 'package:flutter/material.dart';
-import 'package:permission_handler/permission_handler.dart';
-import 'package:detect_care_caregiver_app/core/services/direct_caller.dart';
-import 'package:url_launcher/url_launcher.dart';
-import '../../features/emergency_contacts/data/emergency_contacts_remote_data_source.dart';
+import 'package:detect_care_caregiver_app/features/emergency/call_action_context.dart';
+import 'package:detect_care_caregiver_app/features/emergency/call_action_service.dart';
+
 import '../../features/auth/data/auth_storage.dart';
-import '../../features/home/models/log_entry.dart';
-import '../utils/app_lifecycle.dart';
-import '../../main.dart';
+import '../../features/emergency_contacts/data/emergency_contacts_remote_data_source.dart';
 import '../../features/events/data/events_remote_data_source.dart';
+import '../../features/home/models/log_entry.dart';
 import '../../features/home/widgets/action_log_card.dart';
+import '../../main.dart';
+import '../../services/alert_settings_manager.dart';
+import '../../services/audio_service.dart';
 import '../events/app_events.dart';
+import '../utils/app_lifecycle.dart';
 
 class InAppAlert {
   static bool _showing = false;
@@ -34,12 +32,13 @@ class InAppAlert {
         DateTime(t.year, t.month, t.day, t.hour, t.minute);
     final eventMinute = truncateToMinute(eventTime);
 
-    final statusLower = (e.status ?? '').toString().toLowerCase();
+    final statusLower = e.status.toString().toLowerCase();
     if (!(statusLower.contains('danger') || statusLower.contains('warning'))) {
       print('❌ Popup suppressed: status not danger/warning (${e.status})');
       return;
     }
 
+    // If app not foreground, skip showing
     if (!AppLifecycle.isForeground) {
       print('❌ Popup suppressed: app not in foreground');
       return;
@@ -80,16 +79,24 @@ class InAppAlert {
     }
 
     if (settings.forwardingMode == 'elapsed_time') {
+      // Lấy ngưỡng cấu hình (giây) để auto-forward.
+      // Giới hạn trong khoảng 30–60s để phù hợp với yêu cầu sản phẩm
+      // (tránh người dùng đặt giá trị quá ngắn hoặc quá dài).
       final seconds = settings.forwardingElapsedThresholdSeconds;
       final int clampSeconds = seconds < 30
           ? 30
           : (seconds > 60 ? 60 : seconds);
       try {
+        // Khởi tạo timer client-side: nếu caregiver không tương tác trong
+        // `clampSeconds` giây kể từ khi modal hiển thị, client sẽ gọi API
+        // để chuyển lifecycle sang trạng thái forward (tạm thời do client)
+        // — backend nên có worker đảm bảo hành động này ở phía server.
         forwardTimer = Timer(Duration(seconds: clampSeconds), () async {
           AppLogger.i(
             '⏱️ Auto-forward timer fired for ${e.eventId} after ${clampSeconds}s',
           );
           try {
+            // Double-check latest lifecycle to avoid racing with a cancel/confirm
             final svc = EventService.withDefaultClient();
             final latest = await svc.fetchLogDetail(e.eventId);
             final ls = (latest.lifecycleState ?? '').toString().toUpperCase();
@@ -104,6 +111,7 @@ class InAppAlert {
             AppLogger.w(
               '⚠️ Failed to double-check event before auto-forward: $err',
             );
+            // proceed to attempt forward anyway
           }
 
           try {
@@ -250,75 +258,22 @@ class InAppAlert {
                       //   }
                       // },
                       onEmergencyCall: () async {
+                        final manager = callActionManager(ctx);
+                        if (!manager.allowedActions.contains(
+                          CallAction.emergency,
+                        )) {
+                          _showRestrictedCallMessage(ctx);
+                          cancelForwardTimerLocal();
+                          return;
+                        }
+
                         try {
-                          String phone = '115';
-
-                          final userId = await AuthStorage.getUserId();
-                          if (userId != null && userId.isNotEmpty) {
-                            try {
-                              final ds = EmergencyContactsRemoteDataSource();
-                              final list = await ds.list(userId);
-                              if (list.isNotEmpty) {
-                                list.sort(
-                                  (a, b) =>
-                                      b.alertLevel.compareTo(a.alertLevel),
-                                );
-                                EmergencyContactDto? chosen;
-                                for (final c in list) {
-                                  if (c.phone.trim().isNotEmpty) {
-                                    chosen = c;
-                                    break;
-                                  }
-                                }
-                                chosen ??= list.first;
-                                if (chosen.phone.trim().isNotEmpty) {
-                                  phone = chosen.phone.trim();
-                                }
-                              }
-                            } catch (_) {}
-                          }
-
-                          String normalized = phone.replaceAll(
-                            RegExp(r'[\s\-\(\)]'),
-                            '',
+                          final phone = await _chooseEmergencyPhone();
+                          await attemptCall(
+                            context: ctx,
+                            rawPhone: phone,
+                            actionLabel: 'Gọi khẩn cấp',
                           );
-                          if (normalized.startsWith('+84')) {
-                            normalized = '0${normalized.substring(3)}';
-                          } else if (normalized.startsWith('84')) {
-                            normalized = '0${normalized.substring(2)}';
-                          }
-
-                          try {
-                            final status = await Permission.phone.request();
-                            if (status.isGranted) {
-                              final success = await DirectCaller.call(
-                                normalized,
-                              );
-                              if (!success) {
-                                await launchUrl(Uri.parse('tel:$normalized'));
-                              }
-                            } else if (status.isPermanentlyDenied) {
-                              ScaffoldMessenger.of(ctx).showSnackBar(
-                                SnackBar(
-                                  content: const Text(
-                                    'Quyền gọi điện bị từ chối vĩnh viễn. Vui lòng bật quyền trong cài đặt.',
-                                  ),
-                                  action: SnackBarAction(
-                                    label: 'Cài đặt',
-                                    onPressed: () => openAppSettings(),
-                                  ),
-                                ),
-                              );
-                              // Open dialer as fallback
-                              await launchUrl(Uri.parse('tel:$normalized'));
-                            } else {
-                              // denied (not permanent) — open dialer as fallback
-                              await launchUrl(Uri.parse('tel:$normalized'));
-                            }
-                          } catch (e) {
-                            // If anything goes wrong, fallback to opening the dialer
-                            await launchUrl(Uri.parse('tel:$normalized'));
-                          }
                         } catch (err) {
                           ScaffoldMessenger.of(ctx).showSnackBar(
                             SnackBar(
@@ -476,8 +431,45 @@ class InAppAlert {
     }
   }
 
+  static Future<String> _chooseEmergencyPhone() async {
+    String phone = '115';
+    try {
+      final userId = await AuthStorage.getUserId();
+      if (userId != null && userId.isNotEmpty) {
+        final list = await EmergencyContactsRemoteDataSource().list(userId);
+        if (list.isNotEmpty) {
+          list.sort((a, b) => b.alertLevel.compareTo(a.alertLevel));
+          EmergencyContactDto? chosen;
+          for (final c in list) {
+            if (c.phone.trim().isNotEmpty) {
+              chosen = c;
+              break;
+            }
+          }
+          chosen ??= list.first;
+          if (chosen.phone.trim().isNotEmpty) {
+            phone = chosen.phone.trim();
+          }
+        }
+      }
+    } catch (_) {}
+    if (phone.isEmpty) return '112';
+    return phone;
+  }
+
+  static void _showRestrictedCallMessage(BuildContext context) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(
+        content: Text(
+          'Bạn đã có người chăm sóc. Trong trường hợp khẩn cấp hệ thống sẽ liên hệ caregiver trước.',
+        ),
+        behavior: SnackBarBehavior.floating,
+      ),
+    );
+  }
+
   static String _mapSeverityFrom(LogEntry e) {
-    final s = (e.status ?? '').toLowerCase();
+    final s = e.status.toString().toLowerCase();
     if (s.contains('danger')) return 'critical';
     if (s.contains('warning')) return 'medium';
     if (s.contains('critical')) return 'critical';

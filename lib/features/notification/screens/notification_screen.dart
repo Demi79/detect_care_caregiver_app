@@ -1,9 +1,6 @@
-// ignore_for_file: dead_code
-
 import 'dart:async';
 
 import 'package:detect_care_caregiver_app/core/models/notification.dart';
-import 'package:detect_care_caregiver_app/core/services/direct_caller.dart';
 import 'package:detect_care_caregiver_app/core/utils/backend_enums.dart';
 import 'package:detect_care_caregiver_app/features/alarm/data/alarm_remote_data_source.dart';
 import 'package:detect_care_caregiver_app/features/auth/data/auth_storage.dart';
@@ -16,8 +13,8 @@ import 'package:detect_care_caregiver_app/services/notification_api_service.dart
 import 'package:detect_care_caregiver_app/services/notification_manager.dart';
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
-import 'package:permission_handler/permission_handler.dart';
-import 'package:url_launcher/url_launcher.dart';
+import 'package:detect_care_caregiver_app/features/emergency/call_action_context.dart';
+import 'package:detect_care_caregiver_app/features/emergency/call_action_service.dart';
 
 enum _NotificationSeverity { danger, warning, normal, info }
 
@@ -1033,18 +1030,33 @@ class _NotificationScreenState extends State<NotificationScreen> {
     NotificationModel notification,
     _NotificationSeverity severity,
   ) {
+    final manager = callActionManager(context);
+    final bool canEmergency = manager.allowedActions.contains(
+      CallAction.emergency,
+    );
+    final bool canCaregiver = manager.allowedActions.contains(
+      CallAction.caregiver,
+    );
     final eventId = _extractEventId(notification);
     final hasEvent = eventId != null;
     final items = <_SeverityActionItem>[];
 
     if (severity == _NotificationSeverity.danger) {
       items.addAll([
-        _SeverityActionItem(
-          icon: Icons.call,
-          label: 'Gọi khẩn cấp',
-          color: Colors.red.shade600,
-          onPressed: () => _initiateEmergencyCall(context),
-        ),
+        if (canEmergency)
+          _SeverityActionItem(
+            icon: Icons.call,
+            label: 'Gọi khẩn cấp',
+            color: Colors.red.shade600,
+            onPressed: () => _initiateEmergencyCall(context),
+          )
+        else if (canCaregiver)
+          _SeverityActionItem(
+            icon: Icons.person,
+            label: 'Liên hệ người chăm sóc',
+            color: Colors.blue.shade700,
+            onPressed: () => _callCaregiver(context),
+          ),
         _SeverityActionItem(
           icon: Icons.notifications_active,
           label: 'Kích hoạt báo động',
@@ -1102,12 +1114,20 @@ class _NotificationScreenState extends State<NotificationScreen> {
             _activateAlarmForNotification(context, eventId);
           },
         ),
-        _SeverityActionItem(
-          icon: Icons.call,
-          label: 'Gọi khẩn cấp',
-          color: Colors.red.shade600,
-          onPressed: () => _initiateEmergencyCall(context),
-        ),
+        if (canEmergency)
+          _SeverityActionItem(
+            icon: Icons.call,
+            label: 'Gọi khẩn cấp',
+            color: Colors.red.shade600,
+            onPressed: () => _initiateEmergencyCall(context),
+          )
+        else if (canCaregiver)
+          _SeverityActionItem(
+            icon: Icons.person,
+            label: 'Liên hệ người chăm sóc',
+            color: Colors.blue.shade700,
+            onPressed: () => _callCaregiver(context),
+          ),
         _SeverityActionItem(
           icon: Icons.check_circle_outline,
           label: 'Đã xử lý',
@@ -1253,7 +1273,6 @@ class _NotificationScreenState extends State<NotificationScreen> {
       case _NotificationSeverity.info:
         return 'THÔNG TIN';
       case _NotificationSeverity.normal:
-      default:
         return 'Bình thường';
     }
   }
@@ -1300,7 +1319,6 @@ class _NotificationScreenState extends State<NotificationScreen> {
       case _NotificationSeverity.info:
         return Colors.blue.shade600;
       case _NotificationSeverity.normal:
-      default:
         return Colors.blue.shade300;
     }
   }
@@ -1409,43 +1427,51 @@ class _NotificationScreenState extends State<NotificationScreen> {
   }
 
   Future<void> _initiateEmergencyCall(BuildContext context) async {
-    final messenger = ScaffoldMessenger.of(context);
-    String normalized = '112';
-    try {
-      final rawPhone = await _resolveEmergencyPhoneNumber();
-      normalized = _normalizePhoneNumber(rawPhone);
-      final status = await Permission.phone.request();
-      if (status.isGranted) {
-        final success = await DirectCaller.call(normalized);
-        if (success) return;
-        await _fallbackDial(messenger, normalized);
-        return;
-      }
-      if (status.isPermanentlyDenied) {
-        messenger.showSnackBar(
-          SnackBar(
-            content: const Text(
-              'Quyền gọi điện bị từ chối vĩnh viễn. Vui lòng bật quyền trong cài đặt.',
-            ),
-            action: SnackBarAction(
-              label: 'Cài đặt',
-              onPressed: () => openAppSettings(),
-            ),
-          ),
-        );
-        await _fallbackDial(messenger, normalized);
-        return;
-      }
-      await _fallbackDial(messenger, normalized);
-    } catch (e) {
-      messenger.showSnackBar(
-        SnackBar(
-          content: Text('Lỗi khi gọi: $e'),
-          backgroundColor: Colors.red.shade600,
+    final manager = callActionManager(context);
+    if (!manager.allowedActions.contains(CallAction.emergency)) {
+      _showRestrictedCallMessage(context);
+      return;
+    }
+    final phone = await _resolveEmergencyPhoneNumber();
+    await attemptCall(
+      context: context,
+      rawPhone: phone,
+      actionLabel: 'Gọi khẩn cấp',
+    );
+  }
+
+  void _showRestrictedCallMessage(BuildContext context) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(
+        content: Text(
+          'Bạn đã có người chăm sóc. Trong trường hợp khẩn cấp hệ thống sẽ liên hệ caregiver trước.',
+        ),
+        behavior: SnackBarBehavior.floating,
+      ),
+    );
+  }
+
+  Future<void> _callCaregiver(BuildContext context) async {
+    final manager = callActionManager(context);
+    if (!manager.allowedActions.contains(CallAction.caregiver)) {
+      _showRestrictedCallMessage(context);
+      return;
+    }
+    final caregiverPhone = firstAssignedCaregiverPhone(context);
+    if (caregiverPhone == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Chưa có số điện thoại người chăm sóc để liên hệ.'),
           behavior: SnackBarBehavior.floating,
         ),
       );
+      return;
     }
+    await attemptCall(
+      context: context,
+      rawPhone: caregiverPhone,
+      actionLabel: 'Liên hệ người chăm sóc',
+    );
   }
 
   Future<String> _resolveEmergencyPhoneNumber() async {
@@ -1482,33 +1508,6 @@ class _NotificationScreenState extends State<NotificationScreen> {
       return '112';
     }
     return phoneToCall;
-  }
-
-  String _normalizePhoneNumber(String phone) {
-    var normalized = phone.replaceAll(RegExp(r'[\s\-\(\)]'), '');
-    if (normalized.startsWith('+84')) {
-      normalized = '0${normalized.substring(3)}';
-    } else if (normalized.startsWith('84')) {
-      normalized = '0${normalized.substring(2)}';
-    }
-    return normalized;
-  }
-
-  Future<void> _fallbackDial(
-    ScaffoldMessengerState messenger,
-    String normalized,
-  ) async {
-    try {
-      await launchUrl(Uri.parse('tel:$normalized'));
-    } catch (_) {
-      messenger.showSnackBar(
-        SnackBar(
-          content: const Text('Không thể thực hiện cuộc gọi'),
-          backgroundColor: Colors.red.shade600,
-          behavior: SnackBarBehavior.floating,
-        ),
-      );
-    }
   }
 
   String? _extractEventId(NotificationModel notification) {
@@ -1599,3 +1598,642 @@ class _NotificationScreenState extends State<NotificationScreen> {
     }
   }
 }
+
+// import 'package:detect_care_app/features/notification/utils/notification_translator.dart';
+// import 'package:detect_care_app/services/notification_api_service.dart';
+// import 'package:flutter/material.dart';
+// import 'package:intl/intl.dart';
+// import 'package:detect_care_app/core/models/notification.dart';
+// import 'package:detect_care_app/core/utils/backend_enums.dart';
+// import 'package:detect_care_app/features/notification/screens/notification_detail_screen.dart';
+
+// class NotificationScreen extends StatefulWidget {
+//   const NotificationScreen({super.key});
+
+//       final res = await _apiService.getNotifications();
+//       setState(() {
+//         _notifications = res.notifications;
+//         _notifications.sort(
+//           (a, b) => (b.createdAt ?? DateTime.now()).compareTo(
+//             a.createdAt ?? DateTime.now(),
+//           ),
+//         );
+//         _filteredNotifications = _notifications;
+//       });
+//                                                 color: Colors.grey.shade500,
+//                                               ),
+//                                             ),
+//                                           ],
+//                                         ),
+//                                       ],
+//                                     ),
+//                                   ),
+//                                   if (!_isSelectionMode)
+//                                     PopupMenuButton<String>(
+//                                       icon: Icon(
+//                                         Icons.more_vert,
+//                                         color: Colors.grey.shade400,
+//                                         size: 20,
+//                                       ),
+//                                       shape: RoundedRectangleBorder(
+//                                         borderRadius: BorderRadius.circular(12),
+//                                       ),
+//                                       itemBuilder: (context) => [
+//                                         PopupMenuItem(
+//                                           value: 'delete',
+//                                           child: Row(
+//                                             children: const [
+//                                               Icon(
+//                                                 Icons.delete_outline,
+//                                                 color: Colors.red,
+//                                                 size: 20,
+//                                               ),
+//                                               SizedBox(width: 8),
+//                                               Text('Xóa'),
+//                                             ],
+//                                           ),
+//                                         ),
+//                                       ],
+//                                       onSelected: (value) {
+//                                         if (value == 'delete') {
+//                                           _deleteSingle(n.id);
+//                                         }
+//                                       },
+//                                     ),
+//                                 ],
+//                               ),
+//                             ),
+//                           ),
+//       backgroundColor: const Color(0xFFF8FAFC),
+//       appBar: AppBar(
+//         centerTitle: true,
+//         backgroundColor: Colors.white,
+//         elevation: 0,
+//         shadowColor: Colors.black.withValues(alpha: 0.1),
+//         title: Text(
+//           _isSelectionMode ? '${_selectedIds.length} đã chọn' : 'Thông báo',
+//           style: TextStyle(
+//             color: Color(0xFF1E293B),
+//             fontSize: 20,
+//             fontWeight: FontWeight.w700,
+//             letterSpacing: -0.5,
+//           ),
+//         ),
+//         leading: Container(
+//           margin: const EdgeInsets.all(8),
+//           decoration: BoxDecoration(
+//             color: const Color(0xFFF8FAFC),
+//             borderRadius: BorderRadius.circular(12),
+//             border: Border.all(color: const Color(0xFFE2E8F0)),
+//           ),
+//           child: IconButton(
+//             onPressed: () => Navigator.pop(context),
+//             icon: const Icon(
+//               Icons.arrow_back_ios_new,
+//               color: Color(0xFF374151),
+//               size: 18,
+//             ),
+//           ),
+//         ),
+//         actions: [
+//           if (!_isSelectionMode) ...[
+//             if (_unreadCount > 0)
+//               Container(
+//                 margin: const EdgeInsets.only(right: 8),
+//                 padding: const EdgeInsets.symmetric(
+//                   horizontal: 12,
+//                   vertical: 6,
+//                 ),
+//                 decoration: BoxDecoration(
+//                   color: const Color(0xFFEFF6FF),
+//                   borderRadius: BorderRadius.circular(20),
+//                 ),
+//                 child: Row(
+//                   children: [
+//                     Container(
+//                       width: 8,
+//                       height: 8,
+//                       decoration: const BoxDecoration(
+//                         color: Color(0xFF3B82F6),
+//                         shape: BoxShape.circle,
+//                       ),
+//                     ),
+//                     const SizedBox(width: 6),
+//                     Text(
+//                       '$_unreadCount',
+//                       style: const TextStyle(
+//                         color: Color(0xFF3B82F6),
+//                         fontSize: 13,
+//                         fontWeight: FontWeight.w600,
+//                       ),
+//                     ),
+//                   ],
+//                 ),
+//               ),
+//             IconButton(
+//               icon: const Icon(Icons.done_all, color: Color(0xFF3B82F6)),
+//               tooltip: 'Đánh dấu tất cả đã đọc',
+//               onPressed: _unreadCount > 0 ? _markAllAsRead : null,
+//             ),
+//             IconButton(
+//               icon: const Icon(Icons.checklist, color: Color(0xFF64748B)),
+//               tooltip: 'Chọn để xóa',
+//               onPressed: _toggleSelectionMode,
+//             ),
+//           ] else ...[
+//             IconButton(
+//               icon: const Icon(Icons.select_all, color: Color(0xFF3B82F6)),
+//               tooltip: 'Chọn tất cả',
+//               onPressed: () {
+//                 setState(() {
+//                   if (_selectedIds.length == _filteredNotifications.length) {
+//                     _selectedIds.clear();
+//                   } else {
+//                     _selectedIds = _filteredNotifications
+//                         .map((n) => n.id)
+//                         .where((id) => id.isNotEmpty)
+//                         .toSet();
+//                   }
+//                 });
+//               },
+//             ),
+//             IconButton(
+//               icon: Icon(
+//                 Icons.delete,
+//                 color: _selectedIds.isEmpty
+//                     ? Colors.grey.shade400
+//                     : Colors.red.shade400,
+//               ),
+//               tooltip: 'Xóa đã chọn',
+//               onPressed: _selectedIds.isEmpty ? null : _deleteSelected,
+//             ),
+//           ],
+//         ],
+//       ),
+//       body: Column(
+//         children: [
+//           // Search bar
+//           Container(
+//             color: Colors.white,
+//             padding: const EdgeInsets.fromLTRB(16, 12, 16, 16),
+//             child: Container(
+//               decoration: BoxDecoration(
+//                 color: const Color(0xFFF8FAFC),
+//                 borderRadius: BorderRadius.circular(12),
+//                 border: Border.all(color: const Color(0xFFE2E8F0)),
+//               ),
+//               child: TextField(
+//                 decoration: const InputDecoration(
+//                   hintText: 'Tìm kiếm thông báo...',
+//                   hintStyle: TextStyle(color: Color(0xFF94A3B8)),
+//                   prefixIcon: Icon(Icons.search, color: Color(0xFF64748B)),
+//                   border: InputBorder.none,
+//                   contentPadding: EdgeInsets.symmetric(
+//                     horizontal: 16,
+//                     vertical: 12,
+//                   ),
+//                 ),
+//                 onChanged: (v) {
+//                   _searchQuery = v;
+//                   _applyFilter();
+//                 },
+//               ),
+//             ),
+//           ),
+
+//           // Filter business_type
+//           Container(
+//             color: Colors.white,
+//             height: 52,
+//             child: ListView.builder(
+//               scrollDirection: Axis.horizontal,
+//               padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+//               itemCount: _filterOptions.length,
+//               itemBuilder: (context, index) {
+//                 final o = _filterOptions[index];
+//                 final isSelected = _selectedFilter == o['label'];
+//                 return Padding(
+//                   padding: const EdgeInsets.only(right: 8),
+//                   child: FilterChip(
+//                     label: Text(
+//                       o['label'],
+//                       style: TextStyle(
+//                         color: isSelected
+//                             ? Colors.white
+//                             : const Color(0xFF64748B),
+//                         fontWeight: isSelected
+//                             ? FontWeight.w600
+//                             : FontWeight.w500,
+//                         fontSize: 13,
+//                       ),
+//                     ),
+//                     selected: isSelected,
+//                     backgroundColor: const Color(0xFFF1F5F9),
+//                     selectedColor: const Color(0xFF3B82F6),
+//                     side: BorderSide(
+//                       color: isSelected
+//                           ? const Color(0xFF3B82F6)
+//                           : const Color(0xFFE2E8F0),
+//                     ),
+//                     onSelected: (s) {
+//                       setState(() {
+//                         _selectedFilter = o['label'];
+//                         _applyFilter();
+//                       });
+//                     },
+//                   ),
+//                 );
+//               },
+//             ),
+//           ),
+
+//           // Filter status
+//           Container(
+//             color: Colors.white,
+//             height: 52,
+//             child: ListView.builder(
+//               scrollDirection: Axis.horizontal,
+//               padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+//               itemCount: _statusOptions.length,
+//               itemBuilder: (context, i) {
+//                 final o = _statusOptions[i];
+//                 final isSelected = _selectedStatus == o['label'];
+//                 return Padding(
+//                   padding: const EdgeInsets.only(right: 8),
+//                   child: FilterChip(
+//                     label: Text(
+//                       o['label'],
+//                       style: TextStyle(
+//                         color: isSelected
+//                             ? Colors.white
+//                             : const Color(0xFF64748B),
+//                         fontWeight: isSelected
+//                             ? FontWeight.w600
+//                             : FontWeight.w500,
+//                         fontSize: 13,
+//                       ),
+//                     ),
+//                     selected: isSelected,
+//                     backgroundColor: const Color(0xFFF1F5F9),
+//                     selectedColor: const Color(0xFF3B82F6),
+//                     side: BorderSide(
+//                       color: isSelected
+//                           ? const Color(0xFF3B82F6)
+//                           : const Color(0xFFE2E8F0),
+//                     ),
+//                     onSelected: (s) {
+//                       setState(() {
+//                         _selectedStatus = o['label'];
+//                         _applyFilter();
+//                       });
+//                     },
+//                   ),
+//                 );
+//               },
+//             ),
+//           ),
+
+//           const SizedBox(height: 8),
+
+//           // Notifications list
+//           Expanded(
+//             child: _loading
+//                 ? const Center(
+//                     child: CircularProgressIndicator(color: Color(0xFF3B82F6)),
+//                   )
+//                 : _filteredNotifications.isEmpty
+//                 ? Center(
+//                     child: Column(
+//                       mainAxisAlignment: MainAxisAlignment.center,
+//                       children: [
+//                         Icon(
+//                           Icons.notifications_none,
+//                           size: 64,
+//                           color: Colors.grey.shade300,
+//                         ),
+//                         const SizedBox(height: 16),
+//                         Text(
+//                           'Không có thông báo nào',
+//                           style: TextStyle(
+//                             color: Colors.grey.shade500,
+//                             fontSize: 16,
+//                           ),
+//                         ),
+//                       ],
+//                     ),
+//                   )
+//                 : ListView.builder(
+//                     padding: const EdgeInsets.all(16),
+//                     itemCount: _filteredNotifications.length,
+//                     itemBuilder: (context, i) {
+//                       final n = _filteredNotifications[i];
+//                       final isUnread = n.isRead == false || n.readAt == null;
+//                       final typeVN = BackendEnums.businessTypeToVietnamese(
+//                         n.businessType,
+//                       );
+//                       final statusVN = NotificationTranslator.status(
+//                         n.metadata?['status']?.toString(),
+//                       );
+//                       final isSelected = _selectedIds.contains(n.id);
+
+//                       return Dismissible(
+//                         key: Key(n.id),
+//                         direction: _isSelectionMode
+//                             ? DismissDirection.none
+//                             : DismissDirection.endToStart,
+//                         background: Container(
+//                           margin: const EdgeInsets.only(bottom: 12),
+//                           decoration: BoxDecoration(
+//                             color: Colors.red.shade400,
+//                             borderRadius: BorderRadius.circular(16),
+//                           ),
+//                           alignment: Alignment.centerRight,
+//                           padding: const EdgeInsets.only(right: 20),
+//                           child: const Icon(Icons.delete, color: Colors.white),
+//                         ),
+//                         confirmDismiss: (direction) async {
+//                           return await showDialog<bool>(
+//                             context: context,
+//                             builder: (context) => AlertDialog(
+//                               shape: RoundedRectangleBorder(
+//                                 borderRadius: BorderRadius.circular(16),
+//                               ),
+//                               title: const Text('Xác nhận xóa'),
+//                               content: const Text(
+//                                 'Bạn có chắc muốn xóa thông báo này?',
+//                               ),
+//                               actions: [
+//                                 TextButton(
+//                                   onPressed: () =>
+//                                       Navigator.pop(context, false),
+//                                   child: const Text('Hủy'),
+//                                 ),
+//                                 ElevatedButton(
+//                                   onPressed: () => Navigator.pop(context, true),
+//                                   style: ElevatedButton.styleFrom(
+//                                     backgroundColor: Colors.red.shade400,
+//                                     foregroundColor: Colors.white,
+//                                   ),
+//                                   child: const Text('Xóa'),
+//                                 ),
+//                               ],
+//                             ),
+//                           );
+//                         },
+//                         onDismissed: (direction) async {
+//                           await _apiService.deleteNotification(n.id);
+//                           await _loadNotifications();
+//                           await _fetchUnreadCount();
+//                         },
+//                         child: Container(
+//                           margin: const EdgeInsets.only(bottom: 12),
+//                           decoration: BoxDecoration(
+//                             color: Colors.white,
+//                             borderRadius: BorderRadius.circular(16),
+//                             border: Border.all(
+//                               color: isUnread
+//                                   ? const Color(0xFF3B82F6)
+//                                   : const Color(0xFFE2E8F0),
+//                               width: isUnread ? 2 : 1,
+//                             ),
+//                             boxShadow: [
+//                               BoxShadow(
+//                                 color: Colors.black.withAlpha(
+//                                   (0.04 * 255).round(),
+//                                 ),
+//                                 blurRadius: 8,
+//                                 offset: const Offset(0, 2),
+//                               ),
+//                             ],
+//                           ),
+//                           child: InkWell(
+//                             onTap: _isSelectionMode
+//                                 ? () => _toggleSelection(n.id)
+//                                 : null,
+//                             onLongPress: () {
+//                               if (!_isSelectionMode) {
+//                                 setState(() {
+//                                   _isSelectionMode = true;
+//                                   _selectedIds.add(n.id);
+//                                 });
+//                               }
+//                             },
+//                             borderRadius: BorderRadius.circular(16),
+//                             child: Padding(
+//                               padding: const EdgeInsets.all(16),
+//                               child: Row(
+//                                 crossAxisAlignment: CrossAxisAlignment.start,
+//                                 children: [
+//                                   if (_isSelectionMode)
+//                                     Container(
+//                                       margin: const EdgeInsets.only(right: 12),
+//                                       child: Checkbox(
+//                                         value: isSelected,
+//                                         onChanged: (v) =>
+//                                             _toggleSelection(n.id),
+//                                         activeColor: const Color(0xFF3B82F6),
+//                                         shape: RoundedRectangleBorder(
+//                                           borderRadius: BorderRadius.circular(
+//                                             4,
+//                                           ),
+//                                         ),
+//                                       ),
+//                                     )
+//                                   else
+//                                     Container(
+//                                       margin: const EdgeInsets.only(right: 12),
+//                                       padding: const EdgeInsets.all(10),
+//                                       decoration: BoxDecoration(
+//                                         color: isUnread
+//                                             ? const Color(0xFFEFF6FF)
+//                                             : const Color(0xFFF8FAFC),
+//                                         borderRadius: BorderRadius.circular(12),
+//                                       ),
+//                                       child: Icon(
+//                                         Icons.notifications,
+//                                         color: isUnread
+//                                             ? const Color(0xFF3B82F6)
+//                                             : const Color(0xFF94A3B8),
+//                                         size: 24,
+//                                       ),
+//                                     ),
+//                                   Expanded(
+//                                     child: Column(
+//                                       crossAxisAlignment:
+//                                           CrossAxisAlignment.start,
+//                                       children: [
+//                                         Row(
+//                                           children: [
+//                                             Expanded(
+//                                               child: Text(
+//                                                 n.title,
+//                                                 style: TextStyle(
+//                                                   fontSize: 15,
+//                                                   fontWeight: isUnread
+//                                                       ? FontWeight.w600
+//                                                       : FontWeight.w500,
+//                                                   color: const Color(
+//                                                     0xFF1E293B,
+//                                                   ),
+//                                                 ),
+//                                               ),
+//                                             ),
+//                                             if (isUnread)
+//                                               Container(
+//                                                 width: 8,
+//                                                 height: 8,
+//                                                 decoration: const BoxDecoration(
+//                                                   color: Color(0xFF3B82F6),
+//                                                   shape: BoxShape.circle,
+//                                                 ),
+//                                               ),
+//                                           ],
+//                                         ),
+//                                         const SizedBox(height: 6),
+//                                         Text(
+//                                           n.message,
+//                                           style: const TextStyle(
+//                                             fontSize: 14,
+//                                             color: Color(0xFF64748B),
+//                                             height: 1.4,
+//                                           ),
+//                                           maxLines: 2,
+//                                           overflow: TextOverflow.ellipsis,
+//                                         ),
+//                                         const SizedBox(height: 8),
+//                                         Wrap(
+//                                           spacing: 8,
+//                                           runSpacing: 4,
+//                                           children: [
+//                                             Container(
+//                                               padding:
+//                                                   const EdgeInsets.symmetric(
+//                                                     horizontal: 8,
+//                                                     vertical: 4,
+//                                                   ),
+//                                               decoration: BoxDecoration(
+//                                                 color: const Color(0xFFEFF6FF),
+//                                                 borderRadius:
+//                                                     BorderRadius.circular(6),
+//                                               ),
+//                                               child: Text(
+//                                                 typeVN,
+//                                                 style: const TextStyle(
+//                                                   fontSize: 11,
+//                                                   color: Color(0xFF3B82F6),
+//                                                   fontWeight: FontWeight.w500,
+//                                                 ),
+//                                               ),
+//                                             ),
+//                                             Container(
+//                                               padding:
+//                                                   const EdgeInsets.symmetric(
+//                                                     horizontal: 8,
+//                                                     vertical: 4,
+//                                                   ),
+//                                               decoration: BoxDecoration(
+//                                                 color: const Color(0xFFF1F5F9),
+//                                                 borderRadius:
+//                                                     BorderRadius.circular(6),
+//                                               ),
+//                                               child: Text(
+//                                                 statusVN,
+//                                                 style: const TextStyle(
+//                                                   fontSize: 11,
+//                                                   color: Color(0xFF64748B),
+//                                                   fontWeight: FontWeight.w500,
+//                                                 ),
+//                                               ),
+//                                             ),
+//                                           ],
+//                                         ),
+//                                         const SizedBox(height: 8),
+//                                         Row(
+//                                           children: [
+//                                             Icon(
+//                                               Icons.access_time,
+//                                               size: 12,
+//                                               color: Colors.grey.shade400,
+//                                             ),
+//                                             const SizedBox(width: 4),
+//                                             Text(
+//                                               _formatTime(n.createdAt),
+//                                               style: TextStyle(
+//                                                 fontSize: 12,
+//                                                 color: Colors.grey.shade500,
+//                                               ),
+//                                             ),
+//                                           ],
+//                                         ),
+//                                       ],
+//                                     ),
+//                                     ),
+//                                     if (!_isSelectionMode)
+//                                     PopupMenuButton<String>(
+//                                       icon: Icon(
+//                                         Icons.more_vert,
+//                                         color: Colors.grey.shade400,
+//                                         size: 20,
+//                                       ),
+//                                       shape: RoundedRectangleBorder(
+//                                         borderRadius: BorderRadius.circular(12),
+//                                       ),
+//                                       itemBuilder: (context) => [
+//                                         const PopupMenuItem(
+//                                           value: 'delete',
+//                                           child: Row(
+//                                             children: [
+//                                               Icon(
+//                                                 Icons.delete_outline,
+//                                                 color: Colors.red,
+//                                                 size: 20,
+//                                               ),
+//                                               SizedBox(width: 8),
+//                                               Text('Xóa'),
+//                                             ],
+//                                           ),
+//                                       ),
+//                                       onTap: _isSelectionMode
+//                                           ? () => _toggleSelection(n.id)
+//                                           : () async {
+//                                               final changed = await Navigator.push<bool?>(
+//                                                 context,
+//                                                 MaterialPageRoute(
+//                                                   builder: (_) => NotificationDetailScreen(notification: n),
+//                                                 ),
+//                                               );
+//                                               if (changed == true) {
+//                                                 await _loadNotifications();
+//                                                 await _fetchUnreadCount();
+//                                               }
+//                                             },
+//                                       onLongPress: () {
+//                                         if (!_isSelectionMode) {
+//                                           setState(() {
+//                                             _isSelectionMode = true;
+//                                             _selectedIds.add(n.id);
+//                                           });
+//                                         }
+//                                       },
+//                                     ),
+//                                       ],
+//                                       onSelected: (value) {
+//                                         if (value == 'delete') {
+//                                           _deleteSingle(n.id);
+//                                         }
+//                                       },
+//                                     ),
+//                                 ],
+//                               ),
+//                             ),
+//                           ),
+//                         ),
+//                       );
+//                     },
+//                   ),
+//           ),
+//         ],
+//       ),
+//     );
+//   }
+// }

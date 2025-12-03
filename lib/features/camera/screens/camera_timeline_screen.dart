@@ -78,7 +78,8 @@ class _CameraTimelineScreenState extends State<CameraTimelineScreen> {
                   Icons.arrow_back_ios_new,
                   color: Colors.black87,
                 ),
-                onPressed: () => Navigator.of(context).maybePop(),
+                onPressed: () =>
+                    Navigator.of(context, rootNavigator: true).maybePop(),
               ),
               titleSpacing: 0,
               title: Column(
@@ -270,7 +271,6 @@ class _CameraTimelineScreenState extends State<CameraTimelineScreen> {
   }
 
   Widget _buildEmbeddedTimeline(CameraTimelineController ctl) {
-    const timelineHeight = 380.0;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
@@ -296,8 +296,7 @@ class _CameraTimelineScreenState extends State<CameraTimelineScreen> {
           onAdjustZoom: (d) => ctl.adjustZoom(d),
         ),
         const SizedBox(height: 12),
-        SizedBox(
-          height: timelineHeight,
+        Expanded(
           child: CameraTimelineList(
             entries: ctl.entries,
             selectedClipId: ctl.selectedClipId,

@@ -93,15 +93,16 @@ class SharedPermissionsRemoteDataSource {
         } catch (_) {}
 
         try {
-          final parsed = json.decode(res.body);
-          if (parsed is Map) {
-            if (parsed['error'] is Map && parsed['error']['message'] != null) {
-              final serverMsg = parsed['error']['message'].toString();
+          final decoded = json.decode(res.body);
+          if (decoded is Map) {
+            if (decoded['error'] is Map &&
+                decoded['error']['message'] != null) {
+              final serverMsg = decoded['error']['message'].toString();
               throw Exception(serverMsg);
             }
 
-            if (parsed['message'] != null) {
-              throw Exception(parsed['message'].toString());
+            if (decoded['message'] != null) {
+              throw Exception(decoded['message'].toString());
             }
           }
         } catch (_) {
@@ -161,4 +162,91 @@ class SharedPermissionsRemoteDataSource {
 
     return json.decode(res.body) as Map<String, dynamic>;
   }
+
+  /// Backwards-compatible alias for older callers.
+  /// Returns null if the remote call fails for any reason.
+  Future<SharedPermissions?> getPermission({
+    required String customerId,
+    required String caregiverId,
+  }) async {
+    try {
+      return await getSharedPermissions(
+        customerId: customerId,
+        caregiverId: caregiverId,
+      );
+    } catch (_) {
+      return null;
+    }
+  }
+
+  /// Update shared permissions for a customer-caregiver pair.
+  /// Returns a lightweight result containing caregiver info and the saved permissions.
+  Future<UpdatePermissionsResult> updatePermissions({
+    required String customerId,
+    required String caregiverId,
+    required SharedPermissions permissions,
+    String? caregiverUsername,
+    String? caregiverPhone,
+    String? caregiverFullName,
+  }) async {
+    final endpoint = endpoints.pair(customerId, caregiverId);
+    final body = <String, dynamic>{};
+    body.addAll(permissions.toJson());
+    if (caregiverUsername != null && caregiverUsername.isNotEmpty) {
+      body['caregiver_username'] = caregiverUsername;
+    }
+    if (caregiverPhone != null && caregiverPhone.isNotEmpty) {
+      body['caregiver_phone'] = caregiverPhone;
+    }
+    if (caregiverFullName != null && caregiverFullName.isNotEmpty) {
+      body['caregiver_full_name'] = caregiverFullName;
+    }
+    final res = await _api.put(endpoint, body: body);
+
+    if (res.statusCode < 200 || res.statusCode >= 300) {
+      throw Exception(
+        'Update permissions failed: ${res.statusCode} ${res.body}',
+      );
+    }
+
+    try {
+      final decoded = json.decode(res.body) as Map<String, dynamic>;
+      final caregiverFullName =
+          decoded['caregiver_full_name']?.toString() ??
+          decoded['caregiverFullName']?.toString() ??
+          '';
+      final caregiverPhone =
+          decoded['caregiver_phone']?.toString() ??
+          decoded['caregiverPhone']?.toString() ??
+          '';
+      final perms = decoded['permissions'] is Map
+          ? SharedPermissions.fromJson(
+              (decoded['permissions'] as Map).cast<String, dynamic>(),
+            )
+          : permissions;
+      return UpdatePermissionsResult(
+        caregiverFullName: caregiverFullName,
+        caregiverPhone: caregiverPhone,
+        permissions: perms,
+      );
+    } catch (_) {
+      return UpdatePermissionsResult(
+        caregiverFullName: '',
+        caregiverPhone: '',
+        permissions: permissions,
+      );
+    }
+  }
+}
+
+class UpdatePermissionsResult {
+  final String caregiverFullName;
+  final String caregiverPhone;
+  final SharedPermissions permissions;
+
+  UpdatePermissionsResult({
+    required this.caregiverFullName,
+    required this.caregiverPhone,
+    required this.permissions,
+  });
 }

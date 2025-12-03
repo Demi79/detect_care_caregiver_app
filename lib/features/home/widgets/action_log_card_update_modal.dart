@@ -1,5 +1,39 @@
 part of 'action_log_card.dart';
 
+class _EventUpdateDraft {
+  final String? status;
+  final String? eventType;
+  final String note;
+
+  const _EventUpdateDraft({this.status, this.eventType, this.note = ''});
+}
+
+final Map<String, _EventUpdateDraft> _eventUpdateDraftCache = {};
+
+_EventUpdateDraft? _getEventUpdateDraft(String eventId) =>
+    _eventUpdateDraftCache[eventId];
+
+void _persistEventUpdateDraft(
+  String eventId, {
+  String? status,
+  String? eventType,
+  required String note,
+}) {
+  final trimmedNote = note.trim();
+  if (status == null && eventType == null && trimmedNote.isEmpty) {
+    _eventUpdateDraftCache.remove(eventId);
+    return;
+  }
+  _eventUpdateDraftCache[eventId] = _EventUpdateDraft(
+    status: status,
+    eventType: eventType,
+    note: trimmedNote,
+  );
+}
+
+void _clearEventUpdateDraft(String eventId) =>
+    _eventUpdateDraftCache.remove(eventId);
+
 extension _ActionLogCardUpdateModal on ActionLogCard {
   Widget _sectionTitle(String title) {
     return Text(
@@ -115,6 +149,9 @@ extension _ActionLogCardUpdateModal on ActionLogCard {
       'abnormal': Icons.error_outline_rounded,
     };
 
+    final eventId = data.eventId;
+    final draft = _getEventUpdateDraft(eventId);
+    final bool canEditEvent = _canEditEvent;
     final currentLower = data.status.toLowerCase();
     final statusOptions = allStatusOptions
         .where((s) => s != currentLower)
@@ -142,10 +179,11 @@ extension _ActionLogCardUpdateModal on ActionLogCard {
 
     final eventForImages = _buildEventLogForImages();
     final imagesFuture = loadEventImageUrls(eventForImages);
+    final noteController = TextEditingController(text: draft?.note ?? '');
 
-    String? selectedStatus;
-    String? selectedEventType;
-    String note = '';
+    String? selectedStatus = draft?.status;
+    String? selectedEventType = draft?.eventType;
+    String note = draft?.note ?? '';
     int highlightedImageIndex = 0;
 
     showDialog(
@@ -270,6 +308,29 @@ extension _ActionLogCardUpdateModal on ActionLogCard {
                         ],
                       ),
                       const SizedBox(height: 12),
+                      if (!canEditEvent)
+                        Padding(
+                          padding: const EdgeInsets.symmetric(vertical: 6),
+                          child: Row(
+                            children: [
+                              Icon(
+                                Icons.lock_clock,
+                                color: Colors.orange.shade600,
+                                size: 18,
+                              ),
+                              const SizedBox(width: 8),
+                              Expanded(
+                                child: Text(
+                                  'Cập nhật chỉ khả dụng trong vòng ${_kEventUpdateWindow.inDays} ngày kể từ khi sự kiện được ghi nhận.',
+                                  style: TextStyle(
+                                    color: Colors.orange.shade800,
+                                    fontWeight: FontWeight.w600,
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
                       FutureBuilder<List<String>>(
                         future: imagesFuture,
                         builder: (context, snapshot) {
@@ -568,8 +629,17 @@ extension _ActionLogCardUpdateModal on ActionLogCard {
                                 final icon = statusIcons[status]!;
 
                                 return GestureDetector(
-                                  onTap: () =>
-                                      setState(() => selectedStatus = status),
+                                  onTap: canEditEvent
+                                      ? () => setState(() {
+                                          selectedStatus = status;
+                                          _persistEventUpdateDraft(
+                                            eventId,
+                                            status: selectedStatus,
+                                            eventType: selectedEventType,
+                                            note: note,
+                                          );
+                                        })
+                                      : null,
                                   child: AnimatedContainer(
                                     duration: const Duration(milliseconds: 200),
                                     curve: Curves.easeInOut,
@@ -724,8 +794,17 @@ extension _ActionLogCardUpdateModal on ActionLogCard {
                                 final isSelected = selectedEventType == type;
 
                                 return GestureDetector(
-                                  onTap: () =>
-                                      setState(() => selectedEventType = type),
+                                  onTap: canEditEvent
+                                      ? () => setState(() {
+                                          selectedEventType = type;
+                                          _persistEventUpdateDraft(
+                                            eventId,
+                                            status: selectedStatus,
+                                            eventType: selectedEventType,
+                                            note: note,
+                                          );
+                                        })
+                                      : null,
                                   child: AnimatedContainer(
                                     duration: const Duration(milliseconds: 200),
                                     curve: Curves.easeInOut,
@@ -824,7 +903,20 @@ extension _ActionLogCardUpdateModal on ActionLogCard {
                             ),
                             const SizedBox(height: 12),
                             TextField(
-                              onChanged: (v) => setState(() => note = v),
+                              controller: noteController,
+                              enabled: canEditEvent,
+                              readOnly: !canEditEvent,
+                              onChanged: canEditEvent
+                                  ? (v) => setState(() {
+                                      note = v;
+                                      _persistEventUpdateDraft(
+                                        eventId,
+                                        status: selectedStatus,
+                                        eventType: selectedEventType,
+                                        note: note,
+                                      );
+                                    })
+                                  : null,
                               maxLines: 4,
                               maxLength: 240,
                               decoration: InputDecoration(
@@ -903,41 +995,47 @@ extension _ActionLogCardUpdateModal on ActionLogCard {
                           Expanded(
                             flex: 2,
                             child: ElevatedButton.icon(
-                              onPressed: () {
-                                if (selectedStatus == null &&
-                                    selectedEventType == null) {
-                                  ScaffoldMessenger.of(dialogCtx).showSnackBar(
-                                    SnackBar(
-                                      content: Row(
-                                        children: [
-                                          const Icon(
-                                            Icons.info_outline_rounded,
-                                            color: Colors.white,
-                                          ),
-                                          const SizedBox(width: 12),
-                                          const Expanded(
-                                            child: Text(
-                                              'Vui lòng chọn trạng thái hoặc loại sự kiện mới',
+                              onPressed: canEditEvent
+                                  ? () {
+                                      if (selectedStatus == null &&
+                                          selectedEventType == null) {
+                                        ScaffoldMessenger.of(
+                                          dialogCtx,
+                                        ).showSnackBar(
+                                          SnackBar(
+                                            content: Row(
+                                              children: [
+                                                const Icon(
+                                                  Icons.info_outline_rounded,
+                                                  color: Colors.white,
+                                                ),
+                                                const SizedBox(width: 12),
+                                                const Expanded(
+                                                  child: Text(
+                                                    'Vui lòng chọn trạng thái hoặc loại sự kiện mới',
+                                                  ),
+                                                ),
+                                              ],
+                                            ),
+                                            backgroundColor:
+                                                Colors.orange.shade600,
+                                            behavior: SnackBarBehavior.floating,
+                                            shape: RoundedRectangleBorder(
+                                              borderRadius:
+                                                  BorderRadius.circular(10),
                                             ),
                                           ),
-                                        ],
-                                      ),
-                                      backgroundColor: Colors.orange.shade600,
-                                      behavior: SnackBarBehavior.floating,
-                                      shape: RoundedRectangleBorder(
-                                        borderRadius: BorderRadius.circular(10),
-                                      ),
-                                    ),
-                                  );
-                                  return;
-                                }
-                                _confirmUpdate(
-                                  pageContext,
-                                  selectedStatus ?? data.status,
-                                  note,
-                                  eventType: selectedEventType,
-                                );
-                              },
+                                        );
+                                        return;
+                                      }
+                                      _confirmUpdate(
+                                        pageContext,
+                                        selectedStatus ?? data.status,
+                                        note,
+                                        eventType: selectedEventType,
+                                      );
+                                    }
+                                  : null,
                               icon: const Icon(
                                 Icons.check_circle_rounded,
                                 size: 20,
@@ -974,7 +1072,7 @@ extension _ActionLogCardUpdateModal on ActionLogCard {
           );
         },
       ),
-    );
+    ).whenComplete(() => noteController.dispose());
   }
 
   Future<void> _confirmUpdate(
@@ -1166,6 +1264,7 @@ extension _ActionLogCardUpdateModal on ActionLogCard {
         AppEvents.instance.notifyEventsChanged();
       } catch (_) {}
       if (onUpdated != null) onUpdated!(newStatus);
+      _clearEventUpdateDraft(data.eventId);
       return true;
     } catch (e) {
       messenger.showSnackBar(

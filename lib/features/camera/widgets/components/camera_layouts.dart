@@ -10,6 +10,7 @@ class CameraList extends StatelessWidget {
   final Function(CameraEntry)? onRefreshRequested;
   final Function(CameraEntry)? onShowTimeline;
   final String? searchQuery;
+  final String? statusNote;
 
   const CameraList({
     super.key,
@@ -20,6 +21,7 @@ class CameraList extends StatelessWidget {
     this.onRefreshRequested,
     this.onShowTimeline,
     this.searchQuery,
+    this.statusNote,
   });
 
   @override
@@ -55,6 +57,7 @@ class CameraList extends StatelessWidget {
                   headerLabel: null,
                   isGrid2: false,
                   searchQuery: searchQuery,
+                  statusNote: statusNote,
                 ),
               ),
             ),
@@ -73,6 +76,7 @@ class CameraGrid extends StatelessWidget {
   final Function(CameraEntry)? onRefreshRequested;
   final Function(CameraEntry)? onShowTimeline;
   final String? searchQuery;
+  final String? statusNote;
 
   const CameraGrid({
     super.key,
@@ -83,6 +87,7 @@ class CameraGrid extends StatelessWidget {
     this.onRefreshRequested,
     this.onShowTimeline,
     this.searchQuery,
+    this.statusNote,
   });
 
   @override
@@ -133,6 +138,7 @@ class CameraGrid extends StatelessWidget {
                 isGrid2: true,
                 height: 250,
                 searchQuery: searchQuery,
+                statusNote: statusNote,
               ),
             ),
           ),

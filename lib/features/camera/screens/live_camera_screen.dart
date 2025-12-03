@@ -1,9 +1,6 @@
 import 'dart:async';
 import 'dart:ui';
 
-// ignore_for_file: unused_element
-
-import 'package:detect_care_caregiver_app/core/services/direct_caller.dart';
 import 'package:detect_care_caregiver_app/core/utils/logger.dart';
 import 'package:detect_care_caregiver_app/features/alarm/data/alarm_remote_data_source.dart';
 import 'package:detect_care_caregiver_app/features/auth/data/auth_storage.dart';
@@ -13,15 +10,15 @@ import 'package:detect_care_caregiver_app/features/camera/screens/camera_timelin
 import 'package:detect_care_caregiver_app/features/camera/services/camera_access_guard.dart';
 import 'package:detect_care_caregiver_app/features/camera/widgets/features_panel.dart';
 import 'package:detect_care_caregiver_app/features/camera/widgets/status_chip.dart';
+import 'package:detect_care_caregiver_app/features/emergency/call_action_context.dart';
+import 'package:detect_care_caregiver_app/features/emergency/call_action_service.dart';
 import 'package:detect_care_caregiver_app/features/emergency_contacts/data/emergency_contacts_remote_data_source.dart';
-
 import 'package:detect_care_caregiver_app/features/alarm/services/active_alarm_notifier.dart';
 import 'package:detect_care_caregiver_app/features/events/data/events_remote_data_source.dart';
 import 'package:detect_care_caregiver_app/features/home/service/event_service.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_vlc_player/flutter_vlc_player.dart';
-import 'package:permission_handler/permission_handler.dart';
 
 /// Màn hình camera chính với kiến trúc module hóa
 class LiveCameraScreen extends StatefulWidget {
@@ -169,8 +166,11 @@ class _LiveCameraScreenState extends State<LiveCameraScreen> {
       return;
     }
     if (!mounted) return;
-    await Navigator.of(context).push(
-      MaterialPageRoute(builder: (_) => CameraTimelineScreen(camera: camera)),
+    await Navigator.of(context, rootNavigator: true).push(
+      MaterialPageRoute(
+        builder: (_) => CameraTimelineScreen(camera: camera),
+        settings: const RouteSettings(name: 'camera_timeline_screen'),
+      ),
     );
   }
 
@@ -236,8 +236,7 @@ class _LiveCameraScreenState extends State<LiveCameraScreen> {
       // Fallback to SD if HD fails
       if (allowFallback && _stateManager.isHd) {
         final sdUrl = CameraHelpers.withSubtype(url, CameraConstants.sdSubtype);
-        context.showCameraMessage(CameraConstants.hdFallbackMessage);
-
+        // context.showCameraMessage(CameraConstants.hdFallbackMessage);
         _stateManager.updateSettings(isHd: false);
         _stateManager.urlController.text = sdUrl;
         _stateManager.setStarting(false);
@@ -560,87 +559,53 @@ class _LiveCameraScreenState extends State<LiveCameraScreen> {
   Future<void> _handleEmergencyCall() async {
     setState(() => _emergencyCalling = true);
     try {
-      String phone = '115';
-
-      try {
-        final userId = await AuthStorage.getUserId();
-        if (userId != null && userId.isNotEmpty) {
-          try {
-            final ds = EmergencyContactsRemoteDataSource();
-            final list = await ds.list(userId);
-            if (list.isNotEmpty) {
-              list.sort((a, b) => b.alertLevel.compareTo(a.alertLevel));
-              EmergencyContactDto? chosen;
-              for (final c in list) {
-                if (c.phone.trim().isNotEmpty) {
-                  chosen = c;
-                  break;
-                }
-              }
-              chosen ??= list.first;
-              if (chosen.phone.trim().isNotEmpty) {
-                phone = chosen.phone.trim();
-              }
-            }
-          } catch (_) {}
-        }
-      } catch (_) {}
-
-      String normalized = phone.replaceAll(RegExp(r'[\s\-\(\)]'), '');
-      if (normalized.startsWith('+84')) {
-        normalized = '0${normalized.substring(3)}';
-      } else if (normalized.startsWith('84')) {
-        normalized = '0${normalized.substring(2)}';
-      }
-
-      final status = await Permission.phone.request();
-      if (status.isGranted) {
-        final success = await DirectCaller.call(normalized);
-        if (success) {
-          if (mounted) {
-            ScaffoldMessenger.of(
-              context,
-            ).showSnackBar(SnackBar(content: Text('Đang gọi $normalized...')));
-          }
-        } else {
-          if (mounted) {
-            ScaffoldMessenger.of(context).showSnackBar(
-              const SnackBar(
-                content: Text('Không thể thực hiện cuộc gọi trực tiếp.'),
-                backgroundColor: Colors.red,
-              ),
-            );
-          }
-        }
-      } else if (status.isPermanentlyDenied) {
-        if (!mounted) return;
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: const Text(
-              'Quyền gọi điện bị từ chối vĩnh viễn. Vui lòng bật quyền trong cài đặt.',
-            ),
-            action: SnackBarAction(
-              label: 'Cài đặt',
-              onPressed: () => openAppSettings(),
-            ),
-          ),
-        );
-      } else {
+      final manager = callActionManager(context);
+      if (!manager.allowedActions.contains(CallAction.emergency)) {
         if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(
-              content: Text('Quyền gọi điện bị từ chối.'),
-              backgroundColor: Colors.orange,
-            ),
+          context.showCameraMessage(
+            'Trong trường hợp khẩn cấp, hệ thống sẽ liên hệ người chăm sóc trước.',
           );
         }
+        return;
       }
+
+      final phone = await _chooseEmergencyPhone();
+      await attemptCall(
+        context: context,
+        rawPhone: phone,
+        actionLabel: 'Gọi khẩn cấp',
+      );
     } catch (e, st) {
       AppLogger.e('[Camera] emergency call failed', e, st);
       if (mounted) context.showCameraMessage('Không thể thực hiện cuộc gọi.');
     } finally {
       if (mounted) setState(() => _emergencyCalling = false);
     }
+  }
+
+  Future<String> _chooseEmergencyPhone() async {
+    String phone = '115';
+    try {
+      final userId = await AuthStorage.getUserId();
+      if (userId != null && userId.isNotEmpty) {
+        final list = await EmergencyContactsRemoteDataSource().list(userId);
+        if (list.isNotEmpty) {
+          list.sort((a, b) => b.alertLevel.compareTo(a.alertLevel));
+          EmergencyContactDto? chosen;
+          for (final c in list) {
+            if (c.phone.trim().isNotEmpty) {
+              chosen = c;
+              break;
+            }
+          }
+          chosen ??= list.first;
+          if (chosen.phone.trim().isNotEmpty) {
+            phone = chosen.phone.trim();
+          }
+        }
+      }
+    } catch (_) {}
+    return phone.isEmpty ? '115' : phone;
   }
 
   Future<void> _onCancelAlarm() async {
@@ -790,7 +755,10 @@ class _LiveCameraScreenState extends State<LiveCameraScreen> {
                 onChannelsChanged: _changeChannels,
                 showRetention: false,
                 timelineContentBuilder: (ctx) => _buildEmbeddedTimeline(ctx),
-                onOpenTimeline: widget.camera != null ? _openTimeline : null,
+                onOpenTimeline: widget.camera != null
+                    ? () => _openTimeline()
+                    : null,
+                camera: widget.camera,
               ),
             ),
           ),
@@ -1206,15 +1174,19 @@ class _LiveCameraScreenState extends State<LiveCameraScreen> {
           ),
           child: Row(
             mainAxisAlignment: MainAxisAlignment.center,
+            mainAxisSize: MainAxisSize.min,
             children: [
               Icon(icon, color: Colors.white, size: 20),
               const SizedBox(width: 8),
-              Text(
-                label,
-                style: const TextStyle(
-                  color: Colors.white,
-                  fontWeight: FontWeight.w700,
-                  letterSpacing: 0.3,
+              Flexible(
+                child: Text(
+                  label,
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(
+                    color: Colors.white,
+                    fontWeight: FontWeight.w700,
+                    letterSpacing: 0.3,
+                  ),
                 ),
               ),
               if (loading) ...[

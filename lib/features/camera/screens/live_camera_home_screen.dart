@@ -1,7 +1,5 @@
 import 'dart:async';
 
-// ignore_for_file: unused_field
-
 import 'package:detect_care_caregiver_app/features/auth/data/auth_storage.dart';
 import 'package:detect_care_caregiver_app/features/camera/models/camera_entry.dart';
 import 'package:detect_care_caregiver_app/features/camera/screens/camera_timeline_screen.dart';
@@ -18,6 +16,13 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter/foundation.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+
+enum _CameraHomeMenuOption {
+  toggleView,
+  toggleSort,
+  refreshThumbnails,
+  settings,
+}
 
 class LiveCameraHomeScreen extends StatefulWidget {
   const LiveCameraHomeScreen({super.key});
@@ -135,9 +140,36 @@ class _LiveCameraHomeScreenState extends State<LiveCameraHomeScreen>
   Future<void> _openCameraTimeline(CameraEntry camera) async {
     if (!mounted) return;
     await _state.refreshCameraThumb(camera);
-    await Navigator.of(context).push(
-      MaterialPageRoute(builder: (_) => CameraTimelineScreen(camera: camera)),
+    await Navigator.of(context, rootNavigator: true).push(
+      MaterialPageRoute(
+        builder: (_) => CameraTimelineScreen(camera: camera),
+        settings: const RouteSettings(name: 'camera_timeline_screen'),
+      ),
     );
+  }
+
+  void _onMenuOptionSelected(_CameraHomeMenuOption option) {
+    if (!mounted) return;
+    switch (option) {
+      case _CameraHomeMenuOption.toggleView:
+        HapticFeedback.selectionClick();
+        _state.toggleView();
+        break;
+      case _CameraHomeMenuOption.toggleSort:
+        HapticFeedback.selectionClick();
+        _state.toggleSort();
+        break;
+      case _CameraHomeMenuOption.refreshThumbnails:
+        if (_state.refreshing) return;
+        HapticFeedback.mediumImpact();
+        _state.refreshThumbnails();
+        break;
+      case _CameraHomeMenuOption.settings:
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Cài đặt đang được phát triển.')),
+        );
+        break;
+    }
   }
 
   Future<void> _editCamera(CameraEntry camera) async {
@@ -306,6 +338,9 @@ class _LiveCameraHomeScreenState extends State<LiveCameraHomeScreen>
   }
 
   Widget _buildContentView(List<CameraEntry> cameras) {
+    final statusNote = _state.lastRefreshed == null
+        ? 'Chưa đồng bộ'
+        : 'Cập nhật ${_formatRelativeTime(_state.lastRefreshed!)}';
     return RefreshIndicator(
       key: const ValueKey('content'),
       color: Colors.blueAccent,
@@ -353,6 +388,7 @@ class _LiveCameraHomeScreenState extends State<LiveCameraHomeScreen>
                       _openCameraTimeline(camera);
                     },
                     searchQuery: _state.search,
+                    statusNote: statusNote,
                   )
                 : CameraList(
                     cameras: cameras,
@@ -373,11 +409,94 @@ class _LiveCameraHomeScreenState extends State<LiveCameraHomeScreen>
                       _openCameraTimeline(camera);
                     },
                     searchQuery: _state.search,
+                    statusNote: statusNote,
                   ),
           ),
         ],
       ),
     );
+  }
+
+  Widget _buildSummaryBar(List<CameraEntry> filteredCameras) {
+    final total = _state.cameras.length;
+    if (total == 0) return const SizedBox.shrink();
+    final onlineCount = _state.cameras.where((c) => c.isOnline).length;
+    final filtered = filteredCameras.length;
+    final systemStatus = onlineCount == total
+        ? 'Tất cả camera đang online'
+        : '$onlineCount/$total camera đang online';
+    final lastUpdated = _state.lastRefreshed == null
+        ? 'Chưa đồng bộ'
+        : 'Cập nhật ${_formatRelativeTime(_state.lastRefreshed!)}';
+
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+      child: Container(
+        width: double.infinity,
+        padding: const EdgeInsets.all(14),
+        decoration: BoxDecoration(
+          gradient: LinearGradient(
+            colors: [Colors.blueAccent.shade200, Colors.blueAccent],
+            begin: Alignment.topLeft,
+            end: Alignment.bottomRight,
+          ),
+          borderRadius: BorderRadius.circular(18),
+          boxShadow: [
+            BoxShadow(
+              color: Colors.blueAccent.shade700.withOpacity(0.25),
+              blurRadius: 10,
+              offset: const Offset(0, 4),
+            ),
+          ],
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Text(
+                  'Camera',
+                  style: const TextStyle(
+                    color: Colors.white,
+                    fontSize: 18,
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+                if (filtered != total) ...[
+                  const SizedBox(width: 8),
+                  Text(
+                    'Hiển thị $filtered/$total',
+                    style: const TextStyle(color: Colors.white70, fontSize: 14),
+                  ),
+                ],
+              ],
+            ),
+            const SizedBox(height: 6),
+            Text(
+              systemStatus,
+              style: const TextStyle(
+                color: Colors.white70,
+                fontSize: 14,
+                fontWeight: FontWeight.w500,
+              ),
+            ),
+            const SizedBox(height: 2),
+            Text(
+              lastUpdated,
+              style: const TextStyle(color: Colors.white60, fontSize: 13),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  String _formatRelativeTime(DateTime time) {
+    final diff = DateTime.now().difference(time);
+    if (diff.inMinutes < 1) return 'vừa xong';
+    if (diff.inMinutes < 60) return '${diff.inMinutes} phút trước';
+    if (diff.inHours < 24) return '${diff.inHours} giờ trước';
+    return '${diff.inDays} ngày trước';
   }
 
   @override
@@ -417,7 +536,7 @@ class _LiveCameraHomeScreenState extends State<LiveCameraHomeScreen>
             ),
           ),
           title: Text(
-            'Camera${filteredCameras.isNotEmpty ? ' (${filteredCameras.length})' : ''}',
+            'Camera',
             style: const TextStyle(
               color: Colors.white,
               fontWeight: FontWeight.bold,
@@ -433,78 +552,74 @@ class _LiveCameraHomeScreenState extends State<LiveCameraHomeScreen>
           ),
           iconTheme: const IconThemeData(color: Colors.white),
           actions: [
-            IconButton(
-              tooltip: _state.grid ? 'Chuyển danh sách' : 'Chuyển lưới',
-              onPressed: () {
-                if (!mounted) return;
-                HapticFeedback.selectionClick();
-                _state.toggleView();
-              },
-              icon: AnimatedSwitcher(
-                duration: const Duration(milliseconds: 200),
-                child: Icon(
-                  _state.grid
-                      ? Icons.view_list_rounded
-                      : Icons.grid_view_rounded,
-                  key: ValueKey(_state.grid),
-                  color: Colors.white,
-                  shadows: const [
-                    Shadow(
-                      color: Colors.black26,
-                      offset: Offset(0, 1),
-                      blurRadius: 2,
-                    ),
-                  ],
+            PopupMenuButton<_CameraHomeMenuOption>(
+              tooltip: 'Tùy chọn',
+              icon: const Icon(Icons.more_vert),
+              onSelected: _onMenuOptionSelected,
+              itemBuilder: (context) => [
+                PopupMenuItem(
+                  value: _CameraHomeMenuOption.toggleView,
+                  child: Row(
+                    children: [
+                      Icon(
+                        _state.grid
+                            ? Icons.view_list_rounded
+                            : Icons.grid_view_rounded,
+                        color: Colors.black87,
+                      ),
+                      const SizedBox(width: 8),
+                      Text(
+                        _state.grid
+                            ? 'Chuyển sang danh sách'
+                            : 'Chuyển sang lưới',
+                      ),
+                    ],
+                  ),
                 ),
-              ),
-            ),
-            IconButton(
-              tooltip: _state.sortAsc ? 'Sắp xếp Z-A' : 'Sắp xếp A-Z',
-              onPressed: () {
-                if (!mounted) return;
-                HapticFeedback.selectionClick();
-                _state.toggleSort();
-              },
-              icon: AnimatedSwitcher(
-                duration: const Duration(milliseconds: 200),
-                child: Icon(
-                  _state.sortAsc ? Icons.sort_by_alpha : Icons.sort,
-                  key: ValueKey(_state.sortAsc),
-                  color: Colors.white,
-                  shadows: const [
-                    Shadow(
-                      color: Colors.black26,
-                      offset: Offset(0, 1),
-                      blurRadius: 2,
-                    ),
-                  ],
+                PopupMenuItem(
+                  value: _CameraHomeMenuOption.toggleSort,
+                  child: Row(
+                    children: [
+                      Icon(
+                        _state.sortAsc ? Icons.sort_by_alpha : Icons.sort,
+                        color: Colors.black87,
+                      ),
+                      const SizedBox(width: 8),
+                      Text(_state.sortAsc ? 'Sắp xếp Z → A' : 'Sắp xếp A → Z'),
+                    ],
+                  ),
                 ),
-              ),
-            ),
-            IconButton(
-              tooltip: 'Làm mới ảnh xem trước',
-              onPressed: _state.refreshing
-                  ? null
-                  : () {
-                      if (!mounted) return;
-                      HapticFeedback.mediumImpact();
-                      _state.refreshThumbnails();
-                    },
-              icon: AnimatedRotation(
-                turns: _state.refreshing ? 1.0 : 0.0,
-                duration: const Duration(seconds: 1),
-                child: Icon(
-                  Icons.refresh,
-                  color: _state.refreshing ? Colors.white70 : Colors.white,
-                  shadows: const [
-                    Shadow(
-                      color: Colors.black26,
-                      offset: Offset(0, 1),
-                      blurRadius: 2,
-                    ),
-                  ],
+                PopupMenuItem(
+                  value: _CameraHomeMenuOption.refreshThumbnails,
+                  enabled: !_state.refreshing,
+                  child: Row(
+                    children: [
+                      Icon(
+                        Icons.refresh,
+                        color: _state.refreshing
+                            ? Colors.black26
+                            : Colors.black87,
+                      ),
+                      const SizedBox(width: 8),
+                      Text(
+                        _state.refreshing
+                            ? 'Đang làm mới...'
+                            : 'Làm mới ảnh xem trước',
+                      ),
+                    ],
+                  ),
                 ),
-              ),
+                PopupMenuItem(
+                  value: _CameraHomeMenuOption.settings,
+                  child: Row(
+                    children: const [
+                      Icon(Icons.settings, color: Colors.black87),
+                      SizedBox(width: 8),
+                      Text('Cài đặt'),
+                    ],
+                  ),
+                ),
+              ],
             ),
           ],
         ),
@@ -557,6 +672,7 @@ class _LiveCameraHomeScreenState extends State<LiveCameraHomeScreen>
             //   quotaValidation: _state.quotaValidation,
             //   onUpgradePressed: _upgradePlan,
             // ),
+            // if (_state.cameras.isNotEmpty) _buildSummaryBar(filteredCameras),
 
             // Main content
             Expanded(

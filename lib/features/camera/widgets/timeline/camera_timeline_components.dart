@@ -40,6 +40,7 @@ class CameraTimelineClip {
   });
 
   String get timeLabel {
+    // Display times in UTC+7 (local Vietnam time) regardless of stored timezone.
     final tz = startTime.toUtc().add(const Duration(hours: 7));
     final h = tz.hour.toString().padLeft(2, '0');
     final m = tz.minute.toString().padLeft(2, '0');
@@ -436,16 +437,6 @@ class CameraTimelineClipCard extends StatelessWidget {
                                 style: const TextStyle(
                                   fontWeight: FontWeight.bold,
                                   fontSize: 14,
-                                ),
-                              ),
-                              const SizedBox(height: 4),
-                              Text(
-                                clip.durationLabel,
-                                maxLines: 1,
-                                overflow: TextOverflow.ellipsis,
-                                style: TextStyle(
-                                  color: Colors.grey.shade600,
-                                  fontSize: 12,
                                 ),
                               ),
                             ],

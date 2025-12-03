@@ -15,6 +15,17 @@ class Assignment {
   final String? notes;
   final String? customerName;
   final String? customerUsername;
+  // Optional richer fields used by UI layers elsewhere
+  final String? caregiverName;
+  final String? caregiverPhone;
+  final String? caregiverEmail;
+  final String? caregiverSpecialization;
+  final String? caregiverFullName;
+  final String? caregiverUsername;
+  final String? createdAt;
+  final String? updatedAt;
+  final String? assignmentType;
+  final Map<String, dynamic>? sharedPermissions;
 
   const Assignment({
     required this.assignmentId,
@@ -27,12 +38,23 @@ class Assignment {
     this.notes,
     this.customerName,
     this.customerUsername,
+    this.caregiverName,
+    this.caregiverPhone,
+    this.caregiverEmail,
+    this.caregiverSpecialization,
+    this.caregiverFullName,
+    this.caregiverUsername,
+    this.createdAt,
+    this.updatedAt,
+    this.assignmentType,
+    this.sharedPermissions,
   });
 
   factory Assignment.fromJson(Map<String, dynamic> json) {
     String? stringOrNull(dynamic v) => (v is String && v.isNotEmpty) ? v : null;
 
     final customer = json['customer'] as Map<String, dynamic>?;
+    final caregiver = json['caregiver'] as Map<String, dynamic>?;
 
     return Assignment(
       assignmentId: (json['assignment_id'] ?? json['id'] ?? '').toString(),
@@ -45,6 +67,30 @@ class Assignment {
       notes: stringOrNull(json['assignment_notes'] ?? json['notes']),
       customerName: customer?['full_name']?.toString(),
       customerUsername: customer?['username']?.toString(),
+      caregiverName:
+          caregiver?['full_name']?.toString() ??
+          json['caregiver_full_name']?.toString(),
+      caregiverPhone:
+          caregiver?['phone']?.toString() ??
+          json['caregiver_phone']?.toString(),
+      caregiverEmail:
+          caregiver?['email']?.toString() ??
+          json['caregiver_email']?.toString(),
+      caregiverSpecialization:
+          caregiver?['specialization']?.toString() ??
+          json['caregiver_specialization']?.toString(),
+      caregiverFullName:
+          caregiver?['full_name']?.toString() ??
+          json['caregiver_full_name']?.toString(),
+      caregiverUsername:
+          caregiver?['username']?.toString() ??
+          json['caregiver_username']?.toString(),
+      createdAt: stringOrNull(json['created_at'] ?? json['createdAt']),
+      updatedAt: stringOrNull(json['updated_at'] ?? json['updatedAt']),
+      assignmentType: stringOrNull(json['assignment_type'] ?? json['type']),
+      sharedPermissions: (json['shared_permissions'] is Map)
+          ? (json['shared_permissions'] as Map).cast<String, dynamic>()
+          : null,
     );
   }
 }
@@ -291,6 +337,12 @@ class AssignmentsRemoteDataSource {
     // print("assignments: $assignments");
 
     return assignments;
+  }
+
+  /// Backwards-compatible alias used by older UI code.
+  Future<List<Assignment>> listInvitations() async {
+    // Delegate to listPending which returns caregiver invitations for the current user
+    return listPending();
   }
 
   Future<Assignment> accept(String assignmentId) async {

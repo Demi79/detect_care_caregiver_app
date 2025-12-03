@@ -18,6 +18,7 @@ class CameraCard extends StatelessWidget {
   final double? height;
   final double? width;
   final String? searchQuery;
+  final String? statusNote;
   const CameraCard({
     super.key,
     required this.camera,
@@ -31,6 +32,7 @@ class CameraCard extends StatelessWidget {
     this.height,
     this.width,
     this.searchQuery,
+    this.statusNote,
   });
 
   @override
@@ -105,7 +107,7 @@ class CameraCard extends StatelessWidget {
     if (query == null || query.isEmpty) {
       return Text(
         text,
-        maxLines: 1,
+        maxLines: 2,
         overflow: TextOverflow.ellipsis,
         style: TextStyle(
           fontWeight: FontWeight.w900,
@@ -122,7 +124,7 @@ class CameraCard extends StatelessWidget {
     if (startIndex == -1) {
       return Text(
         text,
-        maxLines: 1,
+        maxLines: 2,
         overflow: TextOverflow.ellipsis,
         style: TextStyle(
           fontWeight: FontWeight.w900,
@@ -363,64 +365,82 @@ class CameraCard extends StatelessWidget {
               ),
 
               const SizedBox(height: 6),
-              // HÀNG 2: Nhãn "Camera" với cải thiện
-              Container(
-                padding: EdgeInsets.symmetric(
-                  horizontal: theme.labelPaddingH,
-                  vertical: theme.labelPaddingV,
-                ),
-                decoration: BoxDecoration(
-                  gradient: LinearGradient(
-                    colors: camera.isOnline
-                        ? [Colors.green.shade100, Colors.green.shade50]
-                        : [Colors.orange[100]!, Colors.orange[50]!],
-                    begin: Alignment.topLeft,
-                    end: Alignment.bottomRight,
-                  ),
-                  borderRadius: BorderRadius.circular(theme.labelRadius),
-                  border: Border.all(
-                    color: camera.isOnline
-                        ? Colors.green.shade300
-                        : Colors.orange[200]!,
-                    width: 1,
-                  ),
-                  boxShadow: [
-                    BoxShadow(
-                      color: (camera.isOnline ? Colors.green : Colors.orange)
-                          .shade200
-                          .withValues(alpha: 0.3),
-                      blurRadius: 2,
-                      offset: const Offset(0, 1),
-                    ),
-                  ],
-                ),
-                child: Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Icon(
-                      camera.isOnline ? Icons.videocam : Icons.videocam_off,
-                      size: 12,
-                      color: camera.isOnline
-                          ? Colors.green.shade700
-                          : Colors.orange[800],
-                    ),
-                    const SizedBox(width: 4),
-                    Text(
-                      headerLabel ?? 'Camera',
-                      style: TextStyle(
-                        color: camera.isOnline
-                            ? Colors.green.shade800
-                            : Colors.orange[800],
-                        fontSize: theme.labelFontSize,
-                        fontWeight: FontWeight.w600,
-                      ),
-                    ),
-                  ],
+              _buildStatusSection(theme),
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildStatusSection(CameraCardTheme theme) {
+    final statusLabel = headerLabel ?? (camera.isOnline ? 'Online' : 'Offline');
+    final statusColor = camera.isOnline ? Colors.green : Colors.orange;
+    return Row(
+      children: [
+        Container(
+          padding: EdgeInsets.symmetric(
+            horizontal: theme.labelPaddingH,
+            vertical: theme.labelPaddingV,
+          ),
+          decoration: BoxDecoration(
+            gradient: LinearGradient(
+              colors: camera.isOnline
+                  ? [Colors.green.shade100, Colors.green.shade50]
+                  : [Colors.orange[100]!, Colors.orange[50]!],
+              begin: Alignment.topLeft,
+              end: Alignment.bottomRight,
+            ),
+            borderRadius: BorderRadius.circular(theme.labelRadius),
+            border: Border.all(
+              color: camera.isOnline
+                  ? Colors.green.shade300
+                  : Colors.orange[200]!,
+              width: 1,
+            ),
+            boxShadow: [
+              BoxShadow(
+                color: statusColor.shade200.withValues(alpha: 0.3),
+                blurRadius: 2,
+                offset: const Offset(0, 1),
+              ),
+            ],
+          ),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(
+                camera.isOnline ? Icons.videocam : Icons.videocam_off,
+                size: 12,
+                color: camera.isOnline
+                    ? Colors.green.shade700
+                    : Colors.orange[800],
+              ),
+              const SizedBox(width: 4),
+              Text(
+                statusLabel,
+                style: TextStyle(
+                  color: camera.isOnline
+                      ? Colors.green.shade800
+                      : Colors.orange[800],
+                  fontSize: theme.labelFontSize,
+                  fontWeight: FontWeight.w600,
                 ),
               ),
             ],
           ),
         ),
+        if (statusNote != null) ...[
+          const SizedBox(width: 10),
+          Expanded(
+            child: Text(
+              statusNote!,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: TextStyle(color: Colors.grey.shade700, fontSize: 12),
+            ),
+          ),
+        ],
       ],
     );
   }
