@@ -432,7 +432,8 @@ class InAppAlert {
   }
 
   static Future<String> _chooseEmergencyPhone() async {
-    String phone = '115';
+    // String phone = '115';
+    String phone = '';
     try {
       final userId = await AuthStorage.getUserId();
       if (userId != null && userId.isNotEmpty) {
@@ -453,7 +454,8 @@ class InAppAlert {
         }
       }
     } catch (_) {}
-    if (phone.isEmpty) return '112';
+    // if (phone.isEmpty) return '112';
+    if (phone.isEmpty) return '';
     return phone;
   }
 
