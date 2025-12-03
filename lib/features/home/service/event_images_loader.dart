@@ -1,5 +1,9 @@
-import 'package:detect_care_caregiver_app/features/home/models/event_log.dart';
+import 'package:detect_care_caregiver_app/core/utils/logger.dart';
 import 'package:detect_care_caregiver_app/features/events/data/events_remote_data_source.dart';
+import 'package:detect_care_caregiver_app/features/home/models/event_log.dart';
+import 'package:detect_care_caregiver_app/services/supabase_service.dart';
+
+final _snapshotUrlCache = <String, String>{};
 
 Future<List<String>> loadEventImageUrls(EventLog log) async {
   final urls = <String>[];
@@ -45,7 +49,7 @@ Future<List<String>> loadEventImageUrls(EventLog log) async {
 
   // Debug: show candidate snapshot ids we found (if any)
   try {
-    print(
+    AppLogger.d(
       '[loadEventImageUrls] event=${log.eventId} candidateSnapshotIds=$ids',
     );
   } catch (_) {}
@@ -58,14 +62,20 @@ Future<List<String>> loadEventImageUrls(EventLog log) async {
     // The snapshots API was removed; fetch the full event detail and
     // extract snapshot.files[].cloud_url or snapshot_url from the detail
     try {
-      print(
+      AppLogger.api(
         '[loadEventImageUrls] fetching event detail for ${log.eventId} to extract images (ids=${ids.length} urls_before=${urls.length})',
       );
       final ds = EventsRemoteDataSource();
       final detail = await ds.getEventById(eventId: log.eventId);
+      final detailSnapshotId = detail['snapshot_id'] ?? detail['snapshotId'];
+      if (detailSnapshotId is String && detailSnapshotId.isNotEmpty) {
+        ids.add(detailSnapshotId);
+      }
       {
         try {
-          print('[loadEventImageUrls] detail keys=${detail.keys.toList()}');
+          AppLogger.d(
+            '[loadEventImageUrls] detail keys=${detail.keys.toList()}',
+          );
         } catch (_) {}
         // snapshot_url
         final sv = detail['snapshot_url'] ?? detail['snapshotUrl'];
@@ -104,14 +114,42 @@ Future<List<String>> loadEventImageUrls(EventLog log) async {
         }
       }
     } catch (e) {
-      print('[loadEventImageUrls] error fetching event detail: $e');
+      AppLogger.e('[loadEventImageUrls] error fetching event detail: $e');
       // ignore and continue
+    }
+  }
+
+  if (ids.isNotEmpty) {
+    final snapshotIds = ids
+        .map((id) => id.trim())
+        .where((id) => id.isNotEmpty)
+        .toSet();
+    if (snapshotIds.isNotEmpty) {
+      final supabaseService = SupabaseService();
+      for (final snapshotId in snapshotIds) {
+        final cached = _snapshotUrlCache[snapshotId];
+        if (cached != null && cached.isNotEmpty) {
+          urls.add(cached);
+          continue;
+        }
+        try {
+          final url = await supabaseService.fetchSnapshotImageUrl(snapshotId);
+          if (url != null && url.isNotEmpty) {
+            urls.add(url);
+            _snapshotUrlCache[snapshotId] = url;
+          }
+        } catch (e) {
+          AppLogger.e(
+            '[loadEventImageUrls] Supabase snapshot lookup failed for $snapshotId: $e',
+          );
+        }
+      }
     }
   }
 
   final uniq = urls.toSet().toList();
   try {
-    print(
+    AppLogger.d(
       '[loadEventImageUrls] event=${log.eventId} found imageCount=${uniq.length}',
     );
   } catch (_) {}

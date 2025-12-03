@@ -49,7 +49,7 @@ dependencies {
     
     // Firebase Cloud Messaging
     implementation(platform("com.google.firebase:firebase-bom:32.2.3"))
-    implementation("com.google.firebase:firebase-messaging-ktx")
+    implementation("com.google.firebase:firebase-messaging-ktx:23.2.1")
 }
 
 flutter {

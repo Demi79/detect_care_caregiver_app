@@ -17,7 +17,7 @@ class DeepLinkHandler {
   static Future<void> start() async {
     _appLinks ??= AppLinks();
 
-    // final initial = await _appLinks!.getInitialAppLink();
+    // final initial = await _appLinks!.getInitialLink();
     // if (initial != null) {
     //   await _handle(initial);
     // }

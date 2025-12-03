@@ -1,7 +1,9 @@
+import 'dart:convert';
+
 import 'package:detect_care_caregiver_app/core/alerts/alert_coordinator.dart';
+import 'package:detect_care_caregiver_app/core/utils/logger.dart';
 import 'package:detect_care_caregiver_app/features/home/models/event_log.dart';
 import 'package:flutter/foundation.dart';
-import 'dart:convert';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 class SupabaseService {
@@ -360,9 +362,17 @@ class SupabaseService {
       final path = snap['image_path'] as String?;
       return _imageUrlFromPath(path);
     } catch (e) {
-      debugPrint('⚠️ _getEventImageUrlBySnapshotId error: $e');
+      AppLogger.apiError(
+        '⚠️ _getEventImageUrlBySnapshotId error for snapshot_id=$snapshotId: $e',
+        e,
+      );
       return null;
     }
+  }
+
+  /// Returns the stored image URL for a snapshot, if available.
+  Future<String?> fetchSnapshotImageUrl(String? snapshotId) async {
+    return _getEventImageUrlBySnapshotId(snapshotId);
   }
 
   Future<String?> _imageUrlFromPath(String? imagePath) async {
