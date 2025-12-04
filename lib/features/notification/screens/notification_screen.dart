@@ -15,6 +15,7 @@ import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import 'package:detect_care_caregiver_app/features/emergency/call_action_context.dart';
 import 'package:detect_care_caregiver_app/features/emergency/call_action_service.dart';
+import 'package:detect_care_caregiver_app/features/emergency/emergency_call_helper.dart';
 
 enum _NotificationSeverity { danger, warning, normal, info }
 
@@ -1427,17 +1428,7 @@ class _NotificationScreenState extends State<NotificationScreen> {
   }
 
   Future<void> _initiateEmergencyCall(BuildContext context) async {
-    final manager = callActionManager(context);
-    if (!manager.allowedActions.contains(CallAction.emergency)) {
-      _showRestrictedCallMessage(context);
-      return;
-    }
-    final phone = await _resolveEmergencyPhoneNumber();
-    await attemptCall(
-      context: context,
-      rawPhone: phone,
-      actionLabel: 'Gọi khẩn cấp',
-    );
+    await EmergencyCallHelper.initiateEmergencyCall(context);
   }
 
   void _showRestrictedCallMessage(BuildContext context) {
@@ -1477,9 +1468,10 @@ class _NotificationScreenState extends State<NotificationScreen> {
   Future<String> _resolveEmergencyPhoneNumber() async {
     String? phoneToCall;
     try {
-      final userId = await AuthStorage.getUserId();
-      if (userId != null && userId.isNotEmpty) {
-        final contacts = await EmergencyContactsRemoteDataSource().list(userId);
+      final ds = EmergencyContactsRemoteDataSource();
+      final customerId = await ds.resolveCustomerId();
+      if (customerId != null && customerId.isNotEmpty) {
+        final contacts = await ds.list(customerId);
         final p1 = contacts
             .where((c) => (c.alertLevel == 1) && c.phone.trim().isNotEmpty)
             .toList();

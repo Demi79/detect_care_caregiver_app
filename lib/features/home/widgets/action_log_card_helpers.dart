@@ -161,10 +161,25 @@ extension _ActionLogCardHelpers on ActionLogCard {
     AppLogger.d('[ActionLogCard] cameraId cuối cùng: $cameraId');
 
     try {
-      final userId = await AuthStorage.getUserId();
-      if (userId == null || userId.isEmpty) {
+      String? customerId;
+      try {
+        final assignmentsDs = AssignmentsRemoteDataSource();
+        final assignments = await assignmentsDs.listPending(status: 'accepted');
+        final active = assignments
+            .where((a) => a.isActive && (a.status.toLowerCase() == 'accepted'))
+            .toList();
+        if (active.isNotEmpty) customerId = active.first.customerId;
+      } catch (_) {}
+
+      customerId ??= await AuthStorage.getUserId();
+
+      if (customerId == null || customerId.isEmpty) {
         messenger.showSnackBar(
-          const SnackBar(content: Text('Không xác thực được người dùng.')),
+          const SnackBar(
+            content: Text(
+              'Không thể xác định người dùng để lấy danh sách camera.',
+            ),
+          ),
         );
         return;
       }
@@ -172,7 +187,7 @@ extension _ActionLogCardHelpers on ActionLogCard {
       final api = CameraApi(
         ApiClient(tokenProvider: AuthStorage.getAccessToken),
       );
-      final response = await api.getCamerasByUser(userId: userId);
+      final response = await api.getCamerasByUser(customerId: customerId);
 
       if (response['data'] is! List) {
         AppLogger.e(
@@ -247,9 +262,9 @@ extension _ActionLogCardHelpers on ActionLogCard {
 
       final rootCtx =
           NavigatorKey.navigatorKey.currentState?.overlay?.context ?? context;
-      ScaffoldMessenger.of(rootCtx).showSnackBar(
-        const SnackBar(content: Text('Đã hủy báo động.')),
-      );
+      ScaffoldMessenger.of(
+        rootCtx,
+      ).showSnackBar(const SnackBar(content: Text('Đã hủy báo động.')));
 
       try {
         AppEvents.instance.notifyEventsChanged();

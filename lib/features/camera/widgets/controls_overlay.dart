@@ -1,6 +1,7 @@
 import 'dart:ui';
 
 import 'package:flutter/material.dart';
+import 'package:detect_care_caregiver_app/features/emergency/emergency_call_helper.dart';
 
 class CameraControlsOverlay extends StatefulWidget {
   final bool isPlaying;
@@ -136,7 +137,10 @@ class _CameraControlsOverlayState extends State<CameraControlsOverlay>
     setState(() => _emergencyRunning = true);
     try {
       await _doPressAnimation();
-      if (widget.onEmergency != null) await widget.onEmergency!();
+      try {
+        if (widget.onEmergency != null) await widget.onEmergency!();
+      } catch (_) {}
+      await EmergencyCallHelper.initiateEmergencyCall(context);
     } finally {
       if (mounted) setState(() => _emergencyRunning = false);
     }
@@ -394,9 +398,12 @@ class _CameraControlsOverlayState extends State<CameraControlsOverlay>
           setState(() => _emergencyRunning = true);
           try {
             await _doPressAnimation();
-            if (widget.onEmergency != null) {
-              await widget.onEmergency!();
-            }
+            try {
+              if (widget.onEmergency != null) {
+                await widget.onEmergency!();
+              }
+            } catch (_) {}
+            await EmergencyCallHelper.initiateEmergencyCall(context);
           } finally {
             if (mounted) setState(() => _emergencyRunning = false);
           }

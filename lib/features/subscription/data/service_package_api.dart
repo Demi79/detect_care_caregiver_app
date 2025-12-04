@@ -2,6 +2,7 @@ import 'package:detect_care_caregiver_app/core/network/api_client.dart';
 import 'package:detect_care_caregiver_app/core/utils/logger.dart';
 
 import '../../auth/data/auth_storage.dart';
+import '../../emergency_contacts/data/emergency_contacts_remote_data_source.dart';
 import '../models/plan.dart';
 
 class ServicePackageApi {
@@ -229,10 +230,11 @@ class ServicePackageApi {
 
   Future<Map<String, dynamic>?> getCurrentQuota() async {
     try {
-      final userId = await AuthStorage.getUserId();
-      if (userId == null) return null;
+      final ds = EmergencyContactsRemoteDataSource(api: _apiClient);
+      final customerId = await ds.resolveCustomerId();
+      if (customerId == null || customerId.isEmpty) return null;
 
-      final response = await _apiClient.get('/users/$userId/quota');
+      final response = await _apiClient.get('/users/$customerId/quota');
 
       if (response.statusCode == 200) {
         final responseData = _apiClient.extractDataFromResponse(response);

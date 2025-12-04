@@ -61,23 +61,86 @@ extension _ActionLogCardImages on ActionLogCard {
                         onPressed: () {
                           Navigator.of(dialogCtx, rootNavigator: true).pop();
                           Future.delayed(const Duration(milliseconds: 250), () {
-                            _openCameraForEvent(dialogCtx, event);
+                            _openCameraForEvent(pageContext, event);
                           });
                         },
                         icon: const Icon(Icons.videocam_outlined),
                         tooltip: 'Xem camera',
                       ),
-                      // Edit button
-                      IconButton(
-                        onPressed: () {
-                          if (!dialogCtx.mounted) return;
-                          Navigator.of(dialogCtx).pop();
-                          Future.delayed(const Duration(milliseconds: 200), () {
-                            _showUpdateModal(pageContext);
-                          });
+                      // Edit button — disable if there's an active pending proposal
+                      FutureBuilder<EventLog>(
+                        future: EventRepository(
+                          EventService.withDefaultClient(),
+                        ).getEventDetails(data.eventId),
+                        builder: (ctx, snap) {
+                          bool enabled = _canEditEvent;
+                          if (snap.connectionState == ConnectionState.done &&
+                              !snap.hasError &&
+                              snap.data != null) {
+                            final current = snap.data!;
+                            final hasPending =
+                                current.proposedStatus != null &&
+                                (current.pendingUntil != null &&
+                                    current.pendingUntil!.isAfter(
+                                      DateTime.now(),
+                                    ));
+                            if (hasPending) enabled = false;
+                          }
+
+                          return IconButton(
+                            onPressed: enabled
+                                ? () async {
+                                    try {
+                                      final current =
+                                          snap.data ??
+                                          await EventRepository(
+                                            EventService.withDefaultClient(),
+                                          ).getEventDetails(data.eventId);
+                                      if (current.proposedStatus != null &&
+                                          (current.pendingUntil != null &&
+                                              current.pendingUntil!.isAfter(
+                                                DateTime.now(),
+                                              ))) {
+                                        await showDialog<void>(
+                                          context: context,
+                                          builder: (ctx) => AlertDialog(
+                                            title: const Text('Đã có đề xuất'),
+                                            content: const Text(
+                                              'Sự kiện đang có đề xuất chờ duyệt.',
+                                            ),
+                                            actions: [
+                                              TextButton(
+                                                onPressed: () =>
+                                                    Navigator.of(ctx).pop(),
+                                                child: const Text('Đóng'),
+                                              ),
+                                            ],
+                                          ),
+                                        );
+                                        return;
+                                      }
+                                    } catch (e) {
+                                      print(
+                                        '[ActionLogCard] pre-check getEventDetails failed: $e',
+                                      );
+                                    }
+
+                                    try {
+                                      Navigator.of(context).pop();
+                                    } catch (_) {}
+                                    Navigator.push(
+                                      context,
+                                      MaterialPageRoute(
+                                        builder: (_) =>
+                                            ProposeScreen(logEntry: data),
+                                      ),
+                                    );
+                                  }
+                                : null,
+                            icon: const Icon(Icons.edit_outlined),
+                            tooltip: 'Cập nhật sự kiện',
+                          );
                         },
-                        icon: const Icon(Icons.edit_outlined),
-                        tooltip: 'Cập nhật sự kiện',
                       ),
                       // Close button
                       IconButton(
@@ -268,115 +331,30 @@ extension _ActionLogCardImages on ActionLogCard {
                               child: Column(
                                 crossAxisAlignment: CrossAxisAlignment.stretch,
                                 children: [
-                                  ValueListenableBuilder<bool>(
-                                    valueListenable:
-                                        ActiveAlarmNotifier.instance,
-                                    builder: (context, alarmActive, _) {
-                                      final isDisabled =
-                                          isAlarmWorking ||
-                                          selectedIndex == null ||
-                                          _shouldHideAlarmButtons;
-                                      final title = alarmActive
-                                          ? 'Hủy báo động'
-                                          : 'Gửi báo động?';
-                                      final content = alarmActive
-                                          ? 'Bạn có chắc muốn hủy báo động?'
-                                          : 'Bạn muốn gửi báo động dựa trên hình ảnh này?';
-                                      final icon = alarmActive
-                                          ? Icons.cancel_outlined
-                                          : Icons.warning_amber_rounded;
-                                      final label = alarmActive
-                                          ? (isAlarmWorking
-                                                ? 'ĐANG HỦY...'
-                                                : 'Hủy báo động')
-                                          : (isAlarmWorking
-                                                ? 'ĐANG BÁO ĐỘNG...'
-                                                : 'BÁO ĐỘNG');
-                                      final backgroundColor = alarmActive
-                                          ? Colors.grey.shade600
-                                          : AppTheme.dangerColor;
-                                      final confirmLabel = alarmActive
-                                          ? 'Đồng ý'
-                                          : 'Gửi';
-                                      return ElevatedButton.icon(
-                                        onPressed: isDisabled
-                                            ? null
-                                            : () async {
-                                                final confirmed =
-                                                    await _confirmAlarmDialog(
-                                                      dialogCtx,
-                                                      title: title,
-                                                      content: content,
-                                                      confirmLabel:
-                                                          confirmLabel,
-                                                    );
-                                                if (!confirmed) return;
-                                                if (!dialogCtx.mounted) return;
-
-                                                setDialogState(
-                                                  () => isAlarmWorking = true,
-                                                );
-                                                try {
-                                                  if (alarmActive) {
-                                                    await _cancelAlarmForEvent(
-                                                      dialogCtx,
-                                                      _buildEventLogForImages(),
-                                                    );
-                                                  } else {
-                                                    await _activateAlarmForEvent(
-                                                      dialogCtx,
-                                                      _buildEventLogForImages(),
-                                                      snapshotUrl: selectedUrl,
-                                                    );
-                                                  }
-                                                } finally {
-                                                  if (dialogCtx.mounted) {
-                                                    setDialogState(
-                                                      () => isAlarmWorking =
-                                                          false,
-                                                    );
-                                                  }
-                                                }
-                                              },
-                                        icon: Icon(icon),
-                                        label: Text(label),
-                                        style: ElevatedButton.styleFrom(
-                                          padding: const EdgeInsets.symmetric(
-                                            vertical: 12,
-                                          ),
-                                          backgroundColor: backgroundColor,
-                                          shape: RoundedRectangleBorder(
-                                            borderRadius: BorderRadius.circular(
-                                              16,
-                                            ),
+                                  // Nút gọi khẩn cấp — Tự động ẩn nếu hết thời gian cho phép
+                                  if (!_isUpdateWindowExpired)
+                                    ElevatedButton.icon(
+                                      onPressed: () =>
+                                          _initiateEmergencyCall(dialogCtx),
+                                      icon: const Icon(Icons.call),
+                                      label: const Text('Gọi khẩn cấp'),
+                                      style: ElevatedButton.styleFrom(
+                                        padding: const EdgeInsets.symmetric(
+                                          vertical: 12,
+                                        ),
+                                        backgroundColor: Colors.white,
+                                        foregroundColor: Colors.grey.shade800,
+                                        elevation: 0,
+                                        side: BorderSide(
+                                          color: Colors.grey.shade300,
+                                        ),
+                                        shape: RoundedRectangleBorder(
+                                          borderRadius: BorderRadius.circular(
+                                            16,
                                           ),
                                         ),
-                                      );
-                                    },
-                                  ),
-                                  const SizedBox(height: 8),
-                                  ElevatedButton.icon(
-                                    onPressed: _shouldHideAlarmButtons
-                                        ? null
-                                        : () =>
-                                              _initiateEmergencyCall(dialogCtx),
-                                    icon: const Icon(Icons.call),
-                                    label: const Text('Gọi khẩn cấp'),
-                                    style: ElevatedButton.styleFrom(
-                                      padding: const EdgeInsets.symmetric(
-                                        vertical: 12,
-                                      ),
-                                      backgroundColor: Colors.white,
-                                      foregroundColor: Colors.grey.shade800,
-                                      elevation: 0,
-                                      side: BorderSide(
-                                        color: Colors.grey.shade300,
-                                      ),
-                                      shape: RoundedRectangleBorder(
-                                        borderRadius: BorderRadius.circular(16),
                                       ),
                                     ),
-                                  ),
                                 ],
                               ),
                             ),

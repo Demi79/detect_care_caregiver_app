@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:detect_care_caregiver_app/core/network/api_client.dart';
+import 'package:detect_care_caregiver_app/features/assignments/data/assignments_remote_data_source.dart';
 import 'package:detect_care_caregiver_app/features/auth/data/auth_storage.dart';
 import 'package:detect_care_caregiver_app/features/camera/data/camera_api.dart';
 import 'package:detect_care_caregiver_app/features/camera/data/camera_timeline_api.dart';
@@ -24,8 +25,29 @@ class CameraService {
 
   Future<List<CameraEntry>> loadCameras() async {
     try {
-      final userId = await AuthStorage.getUserId();
-      final result = await _cameraApi.getCamerasByUser(userId: userId ?? '');
+      String? customerId;
+      try {
+        final assignmentsDs = AssignmentsRemoteDataSource();
+        final assignments = await assignmentsDs.listPending(status: 'accepted');
+        final active = assignments
+            .where((a) => a.isActive && (a.status.toLowerCase() == 'accepted'))
+            .toList();
+        if (active.isNotEmpty) customerId = active.first.customerId;
+      } catch (_) {}
+
+      customerId ??= await AuthStorage.getUserId();
+
+      if (customerId == null || customerId.isEmpty) {
+        throw Exception(
+          'Không thể xác định người dùng để lấy danh sách camera.',
+        );
+      }
+
+      final api = CameraApi(
+        ApiClient(tokenProvider: AuthStorage.getAccessToken),
+      );
+
+      final result = await _cameraApi.getCamerasByUser(customerId: customerId);
       final List<dynamic> data = result['data'] ?? [];
       return data.map((e) => CameraEntry.fromJson(e)).toList();
     } catch (e) {

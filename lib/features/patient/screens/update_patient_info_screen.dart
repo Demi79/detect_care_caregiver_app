@@ -542,7 +542,7 @@ class _UpdatePatientInfoScreenState extends State<UpdatePatientInfoScreen> {
     required String Function(String) mapper,
   }) {
     return DropdownButtonFormField<String>(
-      initialValue: value,
+      value: value,
       items: items
           .map((e) => DropdownMenuItem(value: e, child: Text(mapper(e))))
           .toList(),

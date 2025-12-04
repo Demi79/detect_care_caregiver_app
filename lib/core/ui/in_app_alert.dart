@@ -7,6 +7,7 @@ import 'package:detect_care_caregiver_app/features/home/widgets/alert_new_event_
 import 'package:flutter/material.dart';
 import 'package:detect_care_caregiver_app/features/emergency/call_action_context.dart';
 import 'package:detect_care_caregiver_app/features/emergency/call_action_service.dart';
+import 'package:detect_care_caregiver_app/features/emergency/emergency_call_helper.dart';
 
 import '../../features/auth/data/auth_storage.dart';
 import '../../features/emergency_contacts/data/emergency_contacts_remote_data_source.dart';
@@ -258,32 +259,8 @@ class InAppAlert {
                       //   }
                       // },
                       onEmergencyCall: () async {
-                        final manager = callActionManager(ctx);
-                        if (!manager.allowedActions.contains(
-                          CallAction.emergency,
-                        )) {
-                          _showRestrictedCallMessage(ctx);
-                          cancelForwardTimerLocal();
-                          return;
-                        }
-
-                        try {
-                          final phone = await _chooseEmergencyPhone();
-                          await attemptCall(
-                            context: ctx,
-                            rawPhone: phone,
-                            actionLabel: 'Gọi khẩn cấp',
-                          );
-                        } catch (err) {
-                          ScaffoldMessenger.of(ctx).showSnackBar(
-                            SnackBar(
-                              content: Text('Không thể gọi: $err'),
-                              backgroundColor: Colors.red,
-                            ),
-                          );
-                        } finally {
-                          cancelForwardTimerLocal();
-                        }
+                        await EmergencyCallHelper.initiateEmergencyCall(ctx);
+                        cancelForwardTimerLocal();
                       },
 
                       onMarkHandled: () async {
@@ -435,9 +412,10 @@ class InAppAlert {
     // String phone = '115';
     String phone = '';
     try {
-      final userId = await AuthStorage.getUserId();
-      if (userId != null && userId.isNotEmpty) {
-        final list = await EmergencyContactsRemoteDataSource().list(userId);
+      final ds = EmergencyContactsRemoteDataSource();
+      final customerId = await ds.resolveCustomerId();
+      if (customerId != null && customerId.isNotEmpty) {
+        final list = await ds.list(customerId);
         if (list.isNotEmpty) {
           list.sort((a, b) => b.alertLevel.compareTo(a.alertLevel));
           EmergencyContactDto? chosen;

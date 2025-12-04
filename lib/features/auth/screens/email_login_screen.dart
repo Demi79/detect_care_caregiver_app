@@ -457,71 +457,71 @@ class _EmailLoginScreenState extends State<EmailLoginScreen>
             const SizedBox(height: 24),
 
             // Divider
-            Row(
-              children: [
-                Expanded(
-                  child: Container(height: 1, color: const Color(0xFFE5E7EB)),
-                ),
-                Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 16),
-                  child: Text(
-                    'Hoặc',
-                    style: TextStyle(
-                      color: const Color(0xFF9CA3AF),
-                      fontSize: 13,
-                      fontWeight: FontWeight.w400,
-                    ),
-                  ),
-                ),
-                Expanded(
-                  child: Container(height: 1, color: const Color(0xFFE5E7EB)),
-                ),
-              ],
-            ),
+            // Row(
+            //   children: [
+            //     Expanded(
+            //       child: Container(height: 1, color: const Color(0xFFE5E7EB)),
+            //     ),
+            //     Padding(
+            //       padding: const EdgeInsets.symmetric(horizontal: 16),
+            //       child: Text(
+            //         'Hoặc',
+            //         style: TextStyle(
+            //           color: const Color(0xFF9CA3AF),
+            //           fontSize: 13,
+            //           fontWeight: FontWeight.w400,
+            //         ),
+            //       ),
+            //     ),
+            //     Expanded(
+            //       child: Container(height: 1, color: const Color(0xFFE5E7EB)),
+            //     ),
+            //   ],
+            // ),
 
-            const SizedBox(height: 24),
+            // const SizedBox(height: 24),
 
-            // Google Login Button
-            Container(
-              height: 60,
-              decoration: BoxDecoration(
-                borderRadius: BorderRadius.circular(12),
-                border: Border.all(color: const Color(0xFFD1D5DB), width: 1),
-                color: Colors.white,
-              ),
-              child: ElevatedButton.icon(
-                onPressed: () {
-                  Navigator.push(
-                    context,
-                    MaterialPageRoute(builder: (_) => const PhoneLoginScreen()),
-                  );
-                },
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: Colors.white,
-                  foregroundColor: const Color(0xFF374151),
-                  shadowColor: Colors.transparent,
-                  padding: const EdgeInsets.symmetric(horizontal: 12),
-                  minimumSize: const Size.fromHeight(60),
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(12),
-                  ),
-                ),
-                icon: Image.asset(
-                  'assets/google_logo.png',
-                  width: 18,
-                  height: 18,
-                  errorBuilder: (context, error, stackTrace) => const Icon(
-                    Icons.account_circle,
-                    color: Color(0xFFDB4437),
-                    size: 18,
-                  ),
-                ),
-                label: const Text(
-                  'Đăng nhập với số điện thoại',
-                  style: TextStyle(fontSize: 14, fontWeight: FontWeight.w500),
-                ),
-              ),
-            ),
+            // // Google Login Button
+            // Container(
+            //   height: 60,
+            //   decoration: BoxDecoration(
+            //     borderRadius: BorderRadius.circular(12),
+            //     border: Border.all(color: const Color(0xFFD1D5DB), width: 1),
+            //     color: Colors.white,
+            //   ),
+            //   child: ElevatedButton.icon(
+            //     onPressed: () {
+            //       Navigator.push(
+            //         context,
+            //         MaterialPageRoute(builder: (_) => const PhoneLoginScreen()),
+            //       );
+            //     },
+            //     style: ElevatedButton.styleFrom(
+            //       backgroundColor: Colors.white,
+            //       foregroundColor: const Color(0xFF374151),
+            //       shadowColor: Colors.transparent,
+            //       padding: const EdgeInsets.symmetric(horizontal: 12),
+            //       minimumSize: const Size.fromHeight(60),
+            //       shape: RoundedRectangleBorder(
+            //         borderRadius: BorderRadius.circular(12),
+            //       ),
+            //     ),
+            //     icon: Image.asset(
+            //       'assets/google_logo.png',
+            //       width: 18,
+            //       height: 18,
+            //       errorBuilder: (context, error, stackTrace) => const Icon(
+            //         Icons.account_circle,
+            //         color: Color(0xFFDB4437),
+            //         size: 18,
+            //       ),
+            //     ),
+            //     label: const Text(
+            //       'Đăng nhập với số điện thoại',
+            //       style: TextStyle(fontSize: 14, fontWeight: FontWeight.w500),
+            //     ),
+            //   ),
+            // ),
           ],
         ),
       ),
