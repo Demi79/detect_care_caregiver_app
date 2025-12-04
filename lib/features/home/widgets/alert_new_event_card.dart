@@ -1,25 +1,26 @@
-// ignore_for_file: unused_element, unused_local_variable
-
 import 'dart:async';
 
 import 'package:detect_care_caregiver_app/core/events/app_events.dart';
 import 'package:detect_care_caregiver_app/core/network/api_client.dart';
 import 'package:detect_care_caregiver_app/core/utils/logger.dart';
-import 'package:detect_care_caregiver_app/features/alarm/data/alarm_remote_data_source.dart';
+import 'package:detect_care_caregiver_app/features/assignments/data/assignments_remote_data_source.dart';
 import 'package:detect_care_caregiver_app/features/auth/data/auth_storage.dart';
+import 'package:detect_care_caregiver_app/features/auth/providers/auth_provider.dart';
 import 'package:detect_care_caregiver_app/features/camera/data/camera_api.dart';
 import 'package:detect_care_caregiver_app/features/camera/models/camera_entry.dart';
 import 'package:detect_care_caregiver_app/features/camera/screens/live_camera_screen.dart';
-import 'package:detect_care_caregiver_app/features/events/data/events_remote_data_source.dart';
+import 'package:detect_care_caregiver_app/features/fcm/widgets/fcm_quick_send_sheet.dart';
 import 'package:detect_care_caregiver_app/features/home/models/event_log.dart';
 import 'package:detect_care_caregiver_app/features/home/service/event_images_loader.dart';
 import 'package:detect_care_caregiver_app/l10n/vi.dart';
+import 'package:detect_care_caregiver_app/services/audio_service.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:provider/provider.dart';
+import 'package:detect_care_caregiver_app/features/emergency/emergency_call_helper.dart';
+import 'package:detect_care_caregiver_app/features/events/data/events_remote_data_source.dart';
 import 'package:shared_preferences/shared_preferences.dart';
-
 import '../../../core/utils/backend_enums.dart' as be;
-import '../../../services/audio_service.dart';
 
 class AlertEventCard extends StatefulWidget {
   final String eventId;
@@ -84,7 +85,6 @@ class _AlertEventCardState extends State<AlertEventCard>
   bool _isConfirmed = false;
   bool _isMuted = false;
   bool _isSnoozed = false;
-  bool _isActivating = false;
   int _snoozeSeconds = 60;
   Timer? _snoozeTicker;
   int? _snoozeRemaining;
@@ -224,7 +224,10 @@ class _AlertEventCardState extends State<AlertEventCard>
 
   void _handleEmergencyCall() {
     HapticFeedback.heavyImpact();
-    widget.onEmergencyCall?.call();
+    try {
+      widget.onEmergencyCall?.call();
+    } catch (_) {}
+    EmergencyCallHelper.initiateEmergencyCall(context);
   }
 
   Future<void> _handleMarkAsHandled() async {
@@ -1036,118 +1039,56 @@ class _AlertEventCardState extends State<AlertEventCard>
           const SizedBox(height: 8),
 
           // Nút Báo động
-          SizedBox(
-            width: double.infinity,
-            child: ElevatedButton.icon(
-              onPressed: _isActivating
-                  ? null
-                  : () async {
-                      final messenger = ScaffoldMessenger.of(context);
-                      HapticFeedback.mediumImpact();
-                      messenger.showSnackBar(
-                        const SnackBar(
-                          content: Text('Đang kích hoạt báo động...'),
-                        ),
-                      );
-                      setState(() => _isActivating = true);
-                      try {
-                        await EventsRemoteDataSource().updateEventLifecycle(
-                          eventId: widget.eventId,
-                          lifecycleState: 'ALARM_ACTIVATED',
-                          notes: 'Activated from app',
-                        );
+          // SizedBox(
+          //   width: double.infinity,
+          //   child: ElevatedButton.icon(
+          //     onPressed: () async {
+          //       final messenger = ScaffoldMessenger.of(context);
+          //       HapticFeedback.mediumImpact();
+          //       try {
+          //         messenger.showSnackBar(
+          //           const SnackBar(content: Text('Đang kích hoạt báo động...')),
+          //         );
 
-                        // Try to also call external alarm control API
-                        try {
-                          final userId = await AuthStorage.getUserId();
-                          final cameraId =
-                              (widget.detectionData['camera_id'] ??
-                                      widget.detectionData['camera'] ??
-                                      widget.contextData['camera_id'] ??
-                                      widget.contextData['camera'] ??
-                                      widget.cameraId)
-                                  ?.toString();
+          //         await EventsRemoteDataSource().updateEventLifecycle(
+          //           eventId: widget.eventId,
+          //           lifecycleState: 'ALARM_ACTIVATED',
+          //           notes: 'Activated from app',
+          //         );
 
-                          if (userId != null && userId.isNotEmpty) {
-                            try {
-                              final ok = await AlarmRemoteDataSource().setAlarm(
-                                eventId: widget.eventId,
-                                userId: userId,
-                                cameraId: cameraId,
-                                enabled: true,
-                              );
-                              if (ok) {
-                                messenger.showSnackBar(
-                                  const SnackBar(
-                                    content: Text('Đã kích hoạt báo động'),
-                                  ),
-                                );
-                                // Show a local notification to the user as confirmation
-                              } else {
-                                messenger.showSnackBar(
-                                  const SnackBar(
-                                    content: Text(
-                                      'Kích hoạt báo động thất bại (external)',
-                                    ),
-                                  ),
-                                );
-                              }
-                            } catch (e) {
-                              messenger.showSnackBar(
-                                SnackBar(
-                                  content: Text(
-                                    'Kích hoạt báo động thất bại (external): $e',
-                                  ),
-                                ),
-                              );
-                            }
-                          } else {
-                            messenger.showSnackBar(
-                              const SnackBar(
-                                content: Text(
-                                  'Không xác thực user để gửi báo động bên ngoài.',
-                                ),
-                              ),
-                            );
-                          }
-                        } catch (e) {
-                          // If external alarm call fails, log and continue
-                          AppLogger.e('❌ Gọi API báo động ngoài thất bại: $e');
-                        }
-                      } catch (e) {
-                        messenger.showSnackBar(
-                          SnackBar(
-                            content: Text('Kích hoạt báo động thất bại: $e'),
-                          ),
-                        );
-                      } finally {
-                        if (mounted) setState(() => _isActivating = false);
-                      }
-                    },
-              icon: const Icon(
-                Icons.warning_amber_rounded,
-                color: Colors.white,
-              ),
-              label: Text(
-                _isActivating ? 'ĐANG KÍCH HOẠT...' : 'BÁO ĐỘNG',
-                style: const TextStyle(
-                  fontWeight: FontWeight.bold,
-                  color: Colors.white,
-                  fontSize: 13,
-                ),
-              ),
-              style: ElevatedButton.styleFrom(
-                backgroundColor: Colors.deepOrange,
-                padding: const EdgeInsets.symmetric(vertical: 12),
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(8),
-                ),
-                elevation: 2,
-              ),
-            ),
-          ),
+          //         messenger.showSnackBar(
+          //           const SnackBar(content: Text('Đã kích hoạt báo động')),
+          //         );
+          //       } catch (e) {
+          //         messenger.showSnackBar(
+          //           SnackBar(content: Text('Kích hoạt báo động thất bại: $e')),
+          //         );
+          //       }
+          //     },
+          //     icon: const Icon(
+          //       Icons.warning_amber_rounded,
+          //       color: Colors.white,
+          //     ),
+          //     label: const Text(
+          //       'BÁO ĐỘNG',
+          //       style: TextStyle(
+          //         fontWeight: FontWeight.bold,
+          //         color: Colors.white,
+          //         fontSize: 13,
+          //       ),
+          //     ),
+          //     style: ElevatedButton.styleFrom(
+          //       backgroundColor: Colors.deepOrange,
+          //       padding: const EdgeInsets.symmetric(vertical: 12),
+          //       shape: RoundedRectangleBorder(
+          //         borderRadius: BorderRadius.circular(8),
+          //       ),
+          //       elevation: 2,
+          //     ),
+          //   ),
+          // ),
 
-          const SizedBox(height: 8),
+          // const SizedBox(height: 8),
 
           // Nút Gọi khẩn cấp
           SizedBox(
@@ -1206,88 +1147,19 @@ class _AlertEventCardState extends State<AlertEventCard>
                 if (confirm == true) {
                   HapticFeedback.heavyImpact();
                   setState(() => _isCancelling = true);
-                  final messenger = ScaffoldMessenger.of(context);
-                  // compute cameraId similarly to other places
-                  final cameraId =
-                      (widget.detectionData['camera_id'] ??
-                              widget.detectionData['camera'] ??
-                              widget.contextData['camera_id'] ??
-                              widget.contextData['camera'] ??
-                              widget.cameraId)
-                          ?.toString();
-
                   try {
                     final ds = EventsRemoteDataSource();
                     await ds.cancelEvent(eventId: widget.eventId);
-                    messenger.showSnackBar(
+                    ScaffoldMessenger.of(context).showSnackBar(
                       const SnackBar(
                         content: Text('Cảnh báo đã được hủy.'),
                         backgroundColor: Colors.green,
                         behavior: SnackBarBehavior.floating,
                       ),
                     );
-
                     try {
                       AppEvents.instance.notifyEventsChanged();
                     } catch (_) {}
-
-                    // Try to also cancel external alarm control if possible
-                    try {
-                      final userId = await AuthStorage.getUserId();
-                      if (userId != null && userId.isNotEmpty) {
-                        try {
-                          final ok = await AlarmRemoteDataSource().cancelAlarm(
-                            eventId: widget.eventId,
-                            userId: userId,
-                            cameraId: cameraId,
-                          );
-                          if (ok) {
-                            messenger.showSnackBar(
-                              const SnackBar(
-                                content: Text('Đã hủy báo động bên ngoài.'),
-                                backgroundColor: Colors.green,
-                                behavior: SnackBarBehavior.floating,
-                              ),
-                            );
-                          } else {
-                            messenger.showSnackBar(
-                              const SnackBar(
-                                content: Text(
-                                  'Hủy báo động thất bại (external).',
-                                ),
-                                backgroundColor: Colors.orange,
-                                behavior: SnackBarBehavior.floating,
-                              ),
-                            );
-                          }
-                        } catch (e) {
-                          AppLogger.e(
-                            '❌ Gọi API hủy báo động ngoài thất bại: $e',
-                          );
-                          messenger.showSnackBar(
-                            SnackBar(
-                              content: Text(
-                                'Hủy báo động thất bại (external): $e',
-                              ),
-                              backgroundColor: Colors.red.shade600,
-                              behavior: SnackBarBehavior.floating,
-                            ),
-                          );
-                        }
-                      } else {
-                        messenger.showSnackBar(
-                          const SnackBar(
-                            content: Text(
-                              'Không xác thực user để hủy báo động bên ngoài.',
-                            ),
-                            behavior: SnackBarBehavior.floating,
-                          ),
-                        );
-                      }
-                    } catch (e) {
-                      AppLogger.e('❌ Gọi API hủy báo động ngoài thất bại: $e');
-                    }
-
                     // Close the in-app alert popup after successful cancel.
                     // Prefer calling the provided onDismiss callback (host may
                     // manage how the alert was shown). Fallback to popping the
@@ -1301,7 +1173,7 @@ class _AlertEventCardState extends State<AlertEventCard>
                     } catch (_) {}
                   } catch (e) {
                     AppLogger.e('Cancel event failed: $e');
-                    messenger.showSnackBar(
+                    ScaffoldMessenger.of(context).showSnackBar(
                       SnackBar(
                         content: Text('Hủy cảnh báo thất bại: $e'),
                         backgroundColor: Colors.red.shade600,
@@ -1330,14 +1202,9 @@ class _AlertEventCardState extends State<AlertEventCard>
   }
 
   void _showImagesModal(BuildContext context) {
-    // Construct a minimal EventLog from available widget fields so the
-    // loader can discover image URLs from detection/context data or via
-    // the event details API. Ensure top-level widget.cameraId is propagated
-    // into detection/context maps so resolution logic can find it.
     EventLog buildEventFromWidget() {
       final det = Map<String, dynamic>.from(widget.detectionData);
       final ctx = Map<String, dynamic>.from(widget.contextData);
-      // propagate top-level cameraId when absent
       if ((det['camera_id'] ??
                   det['camera'] ??
                   ctx['camera_id'] ??
@@ -1591,16 +1458,16 @@ class _AlertEventCardState extends State<AlertEventCard>
         event.detectionData['camera_id']?.toString() ??
         event.contextData['camera_id']?.toString();
 
-    AppLogger.api('--- Debug mở camera cho event ---');
-    AppLogger.api('🎯 eventId=${event.eventId}');
-    AppLogger.api('initial cameraId=$cameraId');
-    AppLogger.api('keys detectionData=${event.detectionData.keys}');
-    AppLogger.api('keys contextData=${event.contextData.keys}');
+    print('----------------------');
+    print('[DEBUG] 🎯 eventId=${event.eventId}');
+    print('[DEBUG] initial cameraId=$cameraId');
+    print('[DEBUG] detectionData keys=${event.detectionData.keys}');
+    print('[DEBUG] contextData keys=${event.contextData.keys}');
 
     //  Nếu chưa có cameraId hoặc muốn fallback thêm camera khác
     if (cameraId == null) {
       try {
-        AppLogger.api('ℹ️ cameraId không tìm thấy, gọi getEventById...');
+        print('[INFO] cameraId not found, calling getEventById...');
         final detail = await EventsRemoteDataSource().getEventById(
           eventId: event.eventId,
         );
@@ -1624,10 +1491,10 @@ class _AlertEventCardState extends State<AlertEventCard>
           cameraId = possibleIds.first;
         }
 
-        AppLogger.api('ℹ️ possible cameraIds=$possibleIds');
-        AppLogger.api('ℹ️ selected cameraId=$cameraId');
+        print('[INFO] possible cameraIds=$possibleIds');
+        print('[INFO] selected cameraId=$cameraId');
       } catch (e) {
-        AppLogger.e('❌ getEventById thất bại: $e');
+        print('[❌] getEventById failed: $e');
       }
     }
 
@@ -1642,18 +1509,33 @@ class _AlertEventCardState extends State<AlertEventCard>
 
     //  Gọi API để lấy danh sách camera người dùng
     try {
-      final userId = await AuthStorage.getUserId();
-      if (userId == null || userId.isEmpty) {
+      String? customerId;
+      try {
+        final assignmentsDs = AssignmentsRemoteDataSource();
+        final assignments = await assignmentsDs.listPending(status: 'accepted');
+        final active = assignments
+            .where((a) => a.isActive && (a.status.toLowerCase() == 'accepted'))
+            .toList();
+        if (active.isNotEmpty) customerId = active.first.customerId;
+      } catch (_) {}
+
+      customerId ??= await AuthStorage.getUserId();
+
+      if (customerId == null || customerId.isEmpty) {
         messenger.showSnackBar(
-          const SnackBar(content: Text('Không xác thực được người dùng.')),
+          const SnackBar(
+            content: Text(
+              'Không thể xác định người dùng để lấy danh sách camera.',
+            ),
+          ),
         );
         return;
       }
+
       final api = CameraApi(
         ApiClient(tokenProvider: AuthStorage.getAccessToken),
       );
-      final res = await api.getCamerasByUser(userId: userId);
-
+      final res = await api.getCamerasByUser(customerId: customerId);
       if (res['data'] is! List) {
         messenger.showSnackBar(
           const SnackBar(content: Text('Không thể tải danh sách camera.')),
@@ -1678,7 +1560,7 @@ class _AlertEventCardState extends State<AlertEventCard>
         );
         return;
       }
-      AppLogger.api('🎬 Mở LiveCameraScreen với url=$cameraUrl');
+      print('🎬 Opening LiveCameraScreen with url=$cameraUrl');
 
       // Xóa cache url cũ trước khi mở
       try {
@@ -1689,15 +1571,12 @@ class _AlertEventCardState extends State<AlertEventCard>
       //  Điều hướng sang màn hình camera
       await Navigator.of(context).push(
         MaterialPageRoute(
-          builder: (_) => LiveCameraScreen(
-            initialUrl: cameraUrl,
-            loadCache: false,
-            mappedEventId: event.eventId,
-          ),
+          builder: (_) =>
+              LiveCameraScreen(initialUrl: cameraUrl, loadCache: false),
         ),
       );
     } catch (e, st) {
-      AppLogger.e('❌ Lỗi _openCameraForEvent: $e', e, st);
+      print('[❌] _openCameraForEvent error: $e\n$st');
       messenger.showSnackBar(
         SnackBar(content: Text('Không thể mở camera: $e')),
       );

@@ -4,6 +4,9 @@ import 'package:image_picker/image_picker.dart';
 import 'package:detect_care_caregiver_app/core/theme/app_theme.dart';
 import 'package:detect_care_caregiver_app/features/home/repository/event_repository.dart';
 import 'package:detect_care_caregiver_app/features/home/service/event_service.dart';
+import 'package:detect_care_caregiver_app/features/home/models/event_log.dart';
+import 'package:detect_care_caregiver_app/features/home/service/event_images_loader.dart';
+import 'package:detect_care_caregiver_app/features/home/widgets/action_log_card_image_viewer_helper.dart';
 import '../../../core/utils/backend_enums.dart' as be;
 import 'package:detect_care_caregiver_app/features/home/models/log_entry.dart';
 
@@ -25,11 +28,64 @@ class _ProposeScreenState extends State<ProposeScreen> {
   String? _selectedEventType;
 
   late final EventRepository _repo;
+  static const Duration _kEventUpdateWindow = Duration(days: 2);
+  late final EventLog eventForImages;
+  late final Future<List<String>> imagesFuture;
+  int highlightedImageIndex = 0;
 
   @override
   void initState() {
     super.initState();
     _repo = EventRepository(EventService.withDefaultClient());
+    // Prepare a lightweight EventLog for image extraction and viewer
+    eventForImages = EventLog(
+      eventId: widget.logEntry.eventId,
+      status: widget.logEntry.status,
+      eventType: widget.logEntry.eventType,
+      eventDescription: widget.logEntry.eventDescription,
+      confidenceScore: widget.logEntry.confidenceScore,
+      detectedAt: widget.logEntry.detectedAt,
+      createdAt: widget.logEntry.createdAt,
+      detectionData: widget.logEntry.detectionData,
+      aiAnalysisResult: widget.logEntry.aiAnalysisResult,
+      contextData: widget.logEntry.contextData,
+      boundingBoxes: widget.logEntry.boundingBoxes,
+      confirmStatus: widget.logEntry.confirmStatus,
+      imageUrls: const [],
+      lifecycleState: widget.logEntry.lifecycleState,
+      cameraId: widget.logEntry.cameraId,
+    );
+    imagesFuture = loadEventImageUrls(eventForImages);
+  }
+
+  Future<void> _showImagesModal(
+    BuildContext pageContext,
+    EventLog event,
+  ) async {
+    try {
+      final urls = await loadEventImageUrls(event);
+      if (urls.isEmpty) {
+        // Show a simple dialog informing there are no images
+        await showDialog<void>(
+          context: pageContext,
+          builder: (ctx) => AlertDialog(
+            title: const Text('Hình ảnh'),
+            content: const Text('Không có ảnh để hiển thị.'),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.of(ctx).pop(),
+                child: const Text('Đóng'),
+              ),
+            ],
+          ),
+        );
+        return;
+      }
+      final index = highlightedImageIndex.clamp(0, urls.length - 1);
+      return showActionLogCardImageViewer(pageContext, urls, index);
+    } catch (e) {
+      debugPrint('[ProposeScreen] _showImagesModal error: $e');
+    }
   }
 
   Future<void> _pickImage() async {
@@ -309,6 +365,210 @@ class _ProposeScreenState extends State<ProposeScreen> {
                       ],
                     ),
                   ),
+                  const SizedBox(height: 8),
+                  Padding(
+                    padding: const EdgeInsets.symmetric(vertical: 6),
+                    child: Row(
+                      children: [
+                        Icon(
+                          Icons.lock_clock,
+                          color: Colors.orange.shade600,
+                          size: 18,
+                        ),
+                        const SizedBox(width: 8),
+                        Expanded(
+                          child: Text(
+                            'Đề xuất chỉ khả dụng trong vòng ${_kEventUpdateWindow.inDays} ngày kể từ khi sự kiện được ghi nhận.',
+                            style: TextStyle(
+                              color: Colors.orange.shade800,
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  FutureBuilder<List<String>>(
+                    future: imagesFuture,
+                    builder: (context, snapshot) {
+                      Widget preview;
+                      if (snapshot.connectionState != ConnectionState.done) {
+                        preview = Container(
+                          height: 120,
+                          decoration: BoxDecoration(
+                            color: Colors.grey.shade50,
+                            borderRadius: BorderRadius.circular(16),
+                          ),
+                          child: const Center(
+                            child: CircularProgressIndicator(),
+                          ),
+                        );
+                      } else if (snapshot.hasError) {
+                        preview = Container(
+                          height: 120,
+                          padding: const EdgeInsets.symmetric(horizontal: 16),
+                          decoration: BoxDecoration(
+                            color: Colors.grey.shade50,
+                            borderRadius: BorderRadius.circular(16),
+                          ),
+                          child: Center(
+                            child: Text(
+                              'Lỗi tải ảnh: ${snapshot.error}',
+                              style: TextStyle(color: Colors.red.shade600),
+                            ),
+                          ),
+                        );
+                      } else {
+                        final urls = snapshot.data ?? const [];
+                        if (urls.isEmpty) {
+                          preview = Container(
+                            height: 120,
+                            decoration: BoxDecoration(
+                              color: Colors.grey.shade50,
+                              borderRadius: BorderRadius.circular(16),
+                            ),
+                            child: Center(
+                              child: Text(
+                                'Chưa có ảnh liên quan.\nHệ thống sẽ hiển thị ngay khi ảnh có thể tải được.',
+                                textAlign: TextAlign.center,
+                                style: TextStyle(
+                                  color: Colors.grey.shade600,
+                                  fontSize: 13,
+                                ),
+                              ),
+                            ),
+                          );
+                        } else {
+                          final previewIndex = highlightedImageIndex.clamp(
+                            0,
+                            urls.length - 1,
+                          );
+                          preview = SizedBox(
+                            height: 100,
+                            child: ListView.separated(
+                              scrollDirection: Axis.horizontal,
+                              physics: const BouncingScrollPhysics(),
+                              itemBuilder: (context, index) {
+                                final url = urls[index];
+                                final isSelected = index == previewIndex;
+                                return GestureDetector(
+                                  onTap: () => setState(
+                                    () => highlightedImageIndex = index,
+                                  ),
+                                  child: Container(
+                                    width: 120,
+                                    decoration: BoxDecoration(
+                                      borderRadius: BorderRadius.circular(16),
+                                      border: Border.all(
+                                        color: isSelected
+                                            ? Colors.blue.shade600
+                                            : Colors.grey.shade200,
+                                        width: isSelected ? 3 : 1,
+                                      ),
+                                      boxShadow: [
+                                        BoxShadow(
+                                          color: Colors.black.withOpacity(0.04),
+                                          blurRadius: 6,
+                                          offset: const Offset(0, 2),
+                                        ),
+                                      ],
+                                    ),
+                                    child: ClipRRect(
+                                      borderRadius: BorderRadius.circular(16),
+                                      child: Stack(
+                                        children: [
+                                          Positioned.fill(
+                                            child: Image.network(
+                                              url,
+                                              fit: BoxFit.cover,
+                                              width: double.infinity,
+                                              height: double.infinity,
+                                              loadingBuilder:
+                                                  (
+                                                    context,
+                                                    child,
+                                                    progress,
+                                                  ) => progress == null
+                                                  ? child
+                                                  : const Center(
+                                                      child:
+                                                          CircularProgressIndicator(),
+                                                    ),
+                                              errorBuilder:
+                                                  (
+                                                    context,
+                                                    error,
+                                                    stack,
+                                                  ) => Container(
+                                                    color: Colors.grey.shade100,
+                                                    child: Icon(
+                                                      Icons
+                                                          .broken_image_outlined,
+                                                      color:
+                                                          Colors.grey.shade400,
+                                                    ),
+                                                  ),
+                                            ),
+                                          ),
+                                          Positioned(
+                                            top: 8,
+                                            right: 8,
+                                            child: Material(
+                                              color: Colors.white.withOpacity(
+                                                0.7,
+                                              ),
+                                              shape: const CircleBorder(),
+                                              child: InkWell(
+                                                borderRadius:
+                                                    BorderRadius.circular(16),
+                                                onTap: () =>
+                                                    showActionLogCardImageViewer(
+                                                      context,
+                                                      urls,
+                                                      index,
+                                                    ),
+                                                child: const Padding(
+                                                  padding: EdgeInsets.all(6),
+                                                  child: Icon(
+                                                    Icons.zoom_in,
+                                                    size: 18,
+                                                    color: Colors.black54,
+                                                  ),
+                                                ),
+                                              ),
+                                            ),
+                                          ),
+                                        ],
+                                      ),
+                                    ),
+                                  ),
+                                );
+                              },
+                              separatorBuilder: (_, __) =>
+                                  const SizedBox(width: 10),
+                              itemCount: urls.length,
+                            ),
+                          );
+                        }
+                      }
+                      return Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          preview,
+                          const SizedBox(height: 8),
+                          Align(
+                            alignment: Alignment.centerRight,
+                            child: TextButton.icon(
+                              onPressed: () =>
+                                  _showImagesModal(context, eventForImages),
+                              icon: const Icon(Icons.photo_library_outlined),
+                              label: const Text('Xem ảnh chi tiết'),
+                            ),
+                          ),
+                        ],
+                      );
+                    },
+                  ),
                 ],
               ),
             ),
@@ -575,7 +835,7 @@ class _ProposeScreenState extends State<ProposeScreen> {
                       const SizedBox(width: 12),
                       const Expanded(
                         child: Text(
-                          'Lý do đề xuất',
+                          'Lý do đề xuất (bắt buộc)',
                           style: TextStyle(
                             fontSize: 16,
                             fontWeight: FontWeight.w600,
@@ -656,7 +916,7 @@ class _ProposeScreenState extends State<ProposeScreen> {
                       const SizedBox(width: 12),
                       const Expanded(
                         child: Text(
-                          'Ảnh minh họa',
+                          'Ảnh sự kiện mới',
                           style: TextStyle(
                             fontSize: 16,
                             fontWeight: FontWeight.w600,
@@ -720,7 +980,7 @@ class _ProposeScreenState extends State<ProposeScreen> {
                         ],
                       ),
                     ),
-                    const SizedBox(height: 12),
+                    const SizedBox(height: 8),
                   ],
                   SizedBox(
                     width: double.infinity,

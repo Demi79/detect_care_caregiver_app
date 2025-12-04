@@ -106,7 +106,7 @@ class _EventDetailScreenState extends State<EventDetailScreen> {
                     DropdownMenuItem(value: 'danger', child: Text('Nguy hiểm')),
                   ],
                   onChanged: (v) => setState(() => selectedStatus = v),
-                  initialValue: selectedStatus,
+                  value: selectedStatus,
                 ),
 
                 TextField(

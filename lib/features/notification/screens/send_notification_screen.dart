@@ -343,7 +343,7 @@ class _SendNotificationScreenState extends State<SendNotificationScreen> {
                   const SizedBox(height: 20),
 
                   DropdownButtonFormField<String>(
-                    initialValue: _selectedReceiver,
+                    value: _selectedReceiver,
                     items: <DropdownMenuItem<String>>[
                       const DropdownMenuItem(
                         value: '_ALL_',

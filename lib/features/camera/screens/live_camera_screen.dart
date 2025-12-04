@@ -13,6 +13,7 @@ import 'package:detect_care_caregiver_app/features/camera/widgets/status_chip.da
 import 'package:detect_care_caregiver_app/features/emergency/call_action_context.dart';
 import 'package:detect_care_caregiver_app/features/emergency/call_action_service.dart';
 import 'package:detect_care_caregiver_app/features/emergency_contacts/data/emergency_contacts_remote_data_source.dart';
+import 'package:detect_care_caregiver_app/features/emergency/emergency_call_helper.dart';
 import 'package:detect_care_caregiver_app/features/alarm/services/active_alarm_notifier.dart';
 import 'package:detect_care_caregiver_app/features/events/data/events_remote_data_source.dart';
 import 'package:detect_care_caregiver_app/features/home/service/event_service.dart';
@@ -559,22 +560,7 @@ class _LiveCameraScreenState extends State<LiveCameraScreen> {
   Future<void> _handleEmergencyCall() async {
     setState(() => _emergencyCalling = true);
     try {
-      final manager = callActionManager(context);
-      if (!manager.allowedActions.contains(CallAction.emergency)) {
-        if (mounted) {
-          context.showCameraMessage(
-            'Trong trường hợp khẩn cấp, hệ thống sẽ liên hệ người chăm sóc trước.',
-          );
-        }
-        return;
-      }
-
-      final phone = await _chooseEmergencyPhone();
-      await attemptCall(
-        context: context,
-        rawPhone: phone,
-        actionLabel: 'Gọi khẩn cấp',
-      );
+      await EmergencyCallHelper.initiateEmergencyCall(context);
     } catch (e, st) {
       AppLogger.e('[Camera] emergency call failed', e, st);
       if (mounted) context.showCameraMessage('Không thể thực hiện cuộc gọi.');
@@ -586,9 +572,10 @@ class _LiveCameraScreenState extends State<LiveCameraScreen> {
   Future<String> _chooseEmergencyPhone() async {
     String phone = '115';
     try {
-      final userId = await AuthStorage.getUserId();
-      if (userId != null && userId.isNotEmpty) {
-        final list = await EmergencyContactsRemoteDataSource().list(userId);
+      final ds = EmergencyContactsRemoteDataSource();
+      final customerId = await ds.resolveCustomerId();
+      if (customerId != null && customerId.isNotEmpty) {
+        final list = await ds.list(customerId);
         if (list.isNotEmpty) {
           list.sort((a, b) => b.alertLevel.compareTo(a.alertLevel));
           EmergencyContactDto? chosen;
@@ -1234,7 +1221,6 @@ class _LiveCameraScreenState extends State<LiveCameraScreen> {
   }
 
   Widget _buildActionPanelButtons(CameraState state) {
-    const spacing = SizedBox(width: 12);
     return ValueListenableBuilder<bool>(
       valueListenable: ActiveAlarmNotifier.instance,
       builder: (context, alarmActive, _) {
@@ -1254,16 +1240,6 @@ class _LiveCameraScreenState extends State<LiveCameraScreen> {
           children: [
             Row(
               children: [
-                Expanded(
-                  child: _buildGradientActionButton(
-                    icon: Icons.warning_amber_rounded,
-                    label: mainLabel,
-                    colors: mainGradient,
-                    onTap: onMainTap,
-                    loading: mainLoading,
-                  ),
-                ),
-                spacing,
                 Expanded(
                   child: _buildGradientActionButton(
                     icon: Icons.phone_in_talk,

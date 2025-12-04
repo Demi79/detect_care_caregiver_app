@@ -2,6 +2,7 @@ import 'dart:convert';
 import 'dart:developer' as dev;
 
 import 'package:detect_care_caregiver_app/core/network/api_client.dart';
+import 'package:detect_care_caregiver_app/features/assignments/data/assignments_remote_data_source.dart';
 import 'package:detect_care_caregiver_app/features/auth/data/auth_storage.dart';
 
 class EmergencyContactDto {
@@ -59,13 +60,49 @@ class EmergencyContactDto {
 
 class EmergencyContactsRemoteDataSource {
   final ApiClient _api;
+
   EmergencyContactsRemoteDataSource({ApiClient? api})
     : _api = api ?? ApiClient(tokenProvider: AuthStorage.getAccessToken);
 
-  String _base(String userId) => '/users/$userId/emergency-contacts';
+  Future<String?> resolveCustomerId() async {
+    try {
+      final assignmentsDs = AssignmentsRemoteDataSource();
+      final assignments = await assignmentsDs.listPending(status: 'accepted');
 
-  Future<List<EmergencyContactDto>> list(String userId) async {
-    final res = await _api.get(_base(userId));
+      final active = assignments
+          .where((a) => a.isActive && a.status.toLowerCase() == 'accepted')
+          .toList();
+
+      if (active.isNotEmpty) {
+        return active.first.customerId;
+      }
+    } catch (_) {}
+
+    try {
+      final userJson = await AuthStorage.getUserJson();
+      if (userJson != null) {
+        final c1 = userJson['customer_id']?.toString();
+        if (c1 != null && c1.isNotEmpty) return c1;
+
+        final linked = userJson['linked_customer_id']?.toString();
+        if (linked != null && linked.isNotEmpty) return linked;
+
+        final custObj = userJson['customer'];
+        if (custObj is Map && custObj['id'] != null) {
+          final cid = custObj['id']?.toString();
+          if (cid != null && cid.isNotEmpty) return cid;
+        }
+      }
+    } catch (_) {}
+
+    return null;
+  }
+
+  String _base(String customerId) => '/users/$customerId/emergency-contacts';
+
+  Future<List<EmergencyContactDto>> list(String customerId) async {
+    final res = await _api.get(_base(customerId));
+
     if (res.statusCode < 200 || res.statusCode >= 300) {
       throw Exception('List contacts failed: ${res.statusCode} ${res.body}');
     }
@@ -73,35 +110,26 @@ class EmergencyContactsRemoteDataSource {
     dynamic extracted;
     try {
       extracted = _api.extractDataFromResponse(res);
-    } catch (_) {
-      // ignore and fallback to raw decode
-    }
+    } catch (_) {}
 
     final raw = extracted ?? json.decode(res.body);
 
     dev.log('[EmergencyContacts] list response parsed: ${raw.runtimeType}');
 
     if (raw is List) {
-      return raw
-          .cast<Map<String, dynamic>>()
-          .map<EmergencyContactDto>(EmergencyContactDto.fromJson)
-          .toList();
+      return raw.map((e) => EmergencyContactDto.fromJson(e)).toList();
     }
 
     if (raw is Map && raw['data'] is List) {
       return (raw['data'] as List)
-          .cast<Map<String, dynamic>>()
-          .map<EmergencyContactDto>(EmergencyContactDto.fromJson)
+          .map((e) => EmergencyContactDto.fromJson(e))
           .toList();
     }
 
     if (raw is Map) {
       for (final v in raw.values) {
         if (v is List) {
-          return v
-              .cast<Map<String, dynamic>>()
-              .map<EmergencyContactDto>(EmergencyContactDto.fromJson)
-              .toList();
+          return v.map((e) => EmergencyContactDto.fromJson(e)).toList();
         }
       }
     }
@@ -110,10 +138,10 @@ class EmergencyContactsRemoteDataSource {
   }
 
   Future<EmergencyContactDto> create(
-    String userId,
+    String customerId,
     EmergencyContactDto body,
   ) async {
-    final res = await _api.post(_base(userId), body: body.toBody());
+    final res = await _api.post(_base(customerId), body: body.toBody());
     if (res.statusCode < 200 || res.statusCode >= 300) {
       throw Exception('Create contact failed: ${res.statusCode} ${res.body}');
     }
@@ -122,12 +150,12 @@ class EmergencyContactsRemoteDataSource {
   }
 
   Future<EmergencyContactDto> update(
-    String userId,
+    String customerId,
     String contactId,
     EmergencyContactDto body,
   ) async {
     final res = await _api.put(
-      '${_base(userId)}/$contactId',
+      '${_base(customerId)}/$contactId',
       body: body.toBody(),
     );
     if (res.statusCode < 200 || res.statusCode >= 300) {
@@ -137,8 +165,8 @@ class EmergencyContactsRemoteDataSource {
     return EmergencyContactDto.fromJson(map);
   }
 
-  Future<void> delete(String userId, String contactId) async {
-    final res = await _api.delete('${_base(userId)}/$contactId');
+  Future<void> delete(String customerId, String contactId) async {
+    final res = await _api.delete('${_base(customerId)}/$contactId');
     if (res.statusCode < 200 || res.statusCode >= 300) {
       throw Exception('Delete contact failed: ${res.statusCode} ${res.body}');
     }

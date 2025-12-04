@@ -38,18 +38,34 @@ Future<void> attemptCall({
   final normalized = normalizePhoneNumber(rawPhone);
 
   try {
+    try {
+      print('[attemptCall] rawPhone=$rawPhone normalized=$normalized');
+    } catch (_) {}
     final status = await Permission.phone.request();
+    try {
+      print('[attemptCall] permission status: $status');
+    } catch (_) {}
     if (status.isGranted) {
+      try {
+        print('[attemptCall] invoking DirectCaller.call($normalized)');
+      } catch (_) {}
       final success = await DirectCaller.call(normalized);
+      try {
+        print('[attemptCall] DirectCaller returned: $success');
+      } catch (_) {}
       if (success) {
         messenger.showSnackBar(
           SnackBar(content: Text('$actionLabel: Đang gọi $normalized...')),
         );
         return;
       }
+      try {
+        print('[attemptCall] DirectCaller failed, falling back to dialer');
+      } catch (_) {}
       await fallbackDial(context, normalized);
       return;
     }
+
     if (status.isPermanentlyDenied) {
       messenger.showSnackBar(
         SnackBar(
@@ -66,13 +82,20 @@ Future<void> attemptCall({
       return;
     }
 
+    try {
+      print('[attemptCall] permission denied, falling back to dialer');
+    } catch (_) {}
     messenger.showSnackBar(
       const SnackBar(
-        content: Text('Quyền gọi điện bị từ chối.'),
+        content: Text('Quyền gọi điện bị từ chối. Mở app quay số.'),
         backgroundColor: Colors.orange,
       ),
     );
+    await fallbackDial(context, normalized);
   } catch (e) {
+    try {
+      print('[attemptCall] caught error: $e');
+    } catch (_) {}
     messenger.showSnackBar(
       SnackBar(
         content: Text('Lỗi khi gọi: $e'),

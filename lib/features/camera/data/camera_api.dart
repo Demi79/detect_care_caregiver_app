@@ -1,23 +1,50 @@
 import 'package:detect_care_caregiver_app/core/network/api_client.dart';
+import 'package:flutter/foundation.dart';
 import 'package:detect_care_caregiver_app/core/utils/logger.dart';
+
 import '../models/camera_entry.dart';
 
 class CameraApi {
   final ApiClient apiClient;
   CameraApi(this.apiClient);
 
-  // GET /cameras
+  // GET /cameras by customer
   Future<Map<String, dynamic>> getCamerasByUser({
-    required String userId,
+    required String customerId,
     int page = 1,
     int limit = 20,
   }) async {
-    final res = await apiClient.get(
-      '/cameras/by-user/$userId',
-      query: {'page': page, 'limit': limit},
-    );
-    final decoded = apiClient.extractDataFromResponse(res);
-    return _normalizeResponse(decoded);
+    try {
+      final endpoint = '/cameras/by-user/$customerId';
+      final query = {'page': page, 'limit': limit};
+
+      AppLogger.api('[CameraApi] GET $endpoint query=$query');
+
+      final res = await apiClient.get(endpoint, query: query);
+
+      AppLogger.api('[CameraApi] Response status: ${res.statusCode}');
+      AppLogger.api('[CameraApi] Response body: ${res.body}');
+
+      final decoded = apiClient.extractDataFromResponse(res);
+      AppLogger.api('[CameraApi] Decoded payload type: ${decoded.runtimeType}');
+
+      if (decoded is List) {
+        return {'data': decoded};
+      }
+
+      if (decoded is Map && decoded['data'] is List) {
+        return Map<String, dynamic>.from(decoded as Map);
+      }
+
+      if (decoded is Map && decoded.isNotEmpty) {
+        return Map<String, dynamic>.from(decoded as Map);
+      }
+
+      throw Exception('Unexpected response for getCamerasByUser: $decoded');
+    } catch (e, st) {
+      AppLogger.e('[CameraApi] getCamerasByUser failed: $e', e, st);
+      rethrow;
+    }
   }
 
   // GET /cameras/:camera_id
@@ -82,16 +109,10 @@ class CameraApi {
     };
     final res = await apiClient.get('/cameras', query: query);
     final decoded = apiClient.extractDataFromResponse(res);
-    return _normalizeResponse(decoded);
-  }
-
-  Map<String, dynamic> _normalizeResponse(dynamic decoded) {
-    if (decoded == null) return <String, dynamic>{'data': <dynamic>[]};
-    if (decoded is List) return <String, dynamic>{'data': decoded};
-    if (decoded is Map<String, dynamic>) return decoded;
-    return <String, dynamic>{
-      'data': [decoded],
-    };
+    if (decoded is! Map<String, dynamic>) {
+      throw Exception('Unexpected response for getCameras: ${res.body}');
+    }
+    return decoded;
   }
 
   // POST /cameras
@@ -112,31 +133,23 @@ class CameraApi {
     String cameraId,
     Map<String, dynamic> data,
   ) async {
-    // Debug: log request payload
-    AppLogger.api(
-      '🔁 [CameraApi] PATCH /cameras/$cameraId - Yêu cầu cập nhật camera',
-    );
-    AppLogger.api('🔁 [CameraApi] Thân yêu cầu (body): $data');
+    debugPrint('🔁 [CameraApi] PATCH /cameras/$cameraId');
+    debugPrint('🔁 [CameraApi] Request body: $data');
 
     final res = await apiClient.patch('/cameras/$cameraId', body: data);
 
-    // Ghi log phản hồi để dễ chẩn đoán
-    AppLogger.api('🔁 [CameraApi] Trạng thái phản hồi: ${res.statusCode}');
-    AppLogger.api('🔁 [CameraApi] Thân phản hồi: ${res.body}');
+    debugPrint('🔁 [CameraApi] Response status: ${res.statusCode}');
+    debugPrint('🔁 [CameraApi] Response body: ${res.body}');
 
     if (res.statusCode < 200 || res.statusCode >= 300) {
-      AppLogger.apiError(
-        '❌ Cập nhật camera thất bại: ${res.statusCode} ${res.body}',
+      throw Exception(
+        'Cập nhật camera thất bại: ${res.statusCode} ${res.body}',
       );
-      throw Exception('Cập nhật camera thất bại: ${res.statusCode}');
     }
 
     final decoded = apiClient.extractDataFromResponse(res);
     if (decoded is! Map<String, dynamic>) {
-      AppLogger.apiError(
-        '❌ Phản hồi cập nhật camera không hợp lệ: ${res.body}',
-      );
-      throw Exception('Phản hồi cập nhật camera không hợp lệ');
+      throw Exception('Unexpected update camera response: ${res.body}');
     }
     return decoded;
   }
@@ -146,31 +159,23 @@ class CameraApi {
     String cameraId,
     Map<String, dynamic> data,
   ) async {
-    AppLogger.api(
-      '🔁 [CameraApi] PUT /cameras/$cameraId - Yêu cầu cập nhật full',
-    );
-    AppLogger.api('🔁 [CameraApi] Thân yêu cầu (PUT): $data');
+    debugPrint('🔁 [CameraApi] PUT /cameras/$cameraId');
+    debugPrint('🔁 [CameraApi] Request body (PUT): $data');
 
     final res = await apiClient.put('/cameras/$cameraId', body: data);
 
-    AppLogger.api(
-      '🔁 [CameraApi] Trạng thái phản hồi (PUT): ${res.statusCode}',
-    );
-    AppLogger.api('🔁 [CameraApi] Thân phản hồi (PUT): ${res.body}');
+    debugPrint('🔁 [CameraApi] Response status (PUT): ${res.statusCode}');
+    debugPrint('🔁 [CameraApi] Response body (PUT): ${res.body}');
 
     if (res.statusCode < 200 || res.statusCode >= 300) {
-      AppLogger.apiError(
-        '❌ Cập nhật camera thất bại (PUT): ${res.statusCode} ${res.body}',
+      throw Exception(
+        'Cập nhật camera thất bại (PUT): ${res.statusCode} ${res.body}',
       );
-      throw Exception('Cập nhật camera thất bại (PUT): ${res.statusCode}');
     }
 
     final decoded = apiClient.extractDataFromResponse(res);
     if (decoded is! Map<String, dynamic>) {
-      AppLogger.apiError(
-        '❌ Phản hồi PUT cập nhật camera không hợp lệ: ${res.body}',
-      );
-      throw Exception('Phản hồi PUT cập nhật camera không hợp lệ');
+      throw Exception('Unexpected put update camera response: ${res.body}');
     }
     return decoded;
   }
