@@ -1,5 +1,6 @@
 import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:detect_care_caregiver_app/core/config/app_config.dart';
+import 'package:detect_care_caregiver_app/core/vlc/safe_vlc_platform.dart';
 
 import 'package:detect_care_caregiver_app/core/utils/app_lifecycle.dart';
 import 'package:detect_care_caregiver_app/core/alerts/alert_coordinator.dart';
@@ -128,6 +129,9 @@ Future<void> _wireUpFcmModal() async {
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
   AppLifecycle.init();
+
+  // Initialize safe VLC platform wrapper BEFORE any VLC operations
+  ensureSafeVlcPlatform();
 
   try {
     // 1) ENV

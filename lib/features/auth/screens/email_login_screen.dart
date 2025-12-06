@@ -1,6 +1,5 @@
 import 'package:detect_care_caregiver_app/core/config/app_config.dart';
 import 'package:detect_care_caregiver_app/features/auth/screens/forgot_password_screen.dart';
-import 'package:detect_care_caregiver_app/features/auth/screens/phone_login_screen.dart';
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 import 'package:loading_animation_widget/loading_animation_widget.dart';

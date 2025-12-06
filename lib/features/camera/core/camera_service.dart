@@ -1,12 +1,11 @@
 import 'dart:async';
 import 'dart:io';
 
+import 'package:detect_care_caregiver_app/core/utils/logger.dart';
 import 'package:flutter_vlc_player/flutter_vlc_player.dart';
 import 'package:wakelock_plus/wakelock_plus.dart';
 
-import 'camera_constants.dart';
 import 'camera_helpers.dart';
-import 'package:detect_care_caregiver_app/core/utils/logger.dart';
 
 /// Lớp dịch vụ cho các thao tác liên quan đến camera
 class CameraService {
@@ -18,24 +17,25 @@ class CameraService {
     // Huỷ controller hiện có (nếu có)
     await _disposeController();
 
-    // Bật wakelock để tránh thiết bị ngủ trong lúc phát
-    await WakelockPlus.enable();
+    // Bật wakelock CHỈ khi cần thiết
+    try {
+      final isEnabled = await WakelockPlus.enabled;
+      if (!isEnabled) {
+        await WakelockPlus.enable();
+      }
+    } catch (_) {}
 
     try {
       _controller = VlcPlayerController.network(
         url,
         autoInitialize: true,
         autoPlay: true,
-        hwAcc: HwAcc.disabled,
+        hwAcc: HwAcc.full,
         options: VlcPlayerOptions(
           advanced: VlcAdvancedOptions([
-            '--network-caching=${CameraConstants.networkCaching}',
+            '--network-caching=200',
             '--rtsp-tcp',
-            '--live-caching=${CameraConstants.liveCaching}',
-            '--clock-jitter=0',
-            '--avcodec-threads=0',
-            '--video-filter=deinterlace',
-            '--deinterlace-mode=blend',
+            '--live-caching=100',
           ]),
         ),
       );
@@ -97,6 +97,10 @@ class CameraService {
       _controller = null;
       _lastUrl = null;
     }
+    // Tắt wakelock để tiết kiệm pin
+    try {
+      await WakelockPlus.disable();
+    } catch (_) {}
   }
 
   /// Đợi playback bắt đầu

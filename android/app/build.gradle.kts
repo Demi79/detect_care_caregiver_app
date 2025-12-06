@@ -28,6 +28,11 @@ android {
         targetSdk  = flutter.targetSdkVersion
         versionCode = flutter.versionCode
         versionName = flutter.versionName
+        
+        // VLC player compatibility
+        ndk {
+            abiFilters.addAll(listOf("arm64-v8a", "armeabi-v7a"))
+        }
     }
 
     buildTypes {
@@ -40,6 +45,12 @@ android {
         resources.excludes += setOf("META-INF/DEPENDENCIES")
         // Ensure native libs align to 16 KB for compatibility with newer Android devices.
         jniLibs.useLegacyPackaging = false
+    }
+    
+    // Enable optimizations for VLC compatibility
+    dependenciesInfo {
+        includeInApk = false
+        includeInBundle = false
     }
 }
 

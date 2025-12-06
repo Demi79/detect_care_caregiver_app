@@ -33,11 +33,11 @@ class CameraApi {
       }
 
       if (decoded is Map && decoded['data'] is List) {
-        return Map<String, dynamic>.from(decoded as Map);
+        return Map<String, dynamic>.from(decoded);
       }
 
       if (decoded is Map && decoded.isNotEmpty) {
-        return Map<String, dynamic>.from(decoded as Map);
+        return Map<String, dynamic>.from(decoded);
       }
 
       throw Exception('Unexpected response for getCamerasByUser: $decoded');

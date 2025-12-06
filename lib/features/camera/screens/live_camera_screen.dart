@@ -3,6 +3,7 @@ import 'dart:ui';
 
 import 'package:detect_care_caregiver_app/core/utils/logger.dart';
 import 'package:detect_care_caregiver_app/features/alarm/data/alarm_remote_data_source.dart';
+import 'package:detect_care_caregiver_app/features/alarm/services/active_alarm_notifier.dart';
 import 'package:detect_care_caregiver_app/features/auth/data/auth_storage.dart';
 import 'package:detect_care_caregiver_app/features/camera/core/camera_core.dart';
 import 'package:detect_care_caregiver_app/features/camera/models/camera_entry.dart';
@@ -10,11 +11,8 @@ import 'package:detect_care_caregiver_app/features/camera/screens/camera_timelin
 import 'package:detect_care_caregiver_app/features/camera/services/camera_access_guard.dart';
 import 'package:detect_care_caregiver_app/features/camera/widgets/features_panel.dart';
 import 'package:detect_care_caregiver_app/features/camera/widgets/status_chip.dart';
-import 'package:detect_care_caregiver_app/features/emergency/call_action_context.dart';
-import 'package:detect_care_caregiver_app/features/emergency/call_action_service.dart';
-import 'package:detect_care_caregiver_app/features/emergency_contacts/data/emergency_contacts_remote_data_source.dart';
 import 'package:detect_care_caregiver_app/features/emergency/emergency_call_helper.dart';
-import 'package:detect_care_caregiver_app/features/alarm/services/active_alarm_notifier.dart';
+import 'package:detect_care_caregiver_app/features/emergency_contacts/data/emergency_contacts_remote_data_source.dart';
 import 'package:detect_care_caregiver_app/features/events/data/events_remote_data_source.dart';
 import 'package:detect_care_caregiver_app/features/home/service/event_service.dart';
 import 'package:flutter/material.dart';
@@ -53,6 +51,7 @@ class _LiveCameraScreenState extends State<LiveCameraScreen> {
   bool _emergencyCalling = false;
   bool _infraredEnabled = false;
   bool _cancelingAlarm = false;
+  bool _activatingAlarm = false;
 
   @override
   void initState() {
@@ -375,6 +374,7 @@ class _LiveCameraScreenState extends State<LiveCameraScreen> {
             ScaffoldMessenger.of(context).showSnackBar(
               const SnackBar(content: Text('Kích hoạt báo động cho sự kiện.')),
             );
+            ActiveAlarmNotifier.instance.update(true);
           }
         } catch (e, st) {
           AppLogger.e('Failed to activate mapped event alarm: $e', e, st);
@@ -415,6 +415,7 @@ class _LiveCameraScreenState extends State<LiveCameraScreen> {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(content: Text('Gửi báo động thành công.')),
         );
+        ActiveAlarmNotifier.instance.update(true);
       }
     } catch (e, st) {
       AppLogger.e('❌ [Camera] send manual alarm failed', e, st);
@@ -475,7 +476,7 @@ class _LiveCameraScreenState extends State<LiveCameraScreen> {
           await EventsRemoteDataSource().updateEventLifecycle(
             eventId: eventId,
             lifecycleState: 'ALARM_ACTIVATED',
-            notes: 'Activated from camera live view',
+            notes: 'Kích hoạt từ giao diện camera trực tiếp',
           );
 
           try {
@@ -496,6 +497,7 @@ class _LiveCameraScreenState extends State<LiveCameraScreen> {
             ScaffoldMessenger.of(context).showSnackBar(
               const SnackBar(content: Text('Kích hoạt báo động cho sự kiện.')),
             );
+            ActiveAlarmNotifier.instance.update(true);
           }
         } catch (e, st) {
           AppLogger.e('Failed to activate mapped event alarm: $e', e, st);
@@ -558,6 +560,7 @@ class _LiveCameraScreenState extends State<LiveCameraScreen> {
   }
 
   Future<void> _handleEmergencyCall() async {
+    if (_emergencyCalling) return;
     setState(() => _emergencyCalling = true);
     try {
       await EmergencyCallHelper.initiateEmergencyCall(context);
@@ -572,10 +575,9 @@ class _LiveCameraScreenState extends State<LiveCameraScreen> {
   Future<String> _chooseEmergencyPhone() async {
     String phone = '115';
     try {
-      final ds = EmergencyContactsRemoteDataSource();
-      final customerId = await ds.resolveCustomerId();
-      if (customerId != null && customerId.isNotEmpty) {
-        final list = await ds.list(customerId);
+      final userId = await AuthStorage.getUserId();
+      if (userId != null && userId.isNotEmpty) {
+        final list = await EmergencyContactsRemoteDataSource().list(userId);
         if (list.isNotEmpty) {
           list.sort((a, b) => b.alertLevel.compareTo(a.alertLevel));
           EmergencyContactDto? chosen;
@@ -597,7 +599,17 @@ class _LiveCameraScreenState extends State<LiveCameraScreen> {
 
   Future<void> _onCancelAlarm() async {
     final eventId = widget.mappedEventId;
-    if (eventId == null || eventId.isEmpty) return;
+    AppLogger.d(
+      '[Camera] _onCancelAlarm called with eventId=$eventId, alarmActive=${ActiveAlarmNotifier.instance.value}',
+    );
+
+    // If no mapped event, still allow canceling active alarms via the notifier
+    if ((eventId == null || eventId.isEmpty) &&
+        !ActiveAlarmNotifier.instance.value) {
+      AppLogger.w('[Camera] _onCancelAlarm: no eventId and no active alarm');
+      return;
+    }
+
     if (_cancelingAlarm) return;
     setState(() => _cancelingAlarm = true);
     try {
@@ -606,11 +618,17 @@ class _LiveCameraScreenState extends State<LiveCameraScreen> {
         const SnackBar(content: Text('Đang hủy báo động...')),
       );
 
-      await EventsRemoteDataSource().cancelEvent(eventId: eventId);
+      // Cancel mapped event if it exists
+      if (eventId != null && eventId.isNotEmpty) {
+        await EventsRemoteDataSource().cancelEvent(eventId: eventId);
+      }
 
       try {
         final userId = await AuthStorage.getUserId();
-        if (userId != null && userId.isNotEmpty) {
+        if (userId != null &&
+            userId.isNotEmpty &&
+            eventId != null &&
+            eventId.isNotEmpty) {
           await AlarmRemoteDataSource().cancelAlarm(
             eventId: eventId,
             userId: userId,
@@ -626,11 +644,62 @@ class _LiveCameraScreenState extends State<LiveCameraScreen> {
           context,
         ).showSnackBar(const SnackBar(content: Text('Đã hủy báo động.')));
       }
+      ActiveAlarmNotifier.instance.update(false);
     } catch (e, st) {
       AppLogger.e('Failed to cancel mapped event alarm: $e', e, st);
       if (mounted) context.showCameraMessage('Hủy báo động thất bại.');
     } finally {
       if (mounted) setState(() => _cancelingAlarm = false);
+    }
+  }
+
+  Future<void> _onActivateAlarm() async {
+    final eventId = widget.mappedEventId;
+    AppLogger.d('[Camera] _onActivateAlarm: eventId=$eventId');
+    if (eventId == null || eventId.isEmpty) {
+      AppLogger.w('[Camera] _onActivateAlarm: eventId is null or empty');
+      return;
+    }
+    if (_activatingAlarm) return;
+    setState(() => _activatingAlarm = true);
+    try {
+      final messenger = ScaffoldMessenger.of(context);
+      messenger.showSnackBar(
+        const SnackBar(content: Text('Đang kích hoạt báo động...')),
+      );
+
+      final userId = await AuthStorage.getUserId();
+      if (userId == null || userId.isEmpty) {
+        if (mounted) {
+          context.showCameraMessage('Không xác thực được người dùng.');
+        }
+        return;
+      }
+
+      AppLogger.d(
+        '[Camera] Calling setAlarm: eventId=$eventId, userId=$userId',
+      );
+      await AlarmRemoteDataSource().setAlarm(
+        eventId: eventId,
+        userId: userId,
+        cameraId: null,
+        enabled: true,
+      );
+      AppLogger.d('[Camera] setAlarm completed successfully');
+
+      // Reflect activation in UI notifier
+      ActiveAlarmNotifier.instance.update(true);
+
+      if (mounted) {
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(const SnackBar(content: Text('Đã kích hoạt báo động.')));
+      }
+    } catch (e, st) {
+      AppLogger.e('Failed to activate alarm: $e', e, st);
+      if (mounted) context.showCameraMessage('Kích hoạt báo động thất bại.');
+    } finally {
+      if (mounted) setState(() => _activatingAlarm = false);
     }
   }
 
@@ -1135,59 +1204,61 @@ class _LiveCameraScreenState extends State<LiveCameraScreen> {
     required Future<void> Function() onTap,
     bool loading = false,
   }) {
-    return Material(
-      color: Colors.transparent,
-      child: InkWell(
-        onTap: loading ? null : () => unawaited(onTap()),
+    return Container(
+      height: 48,
+      decoration: BoxDecoration(
+        gradient: LinearGradient(
+          colors: colors,
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+        ),
         borderRadius: BorderRadius.circular(18),
-        splashColor: Colors.white24,
-        child: Container(
-          height: 48,
-          padding: const EdgeInsets.symmetric(horizontal: 10),
-          decoration: BoxDecoration(
-            gradient: LinearGradient(
-              colors: colors,
-              begin: Alignment.topLeft,
-              end: Alignment.bottomRight,
-            ),
-            borderRadius: BorderRadius.circular(18),
-            boxShadow: [
-              BoxShadow(
-                color: colors.last.withOpacity(0.45),
-                blurRadius: 14,
-                offset: const Offset(0, 6),
-              ),
-            ],
+        boxShadow: [
+          BoxShadow(
+            color: colors.last.withOpacity(0.45),
+            blurRadius: 14,
+            offset: const Offset(0, 6),
           ),
-          child: Row(
-            mainAxisAlignment: MainAxisAlignment.center,
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Icon(icon, color: Colors.white, size: 20),
-              const SizedBox(width: 8),
-              Flexible(
-                child: Text(
-                  label,
-                  overflow: TextOverflow.ellipsis,
-                  style: const TextStyle(
-                    color: Colors.white,
-                    fontWeight: FontWeight.w700,
-                    letterSpacing: 0.3,
-                  ),
-                ),
-              ),
-              if (loading) ...[
+        ],
+      ),
+      child: Material(
+        color: Colors.transparent,
+        child: InkWell(
+          onTap: loading ? null : () => unawaited(onTap()),
+          borderRadius: BorderRadius.circular(18),
+          splashColor: Colors.white24,
+          child: Container(
+            padding: const EdgeInsets.symmetric(horizontal: 10),
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Icon(icon, color: Colors.white, size: 20),
                 const SizedBox(width: 8),
-                const SizedBox(
-                  width: 14,
-                  height: 14,
-                  child: CircularProgressIndicator(
-                    strokeWidth: 2,
-                    color: Colors.white,
+                Flexible(
+                  child: Text(
+                    label,
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(
+                      color: Colors.white,
+                      fontWeight: FontWeight.w700,
+                      letterSpacing: 0.3,
+                    ),
                   ),
                 ),
+                if (loading) ...[
+                  const SizedBox(width: 8),
+                  const SizedBox(
+                    width: 14,
+                    height: 14,
+                    child: CircularProgressIndicator(
+                      strokeWidth: 2,
+                      color: Colors.white,
+                    ),
+                  ),
+                ],
               ],
-            ],
+            ),
           ),
         ),
       ),
@@ -1221,6 +1292,7 @@ class _LiveCameraScreenState extends State<LiveCameraScreen> {
   }
 
   Widget _buildActionPanelButtons(CameraState state) {
+    const spacing = SizedBox(width: 12);
     return ValueListenableBuilder<bool>(
       valueListenable: ActiveAlarmNotifier.instance,
       builder: (context, alarmActive, _) {
@@ -1230,8 +1302,6 @@ class _LiveCameraScreenState extends State<LiveCameraScreen> {
         final mainLabel = alarmActive
             ? (_cancelingAlarm ? 'Đang hủy...' : 'HỦY BÁO ĐỘNG')
             : (_alarming ? 'Đang...' : 'BÁO ĐỘNG');
-        final showCancelButton =
-            widget.mappedEventId?.isNotEmpty == true && !alarmActive;
         final onMainTap = alarmActive ? _onCancelAlarm : _onCaptureAndAlarm;
         final mainLoading = alarmActive ? _cancelingAlarm : _alarming;
 
@@ -1240,6 +1310,16 @@ class _LiveCameraScreenState extends State<LiveCameraScreen> {
           children: [
             Row(
               children: [
+                Expanded(
+                  child: _buildGradientActionButton(
+                    icon: Icons.warning_amber_rounded,
+                    label: mainLabel,
+                    colors: mainGradient,
+                    onTap: onMainTap,
+                    loading: mainLoading,
+                  ),
+                ),
+                spacing,
                 Expanded(
                   child: _buildGradientActionButton(
                     icon: Icons.phone_in_talk,
@@ -1251,14 +1331,17 @@ class _LiveCameraScreenState extends State<LiveCameraScreen> {
                 ),
               ],
             ),
-            if (showCancelButton) ...[
+            // Activate alarm button (always show when mappedEventId exists)
+            if (widget.mappedEventId?.isNotEmpty == true && !alarmActive) ...[
               const SizedBox(height: 10),
               _buildGradientActionButton(
-                icon: Icons.cancel_presentation_rounded,
-                label: _cancelingAlarm ? 'Đang hủy...' : 'HỦY BÁO ĐỘNG',
-                colors: const [Color(0xFFB0BEC5), Color(0xFF78909C)],
-                onTap: _onCancelAlarm,
-                loading: _cancelingAlarm,
+                icon: Icons.notifications_active,
+                label: _activatingAlarm
+                    ? 'Đang kích hoạt...'
+                    : 'KÍCH HOẠT BÁO ĐỘNG',
+                colors: const [Color(0xFF42A5F5), Color(0xFF1E88E5)],
+                onTap: _onActivateAlarm,
+                loading: _activatingAlarm,
               ),
             ],
           ],

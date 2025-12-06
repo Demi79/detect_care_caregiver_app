@@ -1591,13 +1591,13 @@ class _NotificationScreenState extends State<NotificationScreen> {
   }
 }
 
-// import 'package:detect_care_app/features/notification/utils/notification_translator.dart';
-// import 'package:detect_care_app/services/notification_api_service.dart';
+// import 'package:detect_care_caregiver_app/features/notification/utils/notification_translator.dart';
+// import 'package:detect_care_caregiver_app/services/notification_api_service.dart';
 // import 'package:flutter/material.dart';
 // import 'package:intl/intl.dart';
-// import 'package:detect_care_app/core/models/notification.dart';
-// import 'package:detect_care_app/core/utils/backend_enums.dart';
-// import 'package:detect_care_app/features/notification/screens/notification_detail_screen.dart';
+// import 'package:detect_care_caregiver_app/core/models/notification.dart';
+// import 'package:detect_care_caregiver_app/core/utils/backend_enums.dart';
+// import 'package:detect_care_caregiver_app/features/notification/screens/notification_detail_screen.dart';
 
 // class NotificationScreen extends StatefulWidget {
 //   const NotificationScreen({super.key});

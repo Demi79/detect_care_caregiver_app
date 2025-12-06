@@ -52,7 +52,7 @@ class EmergencyCallHelper {
     final options = <Map<String, String>>[];
     for (final c in valid) {
       final lvl = (c.alertLevel == null) ? '' : 'CẤP ${c.alertLevel}';
-      final label = (c.name?.trim().isNotEmpty == true)
+      final label = (c.name.trim().isNotEmpty == true)
           ? '$lvl: ${c.name} — ${c.phone}'
           : '$lvl: ${c.phone}';
       options.add({'label': label, 'phone': c.phone.trim()});

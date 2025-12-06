@@ -78,8 +78,7 @@ class _CameraTimelineScreenState extends State<CameraTimelineScreen> {
                   Icons.arrow_back_ios_new,
                   color: Colors.black87,
                 ),
-                onPressed: () =>
-                    Navigator.of(context, rootNavigator: true).maybePop(),
+                onPressed: () => Navigator.of(context, rootNavigator: true).maybePop(),
               ),
               titleSpacing: 0,
               title: Column(

@@ -123,7 +123,7 @@ class _FcmQuickSendSheetState extends State<FcmQuickSendSheet> {
               ),
               const SizedBox(height: 12),
               DropdownButtonFormField<String>(
-                value: _selected,
+                initialValue: _selected,
                 items: [
                   const DropdownMenuItem(value: '_ALL_', child: Text('Tất cả')),
                   ..._customers.map(
