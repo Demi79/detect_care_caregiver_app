@@ -24,135 +24,174 @@ class SupabaseService {
     _healthcareChannel = _supabase.channel('realtime:event_detections');
 
     _healthcareChannel =
-        _healthcareChannel!.onPostgresChanges(
-          event: PostgresChangeEvent.insert,
-          schema: 'public',
-          table: 'event_detections',
-          callback: (payload) async {
-            try {
-              print('🟢 Supabase realtime callback fired');
-              try {
-                print('🔔 payload:');
+        _healthcareChannel!
+            .onPostgresChanges(
+              event: PostgresChangeEvent.insert,
+              schema: 'public',
+              table: 'event_detections',
+              callback: (payload) async {
                 try {
-                  print(payload.newRecord);
-                } catch (e) {
-                  print('⚠️ error printing payload.newRecord: $e');
-                }
+                  print('🟢 Supabase realtime callback fired');
+                  try {
+                    print('🔔 payload:');
+                    try {
+                      print(payload.newRecord);
+                    } catch (e) {
+                      print('⚠️ error printing payload.newRecord: $e');
+                    }
 
-                print('🔔 oldRecord:');
-                try {
-                  print(payload.oldRecord);
-                } catch (e) {
-                  print('⚠️ error printing payload.oldRecord: $e');
-                }
+                    print('🔔 oldRecord:');
+                    try {
+                      print(payload.oldRecord);
+                    } catch (e) {
+                      print('⚠️ error printing payload.oldRecord: $e');
+                    }
 
-                print('🔔 type:');
-                try {
-                  print(payload.eventType);
-                } catch (e) {
-                  print('⚠️ error printing payload.eventType: $e');
-                }
-              } catch (e) {
-                print(
-                  '⚠️ unexpected error while logging payload debug info: $e',
-                );
-              }
-
-              final row = payload.newRecord;
-              try {
-                debugPrint(
-                  '\n🔍 Supabase payload.newRecord (runtimeType=${row.runtimeType}):',
-                );
-                debugPrint(row.toString());
-                if (row.isEmpty) {
-                  debugPrint('⚠️ payload.newRecord is an empty Map');
-                }
-              } catch (e) {
-                debugPrint('⚠️ Error printing payload.newRecord: $e');
-              }
-
-              try {
-                final snapshot = {
-                  'newRecord': row,
-                  'oldRecord': payload.oldRecord,
-                  'eventType': payload.eventType.toString(),
-                };
-                final enc = _toJsonEncodable(snapshot);
-                debugPrint('🔔 full payload JSON:');
-                debugPrint(jsonEncode(enc), wrapWidth: 2048);
-              } catch (e) {
-                debugPrint('⚠️ Error JSON-encoding payload snapshot: $e');
-              }
-
-              var mobileEvent = await _mapEventToMobile(row);
-
-              if ((mobileEvent['event_id'] == null ||
-                      (mobileEvent['event_id'] as String).isEmpty) ||
-                  (mobileEvent['event_type'] == null ||
-                      (mobileEvent['event_type'] as String).isEmpty)) {
-                try {
-                  print(
-                    '⚠️ Realtime payload had no id/type — fetching latest event as fallback',
-                  );
-                  final recent = await fetchRecentEvents(limit: 1);
-                  if (recent.isNotEmpty) {
-                    mobileEvent = recent.first;
+                    print('🔔 type:');
+                    try {
+                      print(payload.eventType);
+                    } catch (e) {
+                      print('⚠️ error printing payload.eventType: $e');
+                    }
+                  } catch (e) {
                     print(
-                      'ℹ️ Using latest event from DB: ${mobileEvent['event_id']}',
+                      '⚠️ unexpected error while logging payload debug info: $e',
                     );
-                  } else {
-                    print('⚠️ No recent events found as fallback');
                   }
-                } catch (e) {
-                  print('⚠️ Error fetching recent events fallback: $e');
+
+                  final row = payload.newRecord ?? payload.oldRecord;
+                  try {
+                    debugPrint(
+                      '\n🔍 Supabase payload.newRecord (runtimeType=${row.runtimeType}):',
+                    );
+                    debugPrint(row.toString());
+                    if (row.isEmpty) {
+                      debugPrint('⚠️ payload.newRecord is an empty Map');
+                    }
+                  } catch (e) {
+                    debugPrint('⚠️ Error printing payload.newRecord: $e');
+                  }
+
+                  try {
+                    final snapshot = {
+                      'newRecord': row,
+                      'oldRecord': payload.oldRecord,
+                      'eventType': payload.eventType.toString(),
+                    };
+                    final enc = _toJsonEncodable(snapshot);
+                    debugPrint('🔔 full payload JSON:');
+                    debugPrint(jsonEncode(enc), wrapWidth: 2048);
+                  } catch (e) {
+                    debugPrint('⚠️ Error JSON-encoding payload snapshot: $e');
+                  }
+
+                  var mobileEvent = await _mapEventToMobile(row);
+
+                  if ((mobileEvent['event_id'] == null ||
+                          (mobileEvent['event_id'] as String).isEmpty) ||
+                      (mobileEvent['event_type'] == null ||
+                          (mobileEvent['event_type'] as String).isEmpty)) {
+                    try {
+                      print(
+                        '⚠️ Realtime payload had no id/type — fetching latest event as fallback',
+                      );
+                      final recent = await fetchRecentEvents(limit: 1);
+                      if (recent.isNotEmpty) {
+                        mobileEvent = recent.first;
+                        print(
+                          'ℹ️ Using latest event from DB: ${mobileEvent['event_id']}',
+                        );
+                      } else {
+                        print('⚠️ No recent events found as fallback');
+                      }
+                    } catch (e) {
+                      print('⚠️ Error fetching recent events fallback: $e');
+                    }
+                  }
+                  print('📥 New event (normalized mobileEvent):');
+                  print(mobileEvent.toString());
+                  print(
+                    '📥 New event summary: ${mobileEvent['event_type']} '
+                    '@${mobileEvent['detected_at']} (id=${mobileEvent['event_id']})',
+                  );
+
+                  AlertCoordinator.handle(EventLog.fromJson(mobileEvent));
+                  onEventReceived(mobileEvent);
+                } catch (e, st) {
+                  debugPrint('⚠️ Uncaught error in realtime callback: $e');
+                  debugPrint(st.toString());
                 }
-              }
-              print('📥 New event (normalized mobileEvent):');
-              print(mobileEvent.toString());
-              print(
-                '📥 New event summary: ${mobileEvent['event_type']} '
-                '@${mobileEvent['detected_at']} (id=${mobileEvent['event_id']})',
-              );
+              },
+            )
+            .onPostgresChanges(
+              event: PostgresChangeEvent.update,
+              schema: 'public',
+              table: 'event_detections',
+              callback: (payload) async {
+                try {
+                  final row = payload.newRecord ?? payload.oldRecord;
+                  var mobileEvent = await _mapEventToMobile(row);
+                  AlertCoordinator.handle(EventLog.fromJson(mobileEvent));
+                  onEventReceived(mobileEvent);
+                } catch (e, st) {
+                  debugPrint(
+                    '⚠️ Uncaught error in realtime update callback: $e',
+                  );
+                  debugPrint(st.toString());
+                }
+              },
+            )
+            .onPostgresChanges(
+              event: PostgresChangeEvent.delete,
+              schema: 'public',
+              table: 'event_detections',
+              callback: (payload) async {
+                try {
+                  final row = payload.oldRecord ?? payload.newRecord;
+                  var mobileEvent = await _mapEventToMobile(row);
 
-              AlertCoordinator.handle(EventLog.fromJson(mobileEvent));
-              onEventReceived(mobileEvent);
-            } catch (e, st) {
-              debugPrint('⚠️ Uncaught error in realtime callback: $e');
-              debugPrint(st.toString());
-            }
-          },
-        )..subscribe((status, error) {
-          if (error != null) {
-            debugPrint('❌ Supabase connection error: $error');
-            Future.delayed(const Duration(seconds: 5), () {
-              if (_healthcareChannel != null) {
-                debugPrint('🔄 Attempting to reconnect...');
-                _healthcareChannel!.subscribe();
-              }
-            });
-            return;
-          }
-
-          switch (status) {
-            case RealtimeSubscribeStatus.subscribed:
-              debugPrint('✅ Successfully connected to Supabase Realtime');
-              break;
-            case RealtimeSubscribeStatus.closed:
-              debugPrint('📴 Supabase connection closed');
-              break;
-            case RealtimeSubscribeStatus.channelError:
-              debugPrint('⚠️ Supabase channel error');
-              Future.delayed(const Duration(seconds: 3), () {
+                  AlertCoordinator.handle(EventLog.fromJson(mobileEvent));
+                  onEventReceived(mobileEvent);
+                } catch (e, st) {
+                  debugPrint(
+                    '⚠️ Uncaught error in realtime delete callback: $e',
+                  );
+                  debugPrint(st.toString());
+                }
+              },
+            )
+          ..subscribe((status, error) {
+            if (error != null) {
+              debugPrint('❌ Supabase connection error: $error');
+              Future.delayed(const Duration(seconds: 5), () {
                 if (_healthcareChannel != null) {
-                  debugPrint('🔄 Attempting to resubscribe...');
+                  debugPrint('🔄 Attempting to reconnect...');
                   _healthcareChannel!.subscribe();
                 }
               });
-              break;
-            default:
-              debugPrint('ℹ️ Supabase status: $status');
-          }
-        });
+              return;
+            }
+
+            switch (status) {
+              case RealtimeSubscribeStatus.subscribed:
+                debugPrint('✅ Successfully connected to Supabase Realtime');
+                break;
+              case RealtimeSubscribeStatus.closed:
+                debugPrint('📴 Supabase connection closed');
+                break;
+              case RealtimeSubscribeStatus.channelError:
+                debugPrint('⚠️ Supabase channel error');
+                Future.delayed(const Duration(seconds: 3), () {
+                  if (_healthcareChannel != null) {
+                    debugPrint('🔄 Attempting to resubscribe...');
+                    _healthcareChannel!.subscribe();
+                  }
+                });
+                break;
+              default:
+                debugPrint('ℹ️ Supabase status: $status');
+            }
+          });
   }
 
   Future<Map<String, dynamic>> _mapEventToMobile(
