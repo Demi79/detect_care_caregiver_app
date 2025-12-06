@@ -187,7 +187,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
         title: 'Giờ ngủ',
         onTap: () => Navigator.of(
           context,
-        ).push(MaterialPageRoute(builder: (_) => SleepCheckinScreen())),
+        ).push(MaterialPageRoute(builder: (_) => const SleepCheckinScreen())),
       ),
 
       // const SettingsDivider(),

@@ -1,15 +1,4 @@
-buildscript {
-    repositories {
-        google()
-        mavenCentral()
-    }
-    dependencies {
-        // Dùng version từ gradle.properties
-        classpath("com.android.tools.build:gradle:${properties["androidGradlePluginVersion"]}")
-        // Plugin Google Services
-        classpath("com.google.gms:google-services:4.3.15")
-    }
-}
+import com.android.build.gradle.BaseExtension
 
 allprojects {
     repositories {
@@ -18,13 +7,30 @@ allprojects {
     }
 }
 
-val newBuildDir = rootProject.layout.buildDirectory.dir("../../build").get()
-rootProject.layout.buildDirectory.set(newBuildDir)
+val newBuildDir: Directory =
+    rootProject.layout.buildDirectory
+        .dir("../../build")
+        .get()
+rootProject.layout.buildDirectory.value(newBuildDir)
 
 subprojects {
-    val newSubprojectBuildDir = newBuildDir.dir(project.name)
-    project.layout.buildDirectory.set(newSubprojectBuildDir)
-    evaluationDependsOn(":app")
+    val newSubprojectBuildDir: Directory = newBuildDir.dir(project.name)
+    project.layout.buildDirectory.value(newSubprojectBuildDir)
+}
+
+subprojects {
+    project.evaluationDependsOn(":app")
+}
+
+// Ensure namespace is set for plugins that haven't been updated for AGP 8+
+subprojects {
+    if (project.name == "flutter_vlc_player") {
+        plugins.withId("com.android.library") {
+            extensions.configure<BaseExtension>("android") {
+                namespace = "software.solid.fluttervlcplayer"
+            }
+        }
+    }
 }
 
 tasks.register<Delete>("clean") {

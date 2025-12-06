@@ -52,7 +52,7 @@ class DefaultFirebaseOptions {
 
   static const FirebaseOptions android = FirebaseOptions(
     apiKey: 'AIzaSyBTBDyDDLnYSPdScjCUCeWDwtGOOIx8Zi4',
-    appId: '1:961808917290:android:1d1313a7b9823671f33453',
+    appId: '1:961808917290:android:df73f5449a5895f8f33453',
     messagingSenderId: '961808917290',
     projectId: 'vision-ai-ecfb4',
     storageBucket: 'vision-ai-ecfb4.firebasestorage.app',
@@ -85,5 +85,4 @@ class DefaultFirebaseOptions {
     storageBucket: 'vision-ai-ecfb4.firebasestorage.app',
     measurementId: 'G-SG44CK049R',
   );
-
 }

@@ -17,7 +17,7 @@ import 'package:detect_care_caregiver_app/features/events/data/events_remote_dat
 import 'package:detect_care_caregiver_app/features/home/service/event_service.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'package:flutter_vlc_player/flutter_vlc_player.dart';
+import 'package:media_kit_video/media_kit_video.dart';
 
 /// Màn hình camera chính với kiến trúc module hóa
 class LiveCameraScreen extends StatefulWidget {
@@ -200,59 +200,40 @@ class _LiveCameraScreenState extends State<LiveCameraScreen> {
     await _stateManager.saveUrl(url);
 
     try {
-      final controller = await _cameraService.createController(url);
-      _stateManager.setController(controller);
+      final player = await _cameraService.createController(url);
+      _stateManager.setController(player);
 
-      // Listen for video size changes
-      controller.addListener(() {
-        final size = controller.value.size;
-        if (size.width > 0 && size.height > 0) {
-          final newAspectRatio = size.width / size.height;
-          if (_stateManager.videoAspectRatio != newAspectRatio) {
-            _stateManager.setVideoAspectRatio(newAspectRatio);
-          }
-        }
-      });
-
-      final started = await _cameraService.waitForPlayback(
-        CameraConstants.playbackWaitTimeout,
-      );
+      // Open media with retry logic
+      AppLogger.d('🎬 [LiveCameraScreen] Opening media with retry logic');
+      await _cameraService.openMedia(url, maxRetries: 5);
+      
+      // Play after successful open
+      await _cameraService.play();
 
       if (!mounted) return;
-
-      if (started) {
-        // Phát lại đã bắt đầu thành công. KHÔNG hiển thị status chip lớn
-        // (có thể che luồng video). Vẫn hiển thị controls tạm thời nhưng
-        // tránh đặt thông báo trạng thái cố định.
-        _stateManager.showControlsTemporarily();
-        // Xóa mọi status tạm thời trước đó để giao diện không bị che.
-        _stateManager.setStatusMessage(null);
-        // Quan trọng: tắt flag "starting" để overlay loading không còn hiển
-        // thị nữa.
-        _stateManager.setStarting(false);
-        return;
-      }
-
-      // Fallback to SD if HD fails
-      if (allowFallback && _stateManager.isHd) {
-        final sdUrl = CameraHelpers.withSubtype(url, CameraConstants.sdSubtype);
-        // context.showCameraMessage(CameraConstants.hdFallbackMessage);
-        _stateManager.updateSettings(isHd: false);
-        _stateManager.urlController.text = sdUrl;
-        _stateManager.setStarting(false);
-        await _startPlay(allowFallback: false);
-        return;
-      }
-
-      _stateManager.setStatusMessage(CameraConstants.cannotPlayMessage);
+      _stateManager.showControlsTemporarily();
+      _stateManager.setStatusMessage(null);
+      _stateManager.setStarting(false);
     } catch (e) {
       if (mounted) {
+        // Fallback to SD if HD fails
+        if (allowFallback && _stateManager.isHd) {
+          final sdUrl = CameraHelpers.withSubtype(
+            url,
+            CameraConstants.sdSubtype,
+          );
+          _stateManager.updateSettings(isHd: false);
+          _stateManager.urlController.text = sdUrl;
+          _stateManager.setStarting(false);
+          await _startPlay(allowFallback: false);
+          return;
+        }
+
         _stateManager.setStatusMessage(CameraConstants.cannotPlayMessage);
         context.showCameraMessage(CameraConstants.checkUrlMessage);
+        _stateManager.setStarting(false);
       }
     }
-
-    _stateManager.setStarting(false);
   }
 
   String? _extractCameraIdFromUrl(String? url) {
@@ -273,6 +254,7 @@ class _LiveCameraScreenState extends State<LiveCameraScreen> {
     return null;
   }
 
+  // ignore: unused_element
   Future<void> _toggleQuality() async {
     if (_stateManager.isStarting) {
       context.showCameraMessage(CameraConstants.connectingWaitMessage);
@@ -425,6 +407,7 @@ class _LiveCameraScreenState extends State<LiveCameraScreen> {
     }
   }
 
+  // ignore: unused_element
   Future<void> _togglePlayPause() async {
     try {
       final isPlaying = _stateManager.state.isPlaying;
@@ -547,10 +530,12 @@ class _LiveCameraScreenState extends State<LiveCameraScreen> {
     }
   }
 
+  // ignore: unused_element
   Future<void> _toggleMute() async {
     await _cameraService.toggleMute(_stateManager.isMuted);
   }
 
+  // ignore: unused_element
   void _toggleInfrared() {
     setState(() => _infraredEnabled = !_infraredEnabled);
     if (!mounted) return;
@@ -572,6 +557,7 @@ class _LiveCameraScreenState extends State<LiveCameraScreen> {
     }
   }
 
+  // ignore: unused_element
   Future<String> _chooseEmergencyPhone() async {
     String phone = '115';
     try {
@@ -938,11 +924,9 @@ class _LiveCameraScreenState extends State<LiveCameraScreen> {
                 fit: StackFit.expand,
                 children: [
                   if (hasController)
-                    VlcPlayer(
-                      controller: _cameraService.controller!,
-                      aspectRatio: state.videoAspectRatio ?? 16 / 9,
-                      placeholder: const Center(
-                        child: CircularProgressIndicator(),
+                    Video(
+                      controller: VideoController(
+                        _cameraService.player!,
                       ),
                     )
                   else
@@ -1057,9 +1041,9 @@ class _LiveCameraScreenState extends State<LiveCameraScreen> {
             ),
           ),
           const SizedBox(width: 6),
-          Text(
+          const Text(
             'LIVE',
-            style: const TextStyle(
+            style: TextStyle(
               color: Colors.white,
               fontSize: 12,
               fontWeight: FontWeight.w600,
@@ -1373,11 +1357,11 @@ class _LiveCameraScreenState extends State<LiveCameraScreen> {
         child: Stack(
           fit: StackFit.expand,
           children: [
-            if (_cameraService.controller != null)
-              VlcPlayer(
-                controller: _cameraService.controller!,
-                aspectRatio: state.videoAspectRatio ?? 16 / 9,
-                placeholder: const Center(child: CircularProgressIndicator()),
+            if (_cameraService.player != null)
+              Video(
+                controller: VideoController(
+                  _cameraService.player!,
+                ),
               )
             else
               GestureDetector(

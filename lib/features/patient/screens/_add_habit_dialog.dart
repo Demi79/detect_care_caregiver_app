@@ -24,7 +24,7 @@ class AddHabitDialogState extends State<AddHabitDialog> {
   @override
   Widget build(BuildContext context) {
     return AlertDialog(
-      title: Text('Thêm thói quen'),
+      title: const Text('Thêm thói quen'),
       content: SingleChildScrollView(
         child: Form(
           key: _formKey,
@@ -32,14 +32,14 @@ class AddHabitDialogState extends State<AddHabitDialog> {
             mainAxisSize: MainAxisSize.min,
             children: [
               TextFormField(
-                decoration: InputDecoration(labelText: 'Tên thói quen'),
+                decoration: const InputDecoration(labelText: 'Tên thói quen'),
                 onChanged: (v) => _habitName = v,
                 validator: (v) =>
                     v == null || v.isEmpty ? 'Nhập tên thói quen' : null,
               ),
               DropdownButtonFormField<String>(
-                decoration: InputDecoration(labelText: 'Loại thói quen'),
-                items: [
+                decoration: const InputDecoration(labelText: 'Loại thói quen'),
+                items: const [
                   DropdownMenuItem(value: 'sleep', child: Text('Ngủ nghỉ')),
                   DropdownMenuItem(value: 'meal', child: Text('Ăn uống')),
                   DropdownMenuItem(
@@ -59,21 +59,21 @@ class AddHabitDialogState extends State<AddHabitDialog> {
                     v == null || v.isEmpty ? 'Chọn loại thói quen' : null,
               ),
               TextFormField(
-                decoration: InputDecoration(labelText: 'Mô tả'),
+                decoration: const InputDecoration(labelText: 'Mô tả'),
                 onChanged: (v) => _description = v,
               ),
               TextFormField(
-                decoration: InputDecoration(labelText: 'Giờ điển hình'),
+                decoration: const InputDecoration(labelText: 'Giờ điển hình'),
                 onChanged: (v) => _typicalTime = v,
               ),
               TextFormField(
-                decoration: InputDecoration(labelText: 'Thời lượng (phút)'),
+                decoration: const InputDecoration(labelText: 'Thời lượng (phút)'),
                 keyboardType: TextInputType.number,
                 onChanged: (v) => _durationMinutes = int.tryParse(v),
               ),
               DropdownButtonFormField<String>(
-                decoration: InputDecoration(labelText: 'Tần suất'),
-                items: [
+                decoration: const InputDecoration(labelText: 'Tần suất'),
+                items: const [
                   DropdownMenuItem(value: 'daily', child: Text('Hàng ngày')),
                   DropdownMenuItem(value: 'weekly', child: Text('Hàng tuần')),
                   DropdownMenuItem(value: 'custom', child: Text('Tuỳ chỉnh')),
@@ -81,21 +81,21 @@ class AddHabitDialogState extends State<AddHabitDialog> {
                 onChanged: (v) => _frequency = v,
               ),
               TextFormField(
-                decoration: InputDecoration(
+                decoration: const InputDecoration(
                   labelText: 'Các ngày (cách nhau bằng dấu phẩy)',
                 ),
                 onChanged: (v) => _daysOfWeek = v,
               ),
               TextFormField(
-                decoration: InputDecoration(labelText: 'Địa điểm'),
+                decoration: const InputDecoration(labelText: 'Địa điểm'),
                 onChanged: (v) => _location = v,
               ),
               TextFormField(
-                decoration: InputDecoration(labelText: 'Ghi chú'),
+                decoration: const InputDecoration(labelText: 'Ghi chú'),
                 onChanged: (v) => _notes = v,
               ),
               SwitchListTile(
-                title: Text('Đang áp dụng'),
+                title: const Text('Đang áp dụng'),
                 value: _isActive,
                 onChanged: (v) => setState(() => _isActive = v),
               ),
@@ -106,7 +106,7 @@ class AddHabitDialogState extends State<AddHabitDialog> {
       actions: [
         TextButton(
           onPressed: () => Navigator.of(context).pop(),
-          child: Text('Huỷ'),
+          child: const Text('Huỷ'),
         ),
         ElevatedButton(
           onPressed: () {
@@ -131,7 +131,7 @@ class AddHabitDialogState extends State<AddHabitDialog> {
               );
             }
           },
-          child: Text('Lưu'),
+          child: const Text('Lưu'),
         ),
       ],
     );

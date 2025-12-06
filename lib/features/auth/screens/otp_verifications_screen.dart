@@ -128,11 +128,11 @@ class _OtpVerificationsScreenState extends State<OtpVerificationsScreen> {
                         color: const Color(0xFF2E7BF0).withValues(alpha: 0.1),
                       ),
                     ),
-                    child: Column(
+                    child: const Column(
                       children: [
                         Row(
                           mainAxisAlignment: MainAxisAlignment.center,
-                          children: const [
+                          children: [
                             Icon(
                               Icons.shield_rounded,
                               color: Color(0xFF2E7BF0),
@@ -149,12 +149,12 @@ class _OtpVerificationsScreenState extends State<OtpVerificationsScreen> {
                             ),
                           ],
                         ),
-                        const SizedBox(height: 8),
+                        SizedBox(height: 8),
                         Text(
                           'Xác thực OTP để bảo vệ tài khoản của bạn',
                           style: TextStyle(
                             fontSize: 14,
-                            color: const Color(0xFF64748B),
+                            color: Color(0xFF64748B),
                           ),
                           textAlign: TextAlign.center,
                         ),
@@ -190,9 +190,9 @@ class _OtpVerificationsScreenState extends State<OtpVerificationsScreen> {
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.stretch,
                       children: [
-                        Text(
+                        const Text(
                           'Nhập mã OTP đã gửi đến',
-                          style: const TextStyle(
+                          style: TextStyle(
                             fontSize: 16,
                             fontWeight: FontWeight.w500,
                             color: Color(0xFF1E3A8A),
@@ -216,16 +216,16 @@ class _OtpVerificationsScreenState extends State<OtpVerificationsScreen> {
                             padding: const EdgeInsets.only(bottom: 8),
                             child: Row(
                               children: [
-                                Icon(
+                                const Icon(
                                   Icons.error_outline,
                                   color: Colors.red,
                                   size: 18,
                                 ),
-                                SizedBox(width: 6),
+                                const SizedBox(width: 6),
                                 Expanded(
                                   child: Text(
                                     _serverMessage!,
-                                    style: TextStyle(color: Colors.red),
+                                    style: const TextStyle(color: Colors.red),
                                   ),
                                 ),
                               ],
@@ -314,7 +314,7 @@ class _OtpVerificationsScreenState extends State<OtpVerificationsScreen> {
                 TextButton(
                   onPressed: () => Navigator.pushReplacement(
                     context,
-                    MaterialPageRoute(builder: (_) => PhoneLoginScreen()),
+                    MaterialPageRoute(builder: (_) => const PhoneLoginScreen()),
                   ),
                   child: const Text(
                     'Quay lại đăng nhập bằng số điện thoại',

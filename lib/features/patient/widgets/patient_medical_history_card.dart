@@ -7,7 +7,7 @@ class PatientMedicalHistoryCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    if (record == null) return SizedBox.shrink();
+    if (record == null) return const SizedBox.shrink();
     return Card(
       margin: const EdgeInsets.symmetric(vertical: 8, horizontal: 0),
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(18)),

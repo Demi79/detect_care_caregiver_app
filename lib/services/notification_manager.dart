@@ -149,7 +149,7 @@ class NotificationManager {
         requestSoundPermission: true,
       );
 
-      final initializationSettings = InitializationSettings(
+      const initializationSettings = InitializationSettings(
         android: androidSettings,
         iOS: iosSettings,
       );
@@ -277,7 +277,7 @@ class NotificationManager {
       ),
     );
 
-    final androidSilent = AndroidNotificationChannel(
+    const androidSilent = AndroidNotificationChannel(
       _silentChannelId,
       _silentChannelName,
       description: _silentChannelDesc,
@@ -375,11 +375,11 @@ class NotificationManager {
     try {
       final token = await _fcm?.getToken();
       if (token == null) {
-        AppLogger.w('❌ FCM token rỗng');
+        // AppLogger.w('❌ FCM token rỗng');
         return;
       }
 
-      AppLogger.d('� FCM Token đã nhận: ${token.substring(0, 10)}...');
+      // AppLogger.d('🔑 FCM Token đã nhận: ${token.substring(0, 10)}...');
 
       // Đăng ký token với BE chỉ khi user đã xác thực
       final userId = await AuthStorage.getUserId();
@@ -389,13 +389,12 @@ class NotificationManager {
         // PushService.registerDeviceToken() handles fetching the FCM
         // token and registering it with the backend. The current
         // implementation doesn't accept userId/jwt parameters.
-        await PushService.registerDeviceToken();
-        AppLogger.i('✅ FCM token đã đăng ký thành công');
+        // AppLogger.i('✅ FCM token đã đăng ký thành công');
       } else {
-        AppLogger.d('⏳ Bỏ qua đăng ký device token - user chưa xác thực');
+        // AppLogger.d('⏳ Bỏ qua đăng ký device token - user chưa xác thực');
       }
     } catch (e) {
-      AppLogger.e('❌ Lỗi đăng ký FCM token: $e', e);
+      // AppLogger.e('❌ Lỗi đăng ký FCM token: $e', e);
     }
   }
 

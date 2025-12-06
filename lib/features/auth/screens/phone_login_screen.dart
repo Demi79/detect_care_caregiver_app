@@ -150,12 +150,12 @@ class _PhoneLoginScreenState extends State<PhoneLoginScreen>
 
           const SizedBox(height: 8),
 
-          Text(
+          const Text(
             'Hệ thống giám sát sức khỏe gia đình',
             textAlign: TextAlign.center,
             style: TextStyle(
               fontSize: 14,
-              color: const Color(0xFF64748B),
+              color: Color(0xFF64748B),
               fontWeight: FontWeight.w400,
               height: 1.4,
             ),
@@ -239,11 +239,11 @@ class _PhoneLoginScreenState extends State<PhoneLoginScreen>
 
             const SizedBox(height: 8),
 
-            Text(
+            const Text(
               'Vui lòng nhập số điện thoại đã đăng kí',
               style: TextStyle(
                 fontSize: 14,
-                color: const Color(0xFF64748B),
+                color: Color(0xFF64748B),
                 fontWeight: FontWeight.w400,
               ),
               textAlign: TextAlign.center,
@@ -283,8 +283,8 @@ class _PhoneLoginScreenState extends State<PhoneLoginScreen>
                   ),
                   decoration: InputDecoration(
                     hintText: 'Nhập số điện thoại của bạn',
-                    hintStyle: TextStyle(
-                      color: const Color(0xFF9CA3AF),
+                    hintStyle: const TextStyle(
+                      color: Color(0xFF9CA3AF),
                       fontSize: 15,
                       fontWeight: FontWeight.w400,
                     ),
@@ -423,12 +423,12 @@ class _PhoneLoginScreenState extends State<PhoneLoginScreen>
                 Expanded(
                   child: Container(height: 1, color: const Color(0xFFE5E7EB)),
                 ),
-                Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 16),
+                const Padding(
+                  padding: EdgeInsets.symmetric(horizontal: 16),
                   child: Text(
                     'Hoặc',
                     style: TextStyle(
-                      color: const Color(0xFF9CA3AF),
+                      color: Color(0xFF9CA3AF),
                       fontSize: 13,
                       fontWeight: FontWeight.w400,
                     ),

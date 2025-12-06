@@ -28,20 +28,20 @@ int effectiveMonthly(Plan p, int selectedTerm) {
 String savingTextFor(Plan p, int selectedTerm) {
   if (selectedTerm == 6) {
     if (p.code == 'pro') {
-      final saving = 99000 * 6 - 564300;
+      const saving = 99000 * 6 - 564300;
       return 'Tiết kiệm ${formatVND(saving)} (-5%)';
     }
     if (p.code == 'premium') {
-      final saving = 199000 * 6 - 1134300;
+      const saving = 199000 * 6 - 1134300;
       return 'Tiết kiệm ${formatVND(saving)} (-5%)';
     }
   } else if (selectedTerm == 12) {
     if (p.code == 'pro') {
-      final saving = 99000 * 12 - 990000;
+      const saving = 99000 * 12 - 990000;
       return 'Tiết kiệm ${formatVND(saving)} (~2 tháng miễn phí)';
     }
     if (p.code == 'premium') {
-      final saving = 199000 * 12 - 1990000;
+      const saving = 199000 * 12 - 1990000;
       return 'Tiết kiệm ${formatVND(saving)} (~2 tháng miễn phí)';
     }
   }

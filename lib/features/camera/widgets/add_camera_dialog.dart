@@ -491,7 +491,7 @@ class _AddCameraDialogState extends State<AddCameraDialog>
     final colorScheme = theme.colorScheme;
 
     return DropdownButtonFormField<String>(
-      initialValue: value,
+      value: value,
       decoration: InputDecoration(
         labelText: label,
         prefixIcon: Icon(icon, color: colorScheme.onSurfaceVariant),

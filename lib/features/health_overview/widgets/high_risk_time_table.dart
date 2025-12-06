@@ -171,7 +171,7 @@ class HighRiskTimeTable extends StatelessWidget {
         child: Row(
           children: [
             if (isHighlight)
-              Icon(
+              const Icon(
                 Icons.local_fire_department_rounded,
                 size: 16,
                 color: AppTheme.dangerColor,

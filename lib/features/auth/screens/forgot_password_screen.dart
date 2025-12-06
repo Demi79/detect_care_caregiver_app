@@ -208,12 +208,12 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen>
 
           const SizedBox(height: 4),
 
-          Text(
+          const Text(
             'Nhập số điện thoại để nhận mã khôi phục',
             textAlign: TextAlign.center,
             style: TextStyle(
               fontSize: 14,
-              color: const Color(0xFF64748B),
+              color: Color(0xFF64748B),
               fontWeight: FontWeight.w400,
               height: 1.4,
             ),
@@ -356,8 +356,8 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen>
                 ),
                 decoration: InputDecoration(
                   hintText: 'Nhập số điện thoại của bạn',
-                  hintStyle: TextStyle(
-                    color: const Color(0xFF9CA3AF),
+                  hintStyle: const TextStyle(
+                    color: Color(0xFF9CA3AF),
                     fontSize: 15,
                     fontWeight: FontWeight.w400,
                   ),
@@ -454,10 +454,10 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen>
         Row(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            Text(
+            const Text(
               'Nhớ mật khẩu? ',
               style: TextStyle(
-                color: const Color(0xFF6B7280),
+                color: Color(0xFF6B7280),
                 fontSize: 14,
                 fontWeight: FontWeight.w400,
               ),

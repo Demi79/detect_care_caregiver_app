@@ -148,14 +148,14 @@ class _EditUserScreenState extends State<EditUserScreen> {
         ),
       ),
       body: _loading
-          ? Center(
+          ? const Center(
               child: Column(
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
-                  const CircularProgressIndicator(
+                  CircularProgressIndicator(
                     valueColor: AlwaysStoppedAnimation<Color>(primaryBlue),
                   ),
-                  const SizedBox(height: 16),
+                  SizedBox(height: 16),
                   Text(
                     'Đang cập nhật...',
                     style: TextStyle(color: textSecondary, fontSize: 14),
@@ -398,10 +398,10 @@ class _EditUserScreenState extends State<EditUserScreen> {
                 borderRadius: BorderRadius.circular(12),
                 border: Border.all(color: lightBlue),
               ),
-              child: Row(
+              child: const Row(
                 children: [
-                  const Icon(Icons.info_outline, color: primaryBlue, size: 20),
-                  const SizedBox(width: 12),
+                  Icon(Icons.info_outline, color: primaryBlue, size: 20),
+                  SizedBox(width: 12),
                   Expanded(
                     child: Text(
                       'Chỉ những trường đã thay đổi mới được cập nhật',
@@ -434,7 +434,7 @@ class _EditUserScreenState extends State<EditUserScreen> {
       ),
       decoration: InputDecoration(
         labelText: label,
-        labelStyle: TextStyle(color: textSecondary, fontSize: 14),
+        labelStyle: const TextStyle(color: textSecondary, fontSize: 14),
         prefixIcon: Icon(icon, color: primaryBlue, size: 22),
         filled: true,
         fillColor: backgroundColor,

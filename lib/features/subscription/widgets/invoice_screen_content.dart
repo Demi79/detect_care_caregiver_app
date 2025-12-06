@@ -67,7 +67,7 @@ class InvoiceScreenContent extends StatelessWidget {
                     const SizedBox(height: 12),
                     ElevatedButton(
                       onPressed: () => onJump(1),
-                      child: Text(L10nVi.retry),
+                      child: const Text(L10nVi.retry),
                     ),
                   ],
                 ),
@@ -86,9 +86,9 @@ class InvoiceScreenContent extends StatelessWidget {
                       color: Colors.grey.shade300,
                     ),
                     const SizedBox(height: 12),
-                    Text(
+                    const Text(
                       L10nVi.noInvoices,
-                      style: const TextStyle(
+                      style: TextStyle(
                         fontSize: 16,
                         fontWeight: FontWeight.w600,
                       ),
@@ -103,7 +103,7 @@ class InvoiceScreenContent extends StatelessWidget {
                     ElevatedButton.icon(
                       onPressed: () => onJump(1),
                       icon: const Icon(Icons.refresh_outlined),
-                      label: Text(L10nVi.retry),
+                      label: const Text(L10nVi.retry),
                     ),
                   ],
                 ),
@@ -128,7 +128,7 @@ class InvoiceScreenContent extends StatelessWidget {
                             child: Center(
                               child: isLoadingMore
                                   ? const CircularProgressIndicator()
-                                  : Text(L10nVi.pullToLoadMore),
+                                  : const Text(L10nVi.pullToLoadMore),
                             ),
                           );
                         }

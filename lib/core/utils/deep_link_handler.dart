@@ -343,7 +343,7 @@ class DeepLinkHandler {
         // SubscriptionStore up to `maxAttempts` times with exponential
         // backoff until the store reports a plan code that matches the
         // expected `planCode` we derived earlier.
-        final int maxAttempts = 4;
+        const int maxAttempts = 4;
         int attempt = 0;
         bool matched = false;
         try {

@@ -67,9 +67,9 @@ class AuthProvider extends ChangeNotifier {
     final bool hasAssigned =
         user!.isAssigned || await _hasAcceptedAssignmentFor(user!.id);
 
-    print(
-      '[Auth] caregiverLogin -> hasAssigned=$hasAssigned, isAssigned=${user!.isAssigned}',
-    );
+    // print(
+    //   '[Auth] caregiverLogin -> hasAssigned=$hasAssigned, isAssigned=${user!.isAssigned}',
+    // );
 
     if (hasAssigned || user!.isAssigned) {
       _set(AuthStatus.authenticated);
@@ -80,18 +80,18 @@ class AuthProvider extends ChangeNotifier {
   }
 
   Future<void> sendOtp(String phone) async {
-    if (kDebugMode) {
-      print('[Auth] Sending OTP to phone: $phone');
-    }
+    // if (kDebugMode) {
+    //   print('[Auth] Sending OTP to phone: $phone');
+    // }
     final result = await repo.sendOtp(phone);
     lastOtpRequestMessage = result.message;
     lastOtpCallId = result.callId;
     _pendingPhone = phone;
-    if (kDebugMode) {
-      print(
-        '[Auth] OTP sent successfully. Message: ${result.message}, CallId: ${result.callId}',
-      );
-    }
+    // if (kDebugMode) {
+    //   print(
+    //     '[Auth] OTP sent successfully. Message: ${result.message}, CallId: ${result.callId}',
+    //   );
+    // }
     _set(AuthStatus.otpSent);
   }
 
@@ -109,15 +109,15 @@ class AuthProvider extends ChangeNotifier {
 
       user = res.user;
       _cachedUserId = user!.id;
-      if (kDebugMode) {
-        print('[Auth] OTP verified -> authenticated as ${user!.fullName}');
-      }
+      // if (kDebugMode) {
+      //   print('[Auth] OTP verified -> authenticated as ${user!.fullName}');
+      // }
       final bool hasAssigned =
           user!.isAssigned || await _hasAcceptedAssignmentFor(user!.id);
 
-      print(
-        '[Auth] verifyOtp -> hasAssigned=$hasAssigned, isAssigned=${user!.isAssigned}',
-      );
+      // print(
+      //   '[Auth] verifyOtp -> hasAssigned=$hasAssigned, isAssigned=${user!.isAssigned}',
+      // );
 
       if (hasAssigned || user!.isAssigned) {
         _set(AuthStatus.authenticated);
@@ -125,7 +125,7 @@ class AuthProvider extends ChangeNotifier {
         _set(AuthStatus.assignVerified);
       }
     } catch (err) {
-      if (kDebugMode) print('[Auth] verifyOtp failed: $err');
+      // if (kDebugMode) print('[Auth] verifyOtp failed: $err');
       _set(AuthStatus.unauthenticated);
       rethrow;
     }
@@ -144,11 +144,11 @@ class AuthProvider extends ChangeNotifier {
   String? get currentUserId => user?.id ?? _cachedUserId;
 
   void _set(AuthStatus s) {
-    if (kDebugMode) {
-      final supaUser = Supabase.instance.client.auth.currentUser;
-      print('[Auth] status: ${status.name} -> ${s.name}');
-      print('[Auth] currentUser: ${user?.id}, supabaseUser: ${supaUser?.id}');
-    }
+    // if (kDebugMode) {
+    //   final supaUser = Supabase.instance.client.auth.currentUser;
+    //   print('[Auth] status: ${status.name} -> ${s.name}');
+    //   print('[Auth] currentUser: ${user?.id}, supabaseUser: ${supaUser?.id}');
+    // }
     status = s;
     notifyListeners();
   }
@@ -169,9 +169,9 @@ class AuthProvider extends ChangeNotifier {
         final bool hasAssigned =
             user!.isAssigned || await _hasAcceptedAssignmentFor(user!.id);
 
-        print(
-          '[Auth] _loadFromPrefs -> hasAssigned=$hasAssigned, isAssigned=${user!.isAssigned}',
-        );
+        // print(
+        //   '[Auth] _loadFromPrefs -> hasAssigned=$hasAssigned, isAssigned=${user!.isAssigned}',
+        // );
 
         if (hasAssigned || user!.isAssigned) {
           _set(AuthStatus.authenticated);
@@ -202,9 +202,9 @@ class AuthProvider extends ChangeNotifier {
         final bool hasAssigned =
             user!.isAssigned || await _hasAcceptedAssignmentFor(user!.id);
 
-        print(
-          '[Auth] reloadUser -> hasAssigned=$hasAssigned, prevAssigned=$prevAssigned, isAssigned=${user!.isAssigned}',
-        );
+        // print(
+        //   '[Auth] reloadUser -> hasAssigned=$hasAssigned, prevAssigned=$prevAssigned, isAssigned=${user!.isAssigned}',
+        // );
 
         if (prevAssigned && !hasAssigned) {
           try {
@@ -224,7 +224,7 @@ class AuthProvider extends ChangeNotifier {
         }
       }
     } catch (e) {
-      print("[Auth] reloadUser error: $e");
+      // print("[Auth] reloadUser error: $e");
     }
   }
 
@@ -321,7 +321,7 @@ class AuthProvider extends ChangeNotifier {
                   try {
                     final Map row = payload.newRecord;
                     if (recordContainsUid(row, uid)) {
-                      print('[Auth] invitation insert for me: $row');
+                      // print('[Auth] invitation insert for me: $row');
                       await reloadUser();
                     } else {
                       print('[Auth] invitation insert (not mine): $row');
@@ -339,7 +339,7 @@ class AuthProvider extends ChangeNotifier {
                   try {
                     final Map row = payload.newRecord;
                     if (recordContainsUid(row, uid)) {
-                      print('[Auth] invitation update for me: $row');
+                      // print('[Auth] invitation update for me: $row');
                       await reloadUser();
                     } else {
                       print('[Auth] invitation update (not mine): $row');
@@ -401,9 +401,9 @@ class AuthProvider extends ChangeNotifier {
             //   },
             // )
             ..subscribe((status, error) {
-              print('[Auth] invitation channel status: $status');
+              // print('[Auth] invitation channel status: $status');
               if (error != null) {
-                print('[Auth] Supabase invitation channel error: $error');
+                // print('[Auth] Supabase invitation channel error: $error');
                 Future.delayed(const Duration(seconds: 5), () {
                   if (_invitationChannel != null) {
                     _invitationChannel!.subscribe();
@@ -411,9 +411,9 @@ class AuthProvider extends ChangeNotifier {
                 });
                 return;
               }
-              if (kDebugMode) {
-                print('[Auth] invitation channel status: $status');
-              }
+              // if (kDebugMode) {
+              //   print('[Auth] invitation channel status: $status');
+              // }
             });
     } catch (e) {
       print('[Auth] _ensureInvitationSubscription failed: $e');
@@ -423,12 +423,12 @@ class AuthProvider extends ChangeNotifier {
   void _disposeInvitationSubscription() {
     try {
       if (_invitationChannel != null) {
-        if (kDebugMode) print('[Auth] disposing invitation channel');
+        // if (kDebugMode) print('[Auth] disposing invitation channel');
         _invitationChannel!.unsubscribe();
         _invitationChannel = null;
       }
     } catch (e) {
-      print('[Auth] _disposeInvitationSubscription error: $e');
+      // print('[Auth] _disposeInvitationSubscription error: $e');
     }
   }
 
@@ -438,7 +438,7 @@ class AuthProvider extends ChangeNotifier {
       final list = await ds.listPending(status: 'accepted');
       return list.any((a) => a.caregiverId == userId && a.isActive);
     } catch (e) {
-      if (kDebugMode) print('[Auth] _hasAcceptedAssignmentFor error: $e');
+      // if (kDebugMode) print('[Auth] _hasAcceptedAssignmentFor error: $e');
       return false;
     }
   }

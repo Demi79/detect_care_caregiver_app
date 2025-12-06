@@ -48,7 +48,7 @@ class _SixDigitInputFieldState extends State<SixDigitInputField> {
   Widget build(BuildContext context) {
     return LayoutBuilder(
       builder: (context, constraints) {
-        final totalSpacing = _spacing * 5;
+        const totalSpacing = _spacing * 5;
         final boxSize = (constraints.maxWidth - totalSpacing) / 6;
 
         return Row(

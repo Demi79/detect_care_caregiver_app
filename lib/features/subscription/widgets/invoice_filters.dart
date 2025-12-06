@@ -29,16 +29,16 @@ Future<void> showInvoiceFiltersModal({
         child: Wrap(
           runSpacing: 16,
           children: [
-            Text(
+            const Text(
               L10nVi.filterSortTitle,
-              style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w700),
+              style: TextStyle(fontSize: 16, fontWeight: FontWeight.w700),
             ),
             Row(
               children: [
-                Text('${L10nVi.status}: '),
+                const Text('${L10nVi.status}: '),
                 const SizedBox(width: 8),
                 SegmentedButton<String>(
-                  segments: [
+                  segments: const [
                     ButtonSegment(
                       value: 'paid',
                       label: Text(L10nVi.statusPaid),
@@ -51,11 +51,11 @@ Future<void> showInvoiceFiltersModal({
             ),
             Row(
               children: [
-                Text('${L10nVi.source}: '),
+                const Text('${L10nVi.source}: '),
                 const SizedBox(width: 8),
                 DropdownButton<String>(
                   value: source,
-                  items: [
+                  items: const [
                     DropdownMenuItem(value: 'all', child: Text(L10nVi.all)),
                     DropdownMenuItem(value: 'vnpay', child: Text(L10nVi.vnpay)),
                     DropdownMenuItem(
@@ -69,11 +69,11 @@ Future<void> showInvoiceFiltersModal({
             ),
             Row(
               children: [
-                Text('${L10nVi.sort}: '),
+                const Text('${L10nVi.sort}: '),
                 const SizedBox(width: 8),
                 DropdownButton<String>(
                   value: sort,
-                  items: [
+                  items: const [
                     DropdownMenuItem(
                       value: 'date_desc',
                       child: Text(L10nVi.newest),
@@ -143,7 +143,7 @@ Future<void> showInvoiceFiltersModal({
                     onJumpToPage(p);
                     HapticFeedback.lightImpact();
                   },
-                  child: Text(L10nVi.go),
+                  child: const Text(L10nVi.go),
                 ),
               ],
             ),

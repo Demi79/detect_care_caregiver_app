@@ -186,7 +186,7 @@ class CameraTimelineRow extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final hasClip = entry.clip != null;
-    final clipHeight = 96.0 + 16 + 10; // thumbnail + paddings
+    const clipHeight = 96.0 + 16 + 10; // thumbnail + paddings
 
     return Row(
       crossAxisAlignment: CrossAxisAlignment.start,

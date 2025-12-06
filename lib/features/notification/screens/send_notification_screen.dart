@@ -298,12 +298,12 @@ class _SendNotificationScreenState extends State<SendNotificationScreen> {
       appBar: AppBar(
         backgroundColor: Colors.white,
         elevation: 0,
-        title: Text(
+        title: const Text(
           'Gửi thông báo',
           style: TextStyle(color: AppTheme.text, fontWeight: FontWeight.w600),
         ),
         leading: IconButton(
-          icon: Icon(Icons.arrow_back, color: AppTheme.text),
+          icon: const Icon(Icons.arrow_back, color: AppTheme.text),
           onPressed: () => Navigator.of(context).pop(),
         ),
       ),
@@ -343,7 +343,7 @@ class _SendNotificationScreenState extends State<SendNotificationScreen> {
                   const SizedBox(height: 20),
 
                   DropdownButtonFormField<String>(
-                    initialValue: _selectedReceiver,
+                    value: _selectedReceiver,
                     items: <DropdownMenuItem<String>>[
                       const DropdownMenuItem(
                         value: '_ALL_',
@@ -450,7 +450,7 @@ class _SendNotificationScreenState extends State<SendNotificationScreen> {
                 borderRadius: BorderRadius.circular(12),
                 border: Border.all(color: const Color(0xFFE2E8F0)),
               ),
-              child: Column(
+              child: const Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Text(
@@ -461,7 +461,7 @@ class _SendNotificationScreenState extends State<SendNotificationScreen> {
                       color: AppTheme.text,
                     ),
                   ),
-                  const SizedBox(height: 8),
+                  SizedBox(height: 8),
                   Text(
                     '• Chọn người nhận hoặc "Tất cả" để gửi cho tất cả\n• Nhập nội dung thông báo rõ ràng\n• Thông báo sẽ được gửi qua push notification',
                     style: TextStyle(

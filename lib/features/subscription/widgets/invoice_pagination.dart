@@ -45,11 +45,11 @@ class InvoicePagination extends StatelessWidget {
                   children: [
                     TextButton(
                       onPressed: page > 1 && !isLoading ? onPrev : null,
-                      child: Text(L10nVi.previous),
+                      child: const Text(L10nVi.previous),
                     ),
                     TextButton(
                       onPressed: hasMore && !isLoading ? onNext : null,
-                      child: Text(L10nVi.next),
+                      child: const Text(L10nVi.next),
                     ),
                   ],
                 ),
@@ -82,7 +82,7 @@ class InvoicePagination extends StatelessWidget {
             children: [
               TextButton(
                 onPressed: page > 1 && !isLoading ? onPrev : null,
-                child: Text(L10nVi.previous),
+                child: const Text(L10nVi.previous),
               ),
 
               Expanded(
@@ -208,7 +208,7 @@ class InvoicePagination extends StatelessWidget {
 
               TextButton(
                 onPressed: hasMore && !isLoading ? onNext : null,
-                child: Text(L10nVi.next),
+                child: const Text(L10nVi.next),
               ),
             ],
           ),

@@ -972,9 +972,9 @@ class _AssignmentsScreenState extends State<AssignmentsScreen> {
       children: [
         Container(
           padding: const EdgeInsets.fromLTRB(20, 24, 20, 16),
-          decoration: BoxDecoration(
+          decoration: const BoxDecoration(
             color: AssignmentsConstants.primaryBlue,
-            borderRadius: const BorderRadius.only(
+            borderRadius: BorderRadius.only(
               bottomLeft: Radius.circular(24),
               bottomRight: Radius.circular(24),
             ),
@@ -985,11 +985,11 @@ class _AssignmentsScreenState extends State<AssignmentsScreen> {
                 decoration: BoxDecoration(
                   color: Colors.white,
                   borderRadius: BorderRadius.circular(16),
-                  boxShadow: [
+                  boxShadow: const [
                     BoxShadow(
-                      color: const Color.fromRGBO(0, 0, 0, 0.1),
+                      color: Color.fromRGBO(0, 0, 0, 0.1),
                       blurRadius: 10,
-                      offset: const Offset(0, 4),
+                      offset: Offset(0, 4),
                     ),
                   ],
                 ),
@@ -1000,7 +1000,7 @@ class _AssignmentsScreenState extends State<AssignmentsScreen> {
                     hintText:
                         'Nhập tên người dùng, email, họ tên người chăm sóc...',
                     hintStyle: TextStyle(color: Colors.grey.shade600),
-                    prefixIcon: Icon(
+                    prefixIcon: const Icon(
                       Icons.search,
                       color: AssignmentsConstants.primaryBlue,
                       size: 24,
@@ -1020,10 +1020,10 @@ class _AssignmentsScreenState extends State<AssignmentsScreen> {
                 ),
               ),
               const SizedBox(height: 12),
-              Text(
+              const Text(
                 'Gõ đúng thông tin để thấy người chăm sóc tương ứng. Chạm vào để xác nhận gán.',
                 style: TextStyle(
-                  color: const Color.fromRGBO(255, 255, 255, 0.9),
+                  color: Color.fromRGBO(255, 255, 255, 0.9),
                   fontSize: 14,
                 ),
                 textAlign: TextAlign.center,
@@ -1108,11 +1108,11 @@ class _AssignmentsScreenState extends State<AssignmentsScreen> {
       decoration: BoxDecoration(
         color: Colors.white,
         borderRadius: BorderRadius.circular(16),
-        boxShadow: [
+        boxShadow: const [
           BoxShadow(
-            color: const Color.fromRGBO(0, 0, 0, 0.05),
+            color: Color.fromRGBO(0, 0, 0, 0.05),
             blurRadius: 10,
-            offset: const Offset(0, 4),
+            offset: Offset(0, 4),
           ),
         ],
       ),
@@ -1121,16 +1121,16 @@ class _AssignmentsScreenState extends State<AssignmentsScreen> {
         children: [
           Container(
             padding: const EdgeInsets.all(16),
-            decoration: BoxDecoration(
+            decoration: const BoxDecoration(
               color: AssignmentsConstants.lightBlue,
-              borderRadius: const BorderRadius.only(
+              borderRadius: BorderRadius.only(
                 topLeft: Radius.circular(16),
                 topRight: Radius.circular(16),
               ),
             ),
             child: Row(
               children: [
-                Icon(
+                const Icon(
                   Icons.assignment_ind,
                   color: AssignmentsConstants.primaryBlue,
                   size: 20,
@@ -1138,7 +1138,7 @@ class _AssignmentsScreenState extends State<AssignmentsScreen> {
                 const SizedBox(width: 8),
                 Text(
                   'Người chăm sóc được mời (${_assignments.length})',
-                  style: TextStyle(
+                  style: const TextStyle(
                     fontWeight: FontWeight.w600,
                     color: AssignmentsConstants.darkBlue,
                     fontSize: 16,

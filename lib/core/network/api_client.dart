@@ -83,14 +83,14 @@ class ApiClient implements ApiProvider {
   Future<Map<String, String>> _headers([Map<String, String>? extra]) async {
     final headers = <String, String>{'Content-Type': 'application/json'};
     final token = await _tokenProvider?.call();
-    if (AppConfig.logHttpRequests) {
-      AppLogger.api(
-        '[HTTP] Token provider result: ${token != null ? 'TOKEN_PRESENT' : 'NO_TOKEN'}',
-      );
-      if (token != null && token.isNotEmpty) {
-        AppLogger.api('[HTTP] Token length: ${token.length}');
-      }
-    }
+    // if (AppConfig.logHttpRequests) {
+    //   AppLogger.api(
+    //     '[HTTP] Token provider result: ${token != null ? 'TOKEN_PRESENT' : 'NO_TOKEN'}',
+    //   );
+    //   if (token != null && token.isNotEmpty) {
+    //     AppLogger.api('[HTTP] Token length: ${token.length}');
+    //   }
+    // }
     if (token != null && token.isNotEmpty) {
       headers['Authorization'] = 'Bearer $token';
     }
@@ -105,37 +105,37 @@ class ApiClient implements ApiProvider {
     Object? body,
   ) {
     if (!AppConfig.logHttpRequests) return;
-    final maskedHeaders = Map<String, String>.from(headers);
-    if (maskedHeaders.containsKey('Authorization')) {
-      final auth = maskedHeaders['Authorization']!;
-      maskedHeaders['Authorization'] = auth.length > 16
-          ? '${auth.substring(0, 16)}…(masked)'
-          : '(masked)';
-    }
-    Object? maskedBody = body;
-    try {
-      if (body is String) {
-        final jsonBody = json.decode(body);
-        if (jsonBody is Map) {
-          final copy = Map<String, dynamic>.from(jsonBody);
-          if (copy.containsKey('otp_code')) copy['otp_code'] = '***';
-          if (copy.containsKey('password')) copy['password'] = '***';
-          maskedBody = json.encode(copy);
-        }
-      }
-    } catch (_) {}
-    AppLogger.api('→ $method ${uri.toString()}');
-    AppLogger.api('  headers=${json.encode(maskedHeaders)}');
-    if (maskedBody != null && maskedBody.toString().isNotEmpty) {
-      AppLogger.api('  body=$maskedBody');
-    }
+    // final maskedHeaders = Map<String, String>.from(headers);
+    // if (maskedHeaders.containsKey('Authorization')) {
+    //   final auth = maskedHeaders['Authorization']!;
+    //   maskedHeaders['Authorization'] = auth.length > 16
+    //       ? '${auth.substring(0, 16)}…(masked)'
+    //       : '(masked)';
+    // }
+    // Object? maskedBody = body;
+    // try {
+    //   if (body is String) {
+    //     final jsonBody = json.decode(body);
+    //     if (jsonBody is Map) {
+    //       final copy = Map<String, dynamic>.from(jsonBody);
+    //       if (copy.containsKey('otp_code')) copy['otp_code'] = '***';
+    //       if (copy.containsKey('password')) copy['password'] = '***';
+    //       maskedBody = json.encode(copy);
+    //     }
+    //   }
+    // } catch (_) {}
+    // AppLogger.api('→ $method ${uri.toString()}');
+    // AppLogger.api('  headers=${json.encode(maskedHeaders)}');
+    // if (maskedBody != null && maskedBody.toString().isNotEmpty) {
+    //   AppLogger.api('  body=$maskedBody');
+    // }
   }
 
   void _logResponse(String method, Uri uri, http.Response res, Duration dt) {
     if (!AppConfig.logHttpRequests) return;
-    AppLogger.api(
-      '← $method ${uri.toString()} (${res.statusCode}) in ${dt.inMilliseconds}ms',
-    );
+    // AppLogger.api(
+    //   '← $method ${uri.toString()} (${res.statusCode}) in ${dt.inMilliseconds}ms',
+    // );
   }
 
   Future<void> _handleUnauthorized() async {

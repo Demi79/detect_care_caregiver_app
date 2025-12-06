@@ -106,7 +106,7 @@ class _EventDetailScreenState extends State<EventDetailScreen> {
                     DropdownMenuItem(value: 'danger', child: Text('Nguy hiểm')),
                   ],
                   onChanged: (v) => setState(() => selectedStatus = v),
-                  initialValue: selectedStatus,
+                  value: selectedStatus,
                 ),
 
                 TextField(
@@ -219,7 +219,7 @@ class _EventDetailScreenState extends State<EventDetailScreen> {
       if (newValue != true) {
         messenger.showSnackBar(
           SnackBar(
-            content: Text('Không thể bỏ đánh dấu từ màn hình này.'),
+            content: const Text('Không thể bỏ đánh dấu từ màn hình này.'),
             backgroundColor: Colors.orange.shade700,
           ),
         );

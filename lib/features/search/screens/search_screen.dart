@@ -389,15 +389,15 @@ class _SearchScreenState extends State<SearchScreen> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Row(
+          const Row(
             children: [
               Icon(
                 Icons.filter_alt_rounded,
                 color: AppTheme.primaryBlue,
                 size: 22,
               ),
-              const SizedBox(width: 10),
-              const Text(
+              SizedBox(width: 10),
+              Text(
                 'Bộ lọc nâng cao',
                 style: TextStyle(
                   fontSize: 16,
@@ -428,7 +428,7 @@ class _SearchScreenState extends State<SearchScreen> {
         ),
         child: Row(
           children: [
-            Icon(
+            const Icon(
               Icons.date_range_rounded,
               color: AppTheme.primaryBlue,
               size: 22,
@@ -464,7 +464,7 @@ class _SearchScreenState extends State<SearchScreen> {
       children: [
         Row(
           children: [
-            Icon(
+            const Icon(
               Icons.show_chart_rounded,
               color: AppTheme.primaryBlue,
               size: 22,
@@ -481,7 +481,7 @@ class _SearchScreenState extends State<SearchScreen> {
             const Spacer(),
             Text(
               '${(_minConfidence * 100).round()}%',
-              style: TextStyle(
+              style: const TextStyle(
                 color: AppTheme.primaryBlue,
                 fontWeight: FontWeight.w700,
               ),
@@ -489,9 +489,9 @@ class _SearchScreenState extends State<SearchScreen> {
           ],
         ),
         SliderTheme(
-          data: SliderThemeData(
+          data: const SliderThemeData(
             activeTrackColor: AppTheme.primaryBlue,
-            inactiveTrackColor: const Color(0xFFE2E8F0),
+            inactiveTrackColor: Color(0xFFE2E8F0),
             thumbColor: Colors.white,
             trackHeight: 4,
           ),
@@ -681,7 +681,7 @@ class _SearchScreenState extends State<SearchScreen> {
                                   child: LinearProgressIndicator(
                                     value: result.confidenceScore,
                                     backgroundColor: const Color(0xFFF1F5F9),
-                                    valueColor: AlwaysStoppedAnimation<Color>(
+                                    valueColor: const AlwaysStoppedAnimation<Color>(
                                       AppTheme.primaryBlue,
                                     ),
                                     minHeight: 6,
@@ -691,7 +691,7 @@ class _SearchScreenState extends State<SearchScreen> {
                               const SizedBox(width: 8),
                               Text(
                                 '${(result.confidenceScore * 100).round()}%',
-                                style: TextStyle(
+                                style: const TextStyle(
                                   fontSize: 12,
                                   color: AppTheme.primaryBlue,
                                   fontWeight: FontWeight.w600,

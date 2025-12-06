@@ -7,7 +7,7 @@ class SubscriptionStatusWidget extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    if (status == null) return SizedBox.shrink();
+    if (status == null) return const SizedBox.shrink();
     Color bgColor;
     Color iconColor;
     IconData icon;

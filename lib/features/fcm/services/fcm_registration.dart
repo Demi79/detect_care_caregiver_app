@@ -11,26 +11,34 @@ class FcmRegistration {
   FcmRegistration(this.ds);
   Future<void> registerForUser(String userId, {String type = 'device'}) async {
     if (userId.isEmpty || _lastUserId == userId) return;
+
+    // Debug log the user ID format
+    debugPrint('🔍 [FcmRegistration] Registering FCM for userId: "$userId"');
+    debugPrint('🔍 [FcmRegistration] userId length: ${userId.length}');
+    debugPrint(
+      '🔍 [FcmRegistration] userId contains dashes: ${userId.contains('-')}',
+    );
+
+    // Basic UUID validation
+    final uuidRegex = RegExp(
+      r'^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$',
+    );
+    final isValidUuid = uuidRegex.hasMatch(userId);
+    debugPrint('🔍 [FcmRegistration] Is valid UUID format: $isValidUuid');
+
+    if (!isValidUuid) {
+      debugPrint(
+        '❌ [FcmRegistration] userId is not a proper UUID format, but proceeding anyway: $userId',
+      );
+    }
+
     _lastUserId = userId;
 
-    try {
-      final permissions = await FirebaseMessaging.instance.requestPermission();
-      if (permissions.authorizationStatus == AuthorizationStatus.denied) {
-        debugPrint('❌ [FCM] No permission granted for notifications');
-        return;
-      }
+    await FirebaseMessaging.instance.requestPermission();
 
-      final token = await FirebaseMessaging.instance.getToken();
-      if (token == null || token.isEmpty) {
-        debugPrint('❌ [FCM] Failed to get FCM token');
-        return;
-      }
-
+    final token = await FirebaseMessaging.instance.getToken();
+    if (token != null && token.isNotEmpty) {
       await ds.saveToken(userId: userId, token: token, type: type);
-      debugPrint('✅ [FCM] Successfully registered token for user $userId');
-    } catch (e) {
-      debugPrint('❌ [FCM] Error registering device: $e');
-      rethrow;
     }
 
     await _sub?.cancel();

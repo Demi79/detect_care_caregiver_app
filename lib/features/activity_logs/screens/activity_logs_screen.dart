@@ -222,11 +222,11 @@ class _ActivityLogsScreenState extends State<ActivityLogsScreen> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Row(
+            const Row(
               children: [
                 Icon(Icons.tune_rounded, size: 20, color: primaryBlue),
-                const SizedBox(width: 8),
-                const Text(
+                SizedBox(width: 8),
+                Text(
                   'Bộ lọc',
                   style: TextStyle(
                     fontWeight: FontWeight.w600,
@@ -533,7 +533,7 @@ class _LogTile extends StatelessWidget {
                   ),
                 ),
                 const SizedBox(width: 8),
-                Icon(
+                const Icon(
                   Icons.arrow_forward_ios_rounded,
                   size: 16,
                   color: textSecondary,
@@ -666,7 +666,7 @@ class _LogDetailSheet extends StatelessWidget {
                       color: lightBlue,
                       borderRadius: BorderRadius.circular(10),
                     ),
-                    child: Icon(
+                    child: const Icon(
                       Icons.info_rounded,
                       color: primaryBlue,
                       size: 20,
@@ -916,7 +916,7 @@ class _EmptyView extends StatelessWidget {
                 color: lightBlue,
                 borderRadius: BorderRadius.circular(20),
               ),
-              child: Icon(Icons.inbox_rounded, size: 40, color: primaryBlue),
+              child: const Icon(Icons.inbox_rounded, size: 40, color: primaryBlue),
             ),
             const SizedBox(height: 20),
             const Text(

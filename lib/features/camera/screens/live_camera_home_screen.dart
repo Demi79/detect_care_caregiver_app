@@ -454,9 +454,9 @@ class _LiveCameraHomeScreenState extends State<LiveCameraHomeScreen>
           children: [
             Row(
               children: [
-                Text(
+                const Text(
                   'Camera',
-                  style: const TextStyle(
+                  style: TextStyle(
                     color: Colors.white,
                     fontSize: 18,
                     fontWeight: FontWeight.w700,
@@ -535,9 +535,9 @@ class _LiveCameraHomeScreenState extends State<LiveCameraHomeScreen>
               ),
             ),
           ),
-          title: Text(
+          title: const Text(
             'Camera',
-            style: const TextStyle(
+            style: TextStyle(
               color: Colors.white,
               fontWeight: FontWeight.bold,
               fontSize: 20,
@@ -609,10 +609,10 @@ class _LiveCameraHomeScreenState extends State<LiveCameraHomeScreen>
                     ],
                   ),
                 ),
-                PopupMenuItem(
+                const PopupMenuItem(
                   value: _CameraHomeMenuOption.settings,
                   child: Row(
-                    children: const [
+                    children: [
                       Icon(Icons.settings, color: Colors.black87),
                       SizedBox(width: 8),
                       Text('Cài đặt'),

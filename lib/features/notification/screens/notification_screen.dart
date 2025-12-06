@@ -337,7 +337,7 @@ class _NotificationScreenState extends State<NotificationScreen> {
         shadowColor: Colors.black.withValues(alpha: 0.1),
         title: Text(
           _isSelectionMode ? '${_selectedIds.length} đã chọn' : 'Thông báo',
-          style: TextStyle(
+          style: const TextStyle(
             color: Color(0xFF1E293B),
             fontSize: 20,
             fontWeight: FontWeight.w700,
@@ -788,10 +788,10 @@ class _NotificationScreenState extends State<NotificationScreen> {
                                         borderRadius: BorderRadius.circular(12),
                                       ),
                                       itemBuilder: (context) => [
-                                        PopupMenuItem(
+                                        const PopupMenuItem(
                                           value: 'delete',
                                           child: Row(
-                                            children: const [
+                                            children: [
                                               Icon(
                                                 Icons.delete_outline,
                                                 color: Colors.red,

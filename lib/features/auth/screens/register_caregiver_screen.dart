@@ -118,31 +118,31 @@ class _RegisterCaregiverScreenState extends State<RegisterCaregiverScreen> {
                     decoration: BoxDecoration(
                       color: const Color.fromRGBO(255, 255, 255, 0.95),
                       borderRadius: BorderRadius.circular(28),
-                      boxShadow: [
+                      boxShadow: const [
                         BoxShadow(
-                          color: const Color.fromRGBO(33, 150, 243, 0.18),
+                          color: Color.fromRGBO(33, 150, 243, 0.18),
                           blurRadius: 40,
-                          offset: const Offset(0, 12),
+                          offset: Offset(0, 12),
                         ),
                       ],
                     ),
                     child: Column(
                       children: [
                         Container(
-                          decoration: BoxDecoration(
+                          decoration: const BoxDecoration(
                             shape: BoxShape.circle,
                             boxShadow: [
                               BoxShadow(
-                                color: const Color.fromRGBO(33, 150, 243, 0.5),
+                                color: Color.fromRGBO(33, 150, 243, 0.5),
                                 blurRadius: 32,
                                 spreadRadius: 2,
                               ),
                             ],
                           ),
-                          child: CircleAvatar(
+                          child: const CircleAvatar(
                             radius: 28,
-                            backgroundColor: const Color(0xFF2E7BF0),
-                            child: const Icon(
+                            backgroundColor: Color(0xFF2E7BF0),
+                            child: Icon(
                               Icons.volunteer_activism,
                               color: Colors.white,
                               size: 28,
@@ -201,11 +201,11 @@ class _RegisterCaregiverScreenState extends State<RegisterCaregiverScreen> {
                       color: const Color(0xFF2E7BF0),
                       width: 1.5,
                     ),
-                    boxShadow: [
+                    boxShadow: const [
                       BoxShadow(
-                        color: const Color.fromRGBO(33, 150, 243, 0.18),
+                        color: Color.fromRGBO(33, 150, 243, 0.18),
                         blurRadius: 32,
-                        offset: const Offset(0, 8),
+                        offset: Offset(0, 8),
                       ),
                     ],
                   ),
@@ -358,12 +358,12 @@ class _RegisterCaregiverScreenState extends State<RegisterCaregiverScreen> {
                 labelText: label,
                 prefixIcon: Icon(
                   icon,
-                  color: hasFocus ? Color(0xFF2E7BF0) : Color(0xFF64748B),
+                  color: hasFocus ? const Color(0xFF2E7BF0) : const Color(0xFF64748B),
                 ),
-                border: OutlineInputBorder(
+                border: const OutlineInputBorder(
                   borderRadius: BorderRadius.all(Radius.circular(16)),
                 ),
-                focusedBorder: OutlineInputBorder(
+                focusedBorder: const OutlineInputBorder(
                   borderRadius: BorderRadius.all(Radius.circular(16)),
                   borderSide: BorderSide(color: Color(0xFF2E7BF0), width: 2),
                 ),

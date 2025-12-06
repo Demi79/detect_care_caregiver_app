@@ -6,7 +6,7 @@ class ErrorMessageWidget extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    if (error == null) return SizedBox.shrink();
+    if (error == null) return const SizedBox.shrink();
     return Padding(
       padding: const EdgeInsets.only(bottom: 12),
       child: Text('Lỗi: $error', style: const TextStyle(color: Colors.red)),

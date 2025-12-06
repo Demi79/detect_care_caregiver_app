@@ -1,7 +1,6 @@
 import 'package:detect_care_caregiver_app/features/auth/providers/auth_provider.dart';
 import 'package:detect_care_caregiver_app/features/auth/screens/email_login_screen.dart';
 import 'package:detect_care_caregiver_app/features/auth/screens/otp_verifications_screen.dart';
-import 'package:detect_care_caregiver_app/features/auth/screens/phone_login_screen.dart';
 import 'package:detect_care_caregiver_app/features/home/screens/home_screen.dart';
 import 'package:detect_care_caregiver_app/features/home/screens/pending_assignment_screen.dart';
 import 'package:flutter/material.dart';

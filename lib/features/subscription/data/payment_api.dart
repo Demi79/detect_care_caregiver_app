@@ -348,7 +348,7 @@ class PaymentApi {
 
   /// Fetch invoice count for badge display
   Future<int> getInvoiceCount(String token) async {
-    final path = '/transactions/billing/history';
+    const path = '/transactions/billing/history';
     final query = <String, String>{};
     final headers = <String, String>{};
     if (token.isNotEmpty) headers['Authorization'] = 'Bearer $token';

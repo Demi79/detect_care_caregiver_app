@@ -903,7 +903,7 @@ class _BaseContactSheet extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final levels = const ['Ưu tiên cấp 1', 'Ưu tiên cấp 2'];
+    const levels = ['Ưu tiên cấp 1', 'Ưu tiên cấp 2'];
 
     return GestureDetector(
       onTap: () => Navigator.pop(context),

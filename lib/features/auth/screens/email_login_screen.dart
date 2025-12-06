@@ -117,12 +117,12 @@ class _EmailLoginScreenState extends State<EmailLoginScreen>
             ),
           ),
           const SizedBox(height: 8),
-          Text(
+          const Text(
             'Hệ thống giám sát sức khỏe gia đình',
             textAlign: TextAlign.center,
             style: TextStyle(
               fontSize: 14,
-              color: const Color(0xFF64748B),
+              color: Color(0xFF64748B),
               fontWeight: FontWeight.w400,
               height: 1.4,
             ),
@@ -200,11 +200,11 @@ class _EmailLoginScreenState extends State<EmailLoginScreen>
               textAlign: TextAlign.center,
             ),
             const SizedBox(height: 8),
-            Text(
+            const Text(
               'Vui lòng nhập email và mật khẩu để đăng nhập',
               style: TextStyle(
                 fontSize: 14,
-                color: const Color(0xFF64748B),
+                color: Color(0xFF64748B),
                 fontWeight: FontWeight.w400,
               ),
               textAlign: TextAlign.center,
@@ -240,8 +240,8 @@ class _EmailLoginScreenState extends State<EmailLoginScreen>
                   ),
                   decoration: InputDecoration(
                     hintText: 'Nhập email của bạn',
-                    hintStyle: TextStyle(
-                      color: const Color(0xFF9CA3AF),
+                    hintStyle: const TextStyle(
+                      color: Color(0xFF9CA3AF),
                       fontSize: 15,
                       fontWeight: FontWeight.w400,
                     ),
@@ -293,8 +293,8 @@ class _EmailLoginScreenState extends State<EmailLoginScreen>
                   ),
                   decoration: InputDecoration(
                     hintText: 'Nhập mật khẩu của bạn',
-                    hintStyle: TextStyle(
-                      color: const Color(0xFF9CA3AF),
+                    hintStyle: const TextStyle(
+                      color: Color(0xFF9CA3AF),
                       fontSize: 15,
                       fontWeight: FontWeight.w400,
                     ),

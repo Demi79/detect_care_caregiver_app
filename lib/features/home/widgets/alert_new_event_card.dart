@@ -627,15 +627,15 @@ class _AlertEventCardState extends State<AlertEventCard>
                               ),
                               onSelected: (secs) => _snoozeNow(secs),
                               itemBuilder: (ctx) => [
-                                PopupMenuItem<int>(
+                                const PopupMenuItem<int>(
                                   value: 30,
                                   child: Text(L10nVi.snooze30s),
                                 ),
-                                PopupMenuItem<int>(
+                                const PopupMenuItem<int>(
                                   value: 60,
                                   child: Text(L10nVi.snooze1m),
                                 ),
-                                PopupMenuItem<int>(
+                                const PopupMenuItem<int>(
                                   value: 300,
                                   child: Text(L10nVi.snooze5m),
                                 ),
@@ -1258,7 +1258,7 @@ class _AlertEventCardState extends State<AlertEventCard>
     final event = buildEventFromWidget();
     final future = loadEventImageUrls(event).then((urls) => urls);
 
-    final bool _isUpdateWindowExpired = (() {
+    final bool isUpdateWindowExpired = (() {
       final created = widget.createdAt ?? widget.timestamp;
       try {
         final expiry = created.add(const Duration(days: 2));
@@ -1474,7 +1474,7 @@ class _AlertEventCardState extends State<AlertEventCard>
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
-                    if (!_isUpdateWindowExpired)
+                    if (!isUpdateWindowExpired)
                       ElevatedButton.icon(
                         onPressed: () => _initiateEmergencyCall(ctx),
                         icon: const Icon(Icons.call),

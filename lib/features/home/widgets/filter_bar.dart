@@ -245,7 +245,7 @@ class FilterBar extends StatelessWidget {
       builder: (context, child) {
         return Theme(
           data: Theme.of(context).copyWith(
-            colorScheme: ColorScheme.light(primary: AppTheme.primaryBlue), dialogTheme: DialogThemeData(backgroundColor: const Color(0xFFF8FAFC)),
+            colorScheme: const ColorScheme.light(primary: AppTheme.primaryBlue), dialogTheme: const DialogThemeData(backgroundColor: Color(0xFFF8FAFC)),
           ),
           child: child!,
         );
@@ -283,7 +283,7 @@ class FilterBar extends StatelessWidget {
       builder: (context, child) {
         return Theme(
           data: Theme.of(context).copyWith(
-            colorScheme: ColorScheme.light(primary: AppTheme.primaryBlue), dialogTheme: DialogThemeData(backgroundColor: const Color(0xFFF8FAFC)),
+            colorScheme: const ColorScheme.light(primary: AppTheme.primaryBlue), dialogTheme: const DialogThemeData(backgroundColor: Color(0xFFF8FAFC)),
           ),
           child: child!,
         );
@@ -314,7 +314,7 @@ class FilterBar extends StatelessWidget {
       context: context,
       builder: (_) => SimpleDialog(
         backgroundColor: const Color(0xFFF8FAFC),
-        title: Center(child: const Text('Chọn trạng thái')),
+        title: const Center(child: Text('Chọn trạng thái')),
         children: statusOptions
             .map(
               (status) => SimpleDialogOption(
@@ -335,7 +335,7 @@ class FilterBar extends StatelessWidget {
       context: context,
       builder: (_) => SimpleDialog(
         backgroundColor: const Color(0xFFF8FAFC),
-        title: Center(child: const Text('Chọn khung giờ')),
+        title: const Center(child: Text('Chọn khung giờ')),
         children: [
           SimpleDialogOption(
             onPressed: () => Navigator.pop(context, 'all'),

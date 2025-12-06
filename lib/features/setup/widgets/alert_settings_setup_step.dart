@@ -219,8 +219,16 @@ class _AlertSettingsSetupStepState extends State<AlertSettingsSetupStep>
                 }
               });
             },
-            activeThumbColor: Colors.white,
-            activeTrackColor: const Color(0xFFF59E0B),
+            thumbColor: WidgetStateProperty.resolveWith(
+              (states) => states.contains(WidgetState.selected)
+                  ? Colors.white
+                  : Colors.grey.shade400,
+            ),
+            trackColor: WidgetStateProperty.resolveWith(
+              (states) => states.contains(WidgetState.selected)
+                  ? const Color(0xFFF59E0B)
+                  : Colors.grey.shade300,
+            ),
           ),
         ],
       ),
@@ -380,7 +388,7 @@ class _AlertSettingsSetupStepState extends State<AlertSettingsSetupStep>
             children: [
               Expanded(
                 child: DropdownButtonFormField<String>(
-                  initialValue: _selectedContactRelation,
+                  value: _selectedContactRelation,
                   onChanged: (value) =>
                       setState(() => _selectedContactRelation = value!),
                   items: _contactRelations.map((relation) {
@@ -622,7 +630,20 @@ class _AlertSettingsSetupStepState extends State<AlertSettingsSetupStep>
               ],
             ),
           ),
-          Switch(value: value, onChanged: onChanged, activeThumbColor: color),
+          Switch(
+            value: value,
+            onChanged: onChanged,
+            thumbColor: WidgetStateProperty.resolveWith(
+              (states) => states.contains(WidgetState.selected)
+                  ? color
+                  : Colors.grey.shade400,
+            ),
+            trackColor: WidgetStateProperty.resolveWith(
+              (states) => states.contains(WidgetState.selected)
+                  ? color.withValues(alpha: 0.4)
+                  : Colors.grey.shade300,
+            ),
+          ),
         ],
       ),
     );

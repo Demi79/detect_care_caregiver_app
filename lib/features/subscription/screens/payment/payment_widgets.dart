@@ -211,12 +211,12 @@ class LoadingArea extends StatelessWidget {
                   end: Alignment.bottomRight,
                 ),
                 borderRadius: BorderRadius.circular(24),
-                boxShadow: [
+                boxShadow: const [
                   BoxShadow(
-                    color: const Color.fromRGBO(229, 57, 53, 0.3),
+                    color: Color.fromRGBO(229, 57, 53, 0.3),
                     spreadRadius: 1,
                     blurRadius: 4,
-                    offset: const Offset(0, 2),
+                    offset: Offset(0, 2),
                   ),
                 ],
               ),

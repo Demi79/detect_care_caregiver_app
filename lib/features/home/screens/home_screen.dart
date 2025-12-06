@@ -293,10 +293,10 @@ class _HomeScreenState extends State<HomeScreen>
                 HapticFeedback.selectionClick();
               }
             });
-            dev.log(
-              'realtime new=${e.eventId} type=${e.eventType}, notificationCount=$_notificationCount',
-              name: 'HomeScreen',
-            );
+            // dev.log(
+            //   'realtime new=${e.eventId} type=${e.eventType}, notificationCount=$_notificationCount',
+            //   name: 'HomeScreen',
+            // );
           } catch (e) {
             dev.log('Error processing event: $e', name: 'HomeScreen', error: e);
           }

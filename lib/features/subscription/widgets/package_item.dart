@@ -82,10 +82,10 @@ class PackageItem extends StatelessWidget {
             onTap: () => onSelected(pkg['id']),
           ),
           if (isUpgrade)
-            Padding(
-              padding: const EdgeInsets.only(left: 16, bottom: 8),
+            const Padding(
+              padding: EdgeInsets.only(left: 16, bottom: 8),
               child: Row(
-                children: const [
+                children: [
                   Icon(Icons.upgrade, color: Colors.orange, size: 18),
                   SizedBox(width: 6),
                   Text(

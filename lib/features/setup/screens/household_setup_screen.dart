@@ -162,8 +162,8 @@ class _HouseholdSetupScreenState extends State<HouseholdSetupScreen>
                     borderRadius: BorderRadius.circular(8),
                     border: Border.all(color: const Color(0xFFBEE3F8)),
                   ),
-                  child: Row(
-                    children: const [
+                  child: const Row(
+                    children: [
                       Icon(Icons.info_outline, color: Color(0xFF0EA5E9)),
                       SizedBox(width: 8),
                       Expanded(

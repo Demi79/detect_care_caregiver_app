@@ -410,8 +410,8 @@ class _UpdatePatientInfoScreenState extends State<UpdatePatientInfoScreen> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Row(
-                    children: const [
+                  const Row(
+                    children: [
                       Icon(
                         Icons.access_time,
                         color: Color(0xFF3B82F6),
@@ -542,7 +542,7 @@ class _UpdatePatientInfoScreenState extends State<UpdatePatientInfoScreen> {
     required String Function(String) mapper,
   }) {
     return DropdownButtonFormField<String>(
-      initialValue: value,
+      value: value,
       items: items
           .map((e) => DropdownMenuItem(value: e, child: Text(mapper(e))))
           .toList(),
@@ -607,9 +607,9 @@ class _UpdatePatientInfoScreenState extends State<UpdatePatientInfoScreen> {
                   color: Colors.white,
                 ),
               )
-            : Row(
+            : const Row(
                 mainAxisAlignment: MainAxisAlignment.center,
-                children: const [
+                children: [
                   Icon(Icons.check_circle_outline, size: 22),
                   SizedBox(width: 10),
                   Text(
