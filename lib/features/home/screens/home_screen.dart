@@ -267,6 +267,21 @@ class _HomeScreenState extends State<HomeScreen>
           try {
             final e = EventLog.fromJson(map);
             setState(() {
+              final lifecycle = (e.lifecycleState ?? '').toLowerCase();
+              final status = (e.status ?? '').toLowerCase();
+              final shouldRemove =
+                  lifecycle.contains('cancel') ||
+                  lifecycle.contains('deact') ||
+                  status == 'cancelled' ||
+                  status == 'canceled' ||
+                  status == 'deleted' ||
+                  status == 'removed';
+
+              if (shouldRemove) {
+                _logs.removeWhere((ev) => ev.eventId == e.eventId);
+                return;
+              }
+
               if (_logs.any((event) => event.eventId == e.eventId)) {
                 final index = _logs.indexWhere(
                   (event) => event.eventId == e.eventId,

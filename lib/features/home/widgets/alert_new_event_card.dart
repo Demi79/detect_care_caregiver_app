@@ -227,6 +227,23 @@ class _AlertEventCardState extends State<AlertEventCard>
     EmergencyCallHelper.initiateEmergencyCall(context);
   }
 
+  Future<void> _initiateEmergencyCall(BuildContext ctx) async {
+    HapticFeedback.heavyImpact();
+    try {
+      widget.onEmergencyCall?.call();
+    } catch (_) {}
+    try {
+      await EmergencyCallHelper.initiateEmergencyCall(ctx);
+    } catch (e, st) {
+      AppLogger.e('Emergency call failed: $e', e, st);
+      try {
+        ScaffoldMessenger.of(ctx).showSnackBar(
+          SnackBar(content: Text('Không thể thực hiện cuộc gọi khẩn cấp: $e')),
+        );
+      } catch (_) {}
+    }
+  }
+
   Future<void> _handleMarkAsHandled() async {
     if (_isConfirming || _isConfirmed) return;
 
@@ -1241,6 +1258,16 @@ class _AlertEventCardState extends State<AlertEventCard>
     final event = buildEventFromWidget();
     final future = loadEventImageUrls(event).then((urls) => urls);
 
+    final bool _isUpdateWindowExpired = (() {
+      final created = widget.createdAt ?? widget.timestamp;
+      try {
+        final expiry = created.add(const Duration(days: 2));
+        return DateTime.now().isAfter(expiry);
+      } catch (_) {
+        return false;
+      }
+    })();
+
     showDialog(
       context: context,
       builder: (ctx) => Dialog(
@@ -1321,7 +1348,6 @@ class _AlertEventCardState extends State<AlertEventCard>
                       );
                     }
 
-                    // Multiple images: show a grid like in ActionLogCard.
                     return SizedBox(
                       height: 220,
                       child: GridView.builder(
@@ -1439,6 +1465,32 @@ class _AlertEventCardState extends State<AlertEventCard>
                       ),
                     );
                   },
+                ),
+              ),
+
+              const SizedBox(height: 12),
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 4),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    if (!_isUpdateWindowExpired)
+                      ElevatedButton.icon(
+                        onPressed: () => _initiateEmergencyCall(ctx),
+                        icon: const Icon(Icons.call),
+                        label: const Text('Gọi khẩn cấp'),
+                        style: ElevatedButton.styleFrom(
+                          padding: const EdgeInsets.symmetric(vertical: 12),
+                          backgroundColor: Colors.white,
+                          foregroundColor: Colors.grey.shade800,
+                          elevation: 0,
+                          side: BorderSide(color: Colors.grey.shade300),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(16),
+                          ),
+                        ),
+                      ),
+                  ],
                 ),
               ),
             ],

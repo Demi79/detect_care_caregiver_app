@@ -86,6 +86,10 @@ flutter:
   assets:
     - .env.dev
 
+dependency_overrides:
+  app_links:
+    path: ./packages/app_links_shim
+
   # An image asset can refer to one or more resolution-specific "variants", see
   # https://flutter.dev/to/resolution-aware-images
 
