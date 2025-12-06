@@ -1,4 +1,5 @@
 import 'package:detect_care_caregiver_app/features/auth/providers/auth_provider.dart';
+import 'package:detect_care_caregiver_app/features/auth/screens/email_login_screen.dart';
 import 'package:detect_care_caregiver_app/features/auth/screens/otp_verifications_screen.dart';
 import 'package:detect_care_caregiver_app/features/auth/screens/phone_login_screen.dart';
 import 'package:detect_care_caregiver_app/features/home/screens/home_screen.dart';
@@ -16,7 +17,7 @@ class AuthGate extends StatelessWidget {
           case AuthStatus.loading:
             return const LoadingGate();
           case AuthStatus.unauthenticated:
-            return const PhoneLoginScreen();
+            return const EmailLoginScreen();
           case AuthStatus.otpSent:
             return OtpVerificationsScreen(
               phoneNumber: auth.pendingPhone!,
