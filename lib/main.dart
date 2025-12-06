@@ -201,7 +201,7 @@ Future<void> _bootstrapCore() async {
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
-  
+
   // Initialize MediaKit for video playback
   MediaKit.ensureInitialized();
 

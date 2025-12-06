@@ -47,25 +47,34 @@ class CameraService {
     int attempt = 0;
     while (attempt < maxRetries) {
       try {
-        AppLogger.d('🔄 [CameraService] Open media attempt ${attempt + 1}/$maxRetries: $url');
-        
-        await _player!.open(
-          Media(url),
-          play: false,
+        AppLogger.d(
+          '🔄 [CameraService] Open media attempt ${attempt + 1}/$maxRetries: $url',
         );
-        
-        AppLogger.i('✅ [CameraService] Media opened successfully on attempt ${attempt + 1}');
+
+        await _player!.open(Media(url), play: false);
+
+        AppLogger.i(
+          '✅ [CameraService] Media opened successfully on attempt ${attempt + 1}',
+        );
         return;
       } catch (e) {
         attempt++;
-        AppLogger.w('⚠️ [CameraService] Open media attempt $attempt failed: $e');
+        AppLogger.w(
+          '⚠️ [CameraService] Open media attempt $attempt failed: $e',
+        );
         if (attempt >= maxRetries) {
-          AppLogger.e('❌ [CameraService] Open media failed after $maxRetries attempts');
+          AppLogger.e(
+            '❌ [CameraService] Open media failed after $maxRetries attempts',
+          );
           rethrow;
         }
         // Exponential backoff
-        final backoffDuration = Duration(milliseconds: 500 + (attempt - 1) * 200);
-        AppLogger.d('⏳ [CameraService] Retrying after ${backoffDuration.inMilliseconds}ms...');
+        final backoffDuration = Duration(
+          milliseconds: 500 + (attempt - 1) * 200,
+        );
+        AppLogger.d(
+          '⏳ [CameraService] Retrying after ${backoffDuration.inMilliseconds}ms...',
+        );
         await Future.delayed(backoffDuration);
       }
     }

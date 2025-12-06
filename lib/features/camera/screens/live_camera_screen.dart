@@ -206,7 +206,7 @@ class _LiveCameraScreenState extends State<LiveCameraScreen> {
       // Open media with retry logic
       AppLogger.d('🎬 [LiveCameraScreen] Opening media with retry logic');
       await _cameraService.openMedia(url, maxRetries: 5);
-      
+
       // Play after successful open
       await _cameraService.play();
 
@@ -924,11 +924,7 @@ class _LiveCameraScreenState extends State<LiveCameraScreen> {
                 fit: StackFit.expand,
                 children: [
                   if (hasController)
-                    Video(
-                      controller: VideoController(
-                        _cameraService.player!,
-                      ),
-                    )
+                    Video(controller: VideoController(_cameraService.player!))
                   else
                     GestureDetector(
                       behavior: HitTestBehavior.opaque,
@@ -1358,11 +1354,7 @@ class _LiveCameraScreenState extends State<LiveCameraScreen> {
           fit: StackFit.expand,
           children: [
             if (_cameraService.player != null)
-              Video(
-                controller: VideoController(
-                  _cameraService.player!,
-                ),
-              )
+              Video(controller: VideoController(_cameraService.player!))
             else
               GestureDetector(
                 behavior: HitTestBehavior.opaque,

@@ -224,24 +224,27 @@ class CameraStateManager {
     // tồn tại nhưng playback bị tạm dừng do thay đổi UI/orientation.
     if (newFullscreen && _player != null) {
       // Use unawaited for fire-and-forget async operations
-      cameraService.play().then((_) {
-        // Log playback state shortly after trying to resume
-        cameraService
-            .isPlaying()
-            .then((playing) {
-              try {
-                // ignore: avoid_print
-                print(
-                  '🐛 [CameraStateManager] fullscreen resume play -> isPlaying=$playing',
-                );
-              } catch (_) {}
-            })
-            .catchError((_) {
-              // ignore errors from isPlaying
-            });
-      }).catchError((_) {
-        // ignore errors from play
-      });
+      cameraService
+          .play()
+          .then((_) {
+            // Log playback state shortly after trying to resume
+            cameraService
+                .isPlaying()
+                .then((playing) {
+                  try {
+                    // ignore: avoid_print
+                    print(
+                      '🐛 [CameraStateManager] fullscreen resume play -> isPlaying=$playing',
+                    );
+                  } catch (_) {}
+                })
+                .catchError((_) {
+                  // ignore errors from isPlaying
+                });
+          })
+          .catchError((_) {
+            // ignore errors from play
+          });
     }
   }
 
