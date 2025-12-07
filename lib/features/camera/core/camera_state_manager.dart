@@ -3,7 +3,7 @@ import 'dart:io';
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'package:media_kit/media_kit.dart';
+import 'package:flutter_vlc_player_16kb/flutter_vlc_player.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import 'camera_constants.dart';
@@ -20,7 +20,7 @@ class CameraStateManager {
   Timer? _statusTimer;
   Timer? _startDebounce;
   Timer? _controlsTimer;
-  Player? _player;
+  VlcPlayerController? _controller;
   final bool loadCache;
 
   CameraStateManager({this.loadCache = true});
@@ -75,7 +75,7 @@ class CameraStateManager {
 
     // Only dispose controller if we created it ourselves, not if it was set from outside
     // The service that created the controller should dispose it
-    _player = null; // Clear reference
+    _controller = null; // Clear reference
 
     // Don't dispose urlController here as it might still be used by widgets
     // Let the widget that owns it dispose it properly
@@ -127,8 +127,8 @@ class CameraStateManager {
     _statusTimer = Timer.periodic(CameraConstants.statusPollInterval, (
       timer,
     ) async {
-      // Don't poll if disposed or player is null
-      if (_isDisposed || _player == null) {
+      // Don't poll if disposed or controller is null
+      if (_isDisposed || _controller == null) {
         timer.cancel();
         return;
       }
@@ -136,7 +136,7 @@ class CameraStateManager {
       if (isStarting && !isPlaying) return;
 
       try {
-        final playing = await cameraService.isPlaying();
+        final playing = await cameraService.safeIsPlaying(_controller);
         if (playing == true &&
             (statusMessage == null ||
                 statusMessage != CameraConstants.playingMessage)) {
@@ -220,31 +220,29 @@ class CameraStateManager {
     }
 
     HapticFeedback.selectionClick();
-    // Khi chuyển sang fullscreen, thử resume playback nếu player đã
+    // Khi chuyển sang fullscreen, thử resume playback nếu controller đã
     // tồn tại nhưng playback bị tạm dừng do thay đổi UI/orientation.
-    if (newFullscreen && _player != null) {
-      // Use unawaited for fire-and-forget async operations
-      cameraService
-          .play()
-          .then((_) {
-            // Log playback state shortly after trying to resume
-            cameraService
-                .isPlaying()
-                .then((playing) {
-                  try {
-                    // ignore: avoid_print
-                    print(
-                      '🐛 [CameraStateManager] fullscreen resume play -> isPlaying=$playing',
-                    );
-                  } catch (_) {}
-                })
-                .catchError((_) {
-                  // ignore errors from isPlaying
-                });
-          })
-          .catchError((_) {
-            // ignore errors from play
-          });
+    if (newFullscreen && _controller != null) {
+      try {
+        _controller!.play();
+        // Log playback state shortly after trying to resume (async)
+        // Avoid unhandled exceptions from isPlaying() if the controller
+        // is not yet initialized by the native side. Attach a catchError
+        // so any failure is swallowed and doesn't crash the UI.
+        cameraService
+            .safeIsPlaying(_controller)
+            .then((playing) {
+              try {
+                // ignore: avoid_print
+                print(
+                  '🐛 [CameraStateManager] fullscreen resume play -> isPlaying=$playing',
+                );
+              } catch (_) {}
+            })
+            .catchError((_) {
+              // ignore errors from safeIsPlaying (shouldn't be necessary)
+            });
+      } catch (_) {}
     }
   }
 
@@ -293,13 +291,13 @@ class CameraStateManager {
     }
   }
 
-  void setController(Player? player) {
-    _player = player;
+  void setController(VlcPlayerController? controller) {
+    _controller = controller;
   }
 
   void clearController() {
-    _player = null;
+    _controller = null;
   }
 
-  Player? getController() => _player;
+  VlcPlayerController? getController() => _controller;
 }
