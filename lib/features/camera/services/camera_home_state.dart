@@ -1,10 +1,11 @@
 import 'dart:async';
 
+import 'package:flutter/material.dart';
+
 import 'package:detect_care_caregiver_app/features/camera/data/camera_storage.dart';
 import 'package:detect_care_caregiver_app/features/camera/models/camera_entry.dart';
 import 'package:detect_care_caregiver_app/features/camera/services/camera_quota_service.dart';
 import 'package:detect_care_caregiver_app/features/camera/services/camera_service.dart';
-import 'package:flutter/material.dart';
 
 class CameraHomeState extends ChangeNotifier {
   final CameraService _cameraService;
@@ -238,16 +239,29 @@ class CameraHomeState extends ChangeNotifier {
     notifyListeners();
   }
 
+  /// Refresh thumbnail for a specific camera after user exits live view
+  /// This will trigger the backend to create a new snapshot request
   Future<void> refreshCameraThumb(CameraEntry camera) async {
     if (_isDisposed) return;
 
     final index = _cameras.indexWhere((c) => c.id == camera.id);
-    if (index != -1) {
-      final thumb = await _cameraService.fetchTimelineThumbnail(camera.id);
-      if (thumb == null || thumb.isEmpty) return;
-      final updatedCamera = camera.copyWith(thumb: thumb);
-      _cameras[index] = updatedCamera;
-      notifyListeners();
+    if (index == -1) return;
+
+    try {
+      // Call the new API endpoint to refresh thumbnail
+      final thumb = await _cameraService.refreshCameraThumbnail(camera.id);
+
+      if (thumb != null && thumb.isNotEmpty) {
+        final updatedCamera = camera.copyWith(thumb: thumb);
+        _cameras[index] = updatedCamera;
+        notifyListeners();
+        debugPrint('✅ Thumbnail refreshed for camera ${camera.id}');
+      } else {
+        debugPrint('⚠️ No thumbnail returned for camera ${camera.id}');
+      }
+    } catch (e) {
+      // Silent fail - don't block UI, thumbnail will be updated on next load
+      debugPrint('Failed to refresh thumbnail for ${camera.id}: $e');
     }
   }
 

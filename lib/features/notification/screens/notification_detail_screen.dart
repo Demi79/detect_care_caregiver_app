@@ -371,7 +371,7 @@ class _NotificationDetailScreenState extends State<NotificationDetailScreen>
       final api = CameraApi(
         ApiClient(tokenProvider: AuthStorage.getAccessToken),
       );
-      final response = await api.getCamerasByUser(customerId: customerId);
+      final response = await api.getCamerasByUser(userId: customerId);
       if (response['data'] is! List) {
         messenger.showSnackBar(
           SnackBar(

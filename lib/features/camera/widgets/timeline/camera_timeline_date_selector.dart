@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+
 import 'camera_timeline_components.dart';
 import 'camera_timeline_zoom_control.dart';
 

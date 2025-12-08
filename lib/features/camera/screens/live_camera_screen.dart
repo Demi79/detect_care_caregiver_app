@@ -6,6 +6,9 @@ import 'package:detect_care_caregiver_app/features/alarm/data/alarm_remote_data_
 import 'package:detect_care_caregiver_app/features/alarm/services/active_alarm_notifier.dart';
 import 'package:detect_care_caregiver_app/features/auth/data/auth_storage.dart';
 import 'package:detect_care_caregiver_app/features/camera/core/camera_core.dart';
+import 'package:detect_care_caregiver_app/features/camera/core/camera_player_factory.dart';
+import 'package:detect_care_caregiver_app/features/camera/core/camera_stream_helper.dart';
+import 'package:detect_care_caregiver_app/features/camera/core/i_camera_player.dart';
 import 'package:detect_care_caregiver_app/features/camera/models/camera_entry.dart';
 import 'package:detect_care_caregiver_app/features/camera/screens/camera_timeline_screen.dart';
 import 'package:detect_care_caregiver_app/features/camera/services/camera_access_guard.dart';
@@ -16,7 +19,6 @@ import 'package:detect_care_caregiver_app/features/events/data/events_remote_dat
 import 'package:detect_care_caregiver_app/features/home/service/event_service.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'package:flutter_vlc_player_16kb/flutter_vlc_player.dart';
 
 /// Màn hình camera chính với kiến trúc module hóa
 class LiveCameraScreen extends StatefulWidget {
@@ -37,10 +39,12 @@ class LiveCameraScreen extends StatefulWidget {
   State<LiveCameraScreen> createState() => _LiveCameraScreenState();
 }
 
-class _LiveCameraScreenState extends State<LiveCameraScreen> {
+class _LiveCameraScreenState extends State<LiveCameraScreen>
+    with WidgetsBindingObserver {
   late final CameraStateManager _stateManager;
   late final CameraService _cameraService;
   late final CameraAccessGuard _accessGuard;
+  ICameraPlayer? _currentPlayer;
   bool _prevIsFullscreen = false;
   bool _handlingFullscreen = false;
   Timer? _startDebounce;
@@ -54,6 +58,9 @@ class _LiveCameraScreenState extends State<LiveCameraScreen> {
   @override
   void initState() {
     super.initState();
+    // Thêm observer để monitor lifecycle
+    WidgetsBinding.instance.addObserver(this);
+
     // Nếu `initialUrl` được truyền vào, ưu tiên nó thay vì phục hồi
     // URL/cấu hình đã lưu trước đó. Trong trường hợp đó, tắt loadCache.
     final shouldLoadCache = widget.initialUrl == null && widget.loadCache;
@@ -75,6 +82,53 @@ class _LiveCameraScreenState extends State<LiveCameraScreen> {
     }
   }
 
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    AppLogger.d('🔄 [Camera] App lifecycle: $state');
+
+    switch (state) {
+      case AppLifecycleState.paused:
+        // App moved to background
+        AppLogger.d('⏸️ [Camera] App paused - stream may buffer');
+        break;
+
+      case AppLifecycleState.resumed:
+        // App back to foreground - check stream health
+        AppLogger.d('▶️ [Camera] App resumed - checking stream...');
+        _onAppResumed();
+        break;
+
+      case AppLifecycleState.detached:
+      case AppLifecycleState.hidden:
+      case AppLifecycleState.inactive:
+        AppLogger.d('🛑 [Camera] App lifecycle change: $state');
+        break;
+    }
+  }
+
+  /// Handle app resume - verify stream is still playing
+  Future<void> _onAppResumed() async {
+    try {
+      final player = _currentPlayer;
+      if (player == null) {
+        AppLogger.w('⚠️ [Camera] No player on resume - restarting...');
+        await _startPlay();
+        return;
+      }
+
+      // Give stream time to stabilize after app resume
+      AppLogger.i(
+        '[Camera] Stream still active (${player.protocol}), continuing...',
+      );
+      await Future.delayed(const Duration(milliseconds: 800));
+
+      // Stream is active, no need to reload
+      AppLogger.i('✅ [Camera] Stream still active after resume');
+    } catch (e, st) {
+      AppLogger.w('⚠️ [Camera] Error on resume: $e', e, st);
+    }
+  }
+
   Future<void> _disposeStreamResources() async {
     if (_streamDisposed) return;
     _streamDisposed = true;
@@ -92,6 +146,13 @@ class _LiveCameraScreenState extends State<LiveCameraScreen> {
 
   @override
   void dispose() {
+    // Remove observer
+    WidgetsBinding.instance.removeObserver(this);
+
+    // Dispose current player
+    unawaited(_currentPlayer?.dispose());
+    _currentPlayer = null;
+
     unawaited(_disposeStreamResources());
 
     if (!_stateDisposed) {
@@ -119,33 +180,15 @@ class _LiveCameraScreenState extends State<LiveCameraScreen> {
       // Indicate transient work to the UI (small spinner overlay)
       _stateManager.setStarting(true);
 
-      // Try to ensure (warm) controller for the URL. The service may
-      // return an existing controller or create a new one and wait briefly.
-      final ensured = await _cameraService.ensureControllerFor(
-        url,
-        waitFor: const Duration(seconds: 2),
-      );
-
-      if (ensured != null) {
-        // Use the ensured controller for the UI
-        _stateManager.setController(ensured);
-
-        // Give native side a small moment and check playback safely
-        await Future.delayed(const Duration(milliseconds: 400));
-        final playing = await cameraService.safeIsPlaying(ensured);
-        AppLogger.d('🐛 [Camera] warm ensured playing=$playing');
-        if (playing == true) {
-          _stateManager.setStarting(false);
-          return;
-        }
+      // Check current player state first
+      final currentPlayer = _currentPlayer;
+      if (currentPlayer != null) {
+        AppLogger.d('✅ [Camera] Stream already playing on fullscreen');
+        _stateManager.setStarting(false);
+        return;
       }
 
-      // Warm failed or not playing yet — fallback to recreate (safe)
-      AppLogger.d(
-        '🐛 [Camera] warm failed; recreating for fullscreen url=$url',
-      );
-      await _disposeStreamResources();
-      await Future.delayed(const Duration(milliseconds: 200));
+      // Try to start playback for the URL
       await _startPlay();
       _stateManager.setStarting(false);
     } finally {
@@ -183,7 +226,7 @@ class _LiveCameraScreenState extends State<LiveCameraScreen> {
     if (_stateManager.isStarting) {
       return; // debounce
     }
-    if (_stateManager.currentUrl == url && _cameraService.controller != null) {
+    if (_stateManager.currentUrl == url && _currentPlayer != null) {
       return;
     }
 
@@ -198,38 +241,49 @@ class _LiveCameraScreenState extends State<LiveCameraScreen> {
     await _stateManager.saveUrl(url);
 
     try {
-      final controller = await _cameraService.createController(url);
-      _stateManager.setController(controller);
+      AppLogger.i(
+        '🔗 [Camera] Starting playback for url=$url (protocol: ${CameraPlayerFactory.detectProtocol(url)})',
+      );
 
-      // Listen for video size changes
-      try {
-        controller.addListener(() {
-          final size = controller.value.size;
-          if (size.width > 0 && size.height > 0) {
-            final newAspectRatio = size.width / size.height;
-            if (_stateManager.videoAspectRatio != newAspectRatio) {
-              _stateManager.setVideoAspectRatio(newAspectRatio);
-            }
-          }
-        });
-      } catch (e) {
-        AppLogger.w('Warning: addListener failed: $e');
+      // Dispose old player
+      await _currentPlayer?.dispose();
+      _currentPlayer = null;
+
+      // Play with new architecture - supports automatic fallback
+      _currentPlayer = await CameraStreamHelper.playWithFallback(
+        initialUrl: url,
+        camera: widget.camera,
+        maxRetries: 1,
+        initTimeout: const Duration(seconds: 3),
+      );
+
+      if (!mounted) return;
+
+      if (_currentPlayer != null) {
+        // Phát thành công - tối ưu UX
+        _stateManager.showControlsTemporarily();
+        _stateManager.setStatusMessage(null);
+        _stateManager.setStarting(false);
+
+        // Haptic feedback để người dùng biết đã kết nối
+        HapticFeedback.lightImpact();
+
+        AppLogger.i(
+          '✅ [Camera] Stream started successfully with ${_currentPlayer!.protocol} (${_currentPlayer!.streamUrl})',
+        );
+
+        // Trigger rebuild to show new player widget
+        if (mounted) setState(() {});
+        return;
       }
 
-      // VLC controller được tạo + play() được gọi = stream đang chạy
-      // Không cần chờ isPlaying() vì trên emulator/network bị hạn chế nó
-      // có thể không bao giờ return true, nhưng stream vẫn "phát" ở backend
-      _stateManager.showControlsTemporarily();
-      _stateManager.setStatusMessage(null);
-      _stateManager.setStarting(false);
-
-      // Haptic feedback để người dùng biết đã kết nối
-      HapticFeedback.lightImpact();
-
-      AppLogger.i('✅ [Camera] Stream controller created and playing');
-      return;
+      // All attempts failed
+      _stateManager.setStatusMessage(CameraConstants.cannotPlayMessage);
+      AppLogger.e(
+        '❌ [Camera] All stream attempts failed. Available protocols: ${CameraStreamHelper.getProtocolPriority(widget.camera).join(", ")}',
+      );
     } catch (e, st) {
-      AppLogger.e('❌ Exception in _startPlay: $e', e, st);
+      AppLogger.e('❌ [Camera] Stream play error: $e', e, st);
       if (mounted) {
         _stateManager.setStatusMessage(CameraConstants.cannotPlayMessage);
         context.showCameraMessage(CameraConstants.checkUrlMessage);
@@ -256,31 +310,6 @@ class _LiveCameraScreenState extends State<LiveCameraScreen> {
     if (m2 != null) return m2.group(1);
     return null;
   }
-
-  // Future<void> _toggleQuality() async {
-  //   if (_stateManager.isStarting) {
-  //     context.showCameraMessage(CameraConstants.connectingWaitMessage);
-  //     return;
-  //   }
-
-  //   final url = _stateManager.urlController.text.trim();
-  //   if (url.isEmpty) return;
-
-  //   final nextHd = !_stateManager.isHd;
-  //   final targetSubtype = nextHd
-  //       ? CameraConstants.hdSubtype
-  //       : CameraConstants.sdSubtype;
-  //   final newUrl = CameraHelpers.withSubtype(url, targetSubtype);
-
-  //   _stateManager.updateSettings(isHd: nextHd);
-  //   _stateManager.urlController.text = newUrl;
-
-  //   if (newUrl != _stateManager.currentUrl) {
-  //     await _startPlay();
-  //   }
-
-  //   HapticFeedback.selectionClick();
-  // }
 
   Future<void> _changeFps(int newFps) async {
     if (_stateManager.isStarting) return;
@@ -309,10 +338,6 @@ class _LiveCameraScreenState extends State<LiveCameraScreen> {
     String? snapshotPath;
     try {
       snapshotPath = await _cameraService.takeSnapshot();
-      if (snapshotPath == null) {
-        context.showCameraMessage('Không chụp được khung hình.');
-        return;
-      }
 
       final extracted = _extractCameraIdFromUrl(
         _stateManager.currentUrl ?? _stateManager.urlController.text,
@@ -362,6 +387,12 @@ class _LiveCameraScreenState extends State<LiveCameraScreen> {
           }
         }
       } else {
+        // Check if snapshot was captured successfully
+        if (snapshotPath == null || snapshotPath.isEmpty) {
+          if (mounted) context.showCameraMessage('Không thể chụp ảnh.');
+          return;
+        }
+
         final svc = EventService.withDefaultClient();
         final createdEvent = await svc.sendManualAlarm(
           cameraId: cameraId,
@@ -404,23 +435,22 @@ class _LiveCameraScreenState extends State<LiveCameraScreen> {
     }
   }
 
-  // Future<void> _togglePlayPause() async {
-  //   try {
-  //     final isPlaying = _stateManager.state.isPlaying;
-  //     await _cameraService.togglePlayPause(isPlaying);
-  //   } catch (e, st) {
-  //     AppLogger.e('Failed to toggle play/pause', e, st);
-  //   }
-  // }
-
   Future<void> _reloadStream() async {
     try {
+      // Check if already reloading
+      if (_stateManager.isStarting) {
+        AppLogger.d('⏳ [Camera] Already reloading, skipping...');
+        return;
+      }
+
       // Haptic feedback
       HapticFeedback.mediumImpact();
 
       // Show loading state
       _stateManager.setStarting(true);
       _stateManager.setStatusMessage('Đang tải lại...');
+
+      AppLogger.i('🔄 [Camera] Reloading stream...');
 
       // Cleanup và đợi để đảm bảo resources được giải phóng
       await _disposeStreamResources();
@@ -440,66 +470,71 @@ class _LiveCameraScreenState extends State<LiveCameraScreen> {
     }
   }
 
-  Future<void> _onCapture() async {
+  Future<void> _onCaptureAndAlarm() async {
     setState(() => _alarming = true);
     String? snapshotPath;
-
     try {
-      // 1) Chụp snapshot
       snapshotPath = await _cameraService.takeSnapshot();
-      if (snapshotPath == null) {
-        if (mounted) context.showCameraMessage('Không chụp được khung hình.');
-        return;
-      }
 
-      // 2) Extract cameraId từ URL
       final extracted = _extractCameraIdFromUrl(
         _stateManager.currentUrl ?? _stateManager.urlController.text,
       );
-
       final uuidRegex = RegExp(
-        r'^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$',
+        r'^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}\u0000'
+            .replaceAll('\u0000', ''),
       );
-
       final cameraId = (extracted != null && uuidRegex.hasMatch(extracted))
           ? extracted
           : '0fd3f12d-ef70-4d41-a622-79fa5db67a49';
-
       if (cameraId == '0fd3f12d-ef70-4d41-a622-79fa5db67a49') {
         AppLogger.d(
           '🐛 [Camera] using default cameraId fallback (extracted=$extracted)',
         );
       }
 
-      // 3) Nếu mappedEventId có tồn tại
       if (widget.mappedEventId != null && widget.mappedEventId!.isNotEmpty) {
         final eventId = widget.mappedEventId!;
-
         try {
-          final userId = await AuthStorage.getUserId();
-          if (userId != null && userId.isNotEmpty) {
-            await AlarmRemoteDataSource().setAlarm(
-              eventId: eventId,
-              userId: userId,
-              cameraId: cameraId,
-              enabled: true,
-            );
-          }
-        } catch (e) {
-          AppLogger.e('External alarm call failed for mapped event: $e');
-        }
-
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text('Gửi báo động cho sự kiện.')),
+          await EventsRemoteDataSource().updateEventLifecycle(
+            eventId: eventId,
+            lifecycleState: 'ALARM_ACTIVATED',
+            notes: 'Kích hoạt từ giao diện camera trực tiếp',
           );
-          ActiveAlarmNotifier.instance.update(true);
-        }
-      }
-      // 4) Nếu không có mappedEvent → tạo sự kiện mới rồi gọi alarm
-      else {
-        final svc = EventService.withDefaultClient();
 
+          try {
+            final userId = await AuthStorage.getUserId();
+            if (userId != null && userId.isNotEmpty) {
+              await AlarmRemoteDataSource().setAlarm(
+                eventId: eventId,
+                userId: userId,
+                cameraId: cameraId,
+                enabled: true,
+              );
+            }
+          } catch (e) {
+            AppLogger.e('External alarm call failed for mapped event: $e');
+          }
+
+          if (mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(content: Text('Kích hoạt báo động cho sự kiện.')),
+            );
+            ActiveAlarmNotifier.instance.update(true);
+          }
+        } catch (e, st) {
+          AppLogger.e('Failed to activate mapped event alarm: $e', e, st);
+          if (mounted) {
+            context.showCameraMessage('Kích hoạt báo động thất bại.');
+          }
+        }
+      } else {
+        // Check if snapshot was captured successfully
+        if (snapshotPath == null || snapshotPath.isEmpty) {
+          if (mounted) context.showCameraMessage('Không thể chụp ảnh.');
+          return;
+        }
+
+        final svc = EventService.withDefaultClient();
         final createdEvent = await svc.sendManualAlarm(
           cameraId: cameraId,
           snapshotPath: snapshotPath,
@@ -529,12 +564,12 @@ class _LiveCameraScreenState extends State<LiveCameraScreen> {
 
         if (!mounted) return;
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Tạo báo động thành công.')),
+          const SnackBar(content: Text('Gửi báo động thành công.')),
         );
       }
     } catch (e, st) {
       AppLogger.e('❌ [Camera] send manual alarm failed', e, st);
-      if (mounted) context.showCameraMessage('Tạo báo động thất bại.');
+      if (mounted) context.showCameraMessage('Gửi báo động thất bại.');
     } finally {
       if (mounted) setState(() => _alarming = false);
     }
@@ -564,6 +599,31 @@ class _LiveCameraScreenState extends State<LiveCameraScreen> {
       if (mounted) setState(() => _emergencyCalling = false);
     }
   }
+
+  // Future<String> _chooseEmergencyPhone() async {
+  //   String phone = '115';
+  //   try {
+  //     final userId = await AuthStorage.getUserId();
+  //     if (userId != null && userId.isNotEmpty) {
+  //       final list = await EmergencyContactsRemoteDataSource().list(userId);
+  //       if (list.isNotEmpty) {
+  //         list.sort((a, b) => b.alertLevel.compareTo(a.alertLevel));
+  //         EmergencyContactDto? chosen;
+  //         for (final c in list) {
+  //           if (c.phone.trim().isNotEmpty) {
+  //             chosen = c;
+  //             break;
+  //           }
+  //         }
+  //         chosen ??= list.first;
+  //         if (chosen.phone.trim().isNotEmpty) {
+  //           phone = chosen.phone.trim();
+  //         }
+  //       }
+  //     }
+  //   } catch (_) {}
+  //   return phone.isEmpty ? '115' : phone;
+  // }
 
   Future<void> _onCancelAlarm() async {
     final eventId = widget.mappedEventId;
@@ -746,9 +806,9 @@ class _LiveCameraScreenState extends State<LiveCameraScreen> {
   Widget _buildBody(CameraState state) {
     if (state.isFullscreen) {
       return CameraWidgets.buildFullscreenContainer(
-        // Nếu chưa có controller (placeholder), để null để cho inner
+        // Nếu chưa có player (placeholder), để null để cho inner
         // GestureDetector (nhấn để bắt phát) nhận sự kiện.
-        onTap: _cameraService.controller != null
+        onTap: _currentPlayer != null
             ? _stateManager.showControlsTemporarily
             : null,
         onDoubleTap: _stateManager.toggleFullscreen,
@@ -811,7 +871,7 @@ class _LiveCameraScreenState extends State<LiveCameraScreen> {
 
   Widget _buildCameraCard(CameraState state) {
     final cameraName = widget.camera?.name ?? 'Camera trực tiếp';
-    final isOnline = _cameraService.controller != null && !state.initLoading;
+    final isOnline = _currentPlayer != null && !state.initLoading;
 
     return Container(
       decoration: BoxDecoration(
@@ -889,7 +949,7 @@ class _LiveCameraScreenState extends State<LiveCameraScreen> {
   }
 
   Widget _buildCameraVideoSection(CameraState state) {
-    final hasController = _cameraService.controller != null;
+    final hasPlayer = _currentPlayer != null;
 
     return Padding(
       padding: const EdgeInsets.fromLTRB(16, 8, 16, 4),
@@ -905,14 +965,8 @@ class _LiveCameraScreenState extends State<LiveCameraScreen> {
               child: Stack(
                 fit: StackFit.expand,
                 children: [
-                  if (hasController)
-                    VlcPlayer(
-                      controller: _cameraService.controller!,
-                      aspectRatio: state.videoAspectRatio ?? 16 / 9,
-                      placeholder: const Center(
-                        child: CircularProgressIndicator(),
-                      ),
-                    )
+                  if (hasPlayer)
+                    _currentPlayer!.buildView()
                   else
                     GestureDetector(
                       behavior: HitTestBehavior.opaque,
@@ -1025,11 +1079,11 @@ class _LiveCameraScreenState extends State<LiveCameraScreen> {
             ),
           ),
           const SizedBox(width: 6),
-          Text(
+          const Text(
             'LIVE',
-            style: const Tconst extStyle(
+            style: TextStyle(
               color: Colors.white,
-        fontSize: 12,
+              fontSize: 12,
               fontWeight: FontWeight.w600,
             ),
           ),
@@ -1122,11 +1176,11 @@ class _LiveCameraScreenState extends State<LiveCameraScreen> {
       builder: (context, alarmActive, _) {
         final mainLabel = alarmActive
             ? (_cancelingAlarm ? 'Đang hủy...' : 'Hủy báo động')
-            : (_alarming ? 'Đang...' : 'Chụp ảnh');
+            : (_alarming ? 'Đang...' : 'Báo động');
         final mainIcon = alarmActive
             ? Icons.close_rounded
             : Icons.warning_amber_rounded;
-        final onMainTap = alarmActive ? _onCancelAlarm : _onCapture;
+        final onMainTap = alarmActive ? _onCancelAlarm : _onCaptureAndAlarm;
         final mainLoading = alarmActive ? _cancelingAlarm : _alarming;
 
         return Row(
@@ -1334,7 +1388,7 @@ class _LiveCameraScreenState extends State<LiveCameraScreen> {
         final mainIcon = alarmActive
             ? Icons.close_rounded
             : Icons.warning_amber_rounded;
-        final onMainTap = alarmActive ? _onCancelAlarm : _onCapture;
+        final onMainTap = alarmActive ? _onCancelAlarm : _onCaptureAndAlarm;
         final mainLoading = alarmActive ? _cancelingAlarm : _alarming;
 
         if (iconOnly) {
@@ -1440,12 +1494,8 @@ class _LiveCameraScreenState extends State<LiveCameraScreen> {
         child: Stack(
           fit: StackFit.expand,
           children: [
-            if (_cameraService.controller != null)
-              VlcPlayer(
-                controller: _cameraService.controller!,
-                aspectRatio: state.videoAspectRatio ?? 16 / 9,
-                placeholder: const Center(child: CircularProgressIndicator()),
-              )
+            if (_currentPlayer != null)
+              _currentPlayer!.buildView()
             else
               GestureDetector(
                 behavior: HitTestBehavior.opaque,

@@ -1584,7 +1584,7 @@ class _AlertEventCardState extends State<AlertEventCard>
       final api = CameraApi(
         ApiClient(tokenProvider: AuthStorage.getAccessToken),
       );
-      final res = await api.getCamerasByUser(customerId: customerId);
+      final res = await api.getCamerasByUser(userId: customerId);
       if (res['data'] is! List) {
         messenger.showSnackBar(
           const SnackBar(content: Text('Không thể tải danh sách camera.')),

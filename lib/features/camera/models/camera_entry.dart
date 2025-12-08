@@ -1,5 +1,6 @@
-import 'package:detect_care_caregiver_app/core/config/app_config.dart';
 import 'package:flutter/foundation.dart';
+
+import 'package:detect_care_caregiver_app/core/config/app_config.dart';
 
 class CameraEntry {
   final String id;
@@ -8,12 +9,48 @@ class CameraEntry {
   final String? thumb;
   final bool isOnline;
 
+  /// Thông tin bổ sung từ API
+  final String? userId;
+  final String? cameraType;
+  final String? ipAddress;
+  final int? port;
+  final String? rtspUrl;
+  final String? hlsUrl;
+  final String? webrtcUrl;
+  final String? username;
+  final String? password;
+  final String? locationInRoom;
+  final String? resolution;
+  final int? fps;
+  final String? status;
+  final DateTime? lastPing;
+  final DateTime? lastHeartbeatAt;
+  final DateTime? createdAt;
+  final DateTime? updatedAt;
+
   const CameraEntry({
     required this.id,
     required this.name,
     required this.url,
     this.thumb,
     this.isOnline = true,
+    this.userId,
+    this.cameraType,
+    this.ipAddress,
+    this.port,
+    this.rtspUrl,
+    this.hlsUrl,
+    this.webrtcUrl,
+    this.username,
+    this.password,
+    this.locationInRoom,
+    this.resolution,
+    this.fps,
+    this.status,
+    this.lastPing,
+    this.lastHeartbeatAt,
+    this.createdAt,
+    this.updatedAt,
   });
 
   CameraEntry copyWith({
@@ -22,6 +59,23 @@ class CameraEntry {
     String? url,
     String? thumb,
     bool? isOnline,
+    String? userId,
+    String? cameraType,
+    String? ipAddress,
+    int? port,
+    String? rtspUrl,
+    String? hlsUrl,
+    String? webrtcUrl,
+    String? username,
+    String? password,
+    String? locationInRoom,
+    String? resolution,
+    int? fps,
+    String? status,
+    DateTime? lastPing,
+    DateTime? lastHeartbeatAt,
+    DateTime? createdAt,
+    DateTime? updatedAt,
   }) {
     return CameraEntry(
       id: id ?? this.id,
@@ -29,15 +83,49 @@ class CameraEntry {
       url: url ?? this.url,
       thumb: thumb ?? this.thumb,
       isOnline: isOnline ?? this.isOnline,
+      userId: userId ?? this.userId,
+      cameraType: cameraType ?? this.cameraType,
+      ipAddress: ipAddress ?? this.ipAddress,
+      port: port ?? this.port,
+      rtspUrl: rtspUrl ?? this.rtspUrl,
+      hlsUrl: hlsUrl ?? this.hlsUrl,
+      webrtcUrl: webrtcUrl ?? this.webrtcUrl,
+      username: username ?? this.username,
+      password: password ?? this.password,
+      locationInRoom: locationInRoom ?? this.locationInRoom,
+      resolution: resolution ?? this.resolution,
+      fps: fps ?? this.fps,
+      status: status ?? this.status,
+      lastPing: lastPing ?? this.lastPing,
+      lastHeartbeatAt: lastHeartbeatAt ?? this.lastHeartbeatAt,
+      createdAt: createdAt ?? this.createdAt,
+      updatedAt: updatedAt ?? this.updatedAt,
     );
   }
 
   Map<String, dynamic> toJson() => {
     'camera_id': id,
     'camera_name': name,
-    'rtsp_url': url,
+    'url': url,
+    'rtsp_url': rtspUrl ?? url,
     'thumb': thumb,
     'is_online': isOnline,
+    'user_id': userId,
+    'camera_type': cameraType,
+    'ip_address': ipAddress,
+    'port': port,
+    'hls_url': hlsUrl,
+    'webrtc_url': webrtcUrl,
+    'username': username,
+    'password': password,
+    'location_in_room': locationInRoom,
+    'resolution': resolution,
+    'fps': fps,
+    'status': status,
+    'last_ping': lastPing?.toIso8601String(),
+    'last_heartbeat_at': lastHeartbeatAt?.toIso8601String(),
+    'created_at': createdAt?.toIso8601String(),
+    'updated_at': updatedAt?.toIso8601String(),
   };
 
   factory CameraEntry.fromJson(Map<String, dynamic> j) {
@@ -47,12 +135,14 @@ class CameraEntry {
     debugPrint('🔍 [CameraEntry] Parsing camera data:');
     debugPrint('  camera_id: ${j['camera_id']}');
     debugPrint('  rtsp_url: ${j['rtsp_url']}');
+    debugPrint('  hls_url: ${j['hls_url']}');
     debugPrint('  username: ${j['username']}');
     debugPrint('  password: ${j['password'] != null ? "***" : "null"}');
 
+    final rtspUrlRaw = j['rtsp_url']?.toString();
     // Nếu không có url, xây dựng từ rtsp_url + username/password
     if (finalUrl.isEmpty) {
-      final rtspUrl = j['rtsp_url']?.toString() ?? '';
+      final rtspUrl = rtspUrlRaw ?? '';
       final username = j['username']?.toString();
       final password = j['password']?.toString();
 
@@ -96,6 +186,23 @@ class CameraEntry {
       isOnline: j['is_online'] is bool
           ? j['is_online']
           : (j['is_online']?.toString() == 'true'),
+      userId: j['user_id']?.toString(),
+      cameraType: j['camera_type']?.toString(),
+      ipAddress: j['ip_address']?.toString(),
+      port: _parseInt(j['port']),
+      rtspUrl: rtspUrlRaw,
+      hlsUrl: j['hls_url']?.toString(),
+      webrtcUrl: j['webrtc_url']?.toString(),
+      username: j['username']?.toString(),
+      password: j['password']?.toString(),
+      locationInRoom: j['location_in_room']?.toString(),
+      resolution: j['resolution']?.toString(),
+      fps: _parseInt(j['fps']),
+      status: j['status']?.toString(),
+      lastPing: _parseDate(j['last_ping']),
+      lastHeartbeatAt: _parseDate(j['last_heartbeat_at']),
+      createdAt: _parseDate(j['created_at']),
+      updatedAt: _parseDate(j['updated_at']),
     );
   }
 
@@ -144,5 +251,19 @@ class CameraEntry {
         : base;
     final normalizedPath = value.startsWith('/') ? value : '/$value';
     return '$normalizedBase$normalizedPath';
+  }
+
+  static DateTime? _parseDate(dynamic value) {
+    if (value == null) return null;
+    if (value is DateTime) return value;
+    final str = value.toString();
+    if (str.isEmpty) return null;
+    return DateTime.tryParse(str);
+  }
+
+  static int? _parseInt(dynamic value) {
+    if (value == null) return null;
+    if (value is int) return value;
+    return int.tryParse(value.toString());
   }
 }

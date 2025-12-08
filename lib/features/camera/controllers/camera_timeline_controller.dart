@@ -2,12 +2,13 @@ import 'dart:convert';
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter/scheduler.dart';
-import 'package:detect_care_caregiver_app/core/utils/logger.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
+
+import 'package:detect_care_caregiver_app/core/utils/logger.dart';
 import 'package:detect_care_caregiver_app/features/camera/data/camera_timeline_api.dart';
-import 'package:detect_care_caregiver_app/features/camera/widgets/timeline/camera_timeline_parser.dart';
-import 'package:detect_care_caregiver_app/features/camera/widgets/timeline/camera_timeline_demo_data.dart';
 import 'package:detect_care_caregiver_app/features/camera/widgets/timeline/camera_timeline_components.dart';
+import 'package:detect_care_caregiver_app/features/camera/widgets/timeline/camera_timeline_demo_data.dart';
+import 'package:detect_care_caregiver_app/features/camera/widgets/timeline/camera_timeline_parser.dart';
 
 class CameraTimelineController extends ChangeNotifier {
   final CameraTimelineApi api;

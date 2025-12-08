@@ -1,9 +1,10 @@
+import 'package:flutter/material.dart';
+
 import 'package:detect_care_caregiver_app/core/utils/logger.dart';
 import 'package:detect_care_caregiver_app/features/auth/data/auth_storage.dart';
 import 'package:detect_care_caregiver_app/features/auth/screens/phone_login_screen.dart';
 import 'package:detect_care_caregiver_app/features/service_package/screens/service_package_screen.dart';
 import 'package:detect_care_caregiver_app/features/subscription/data/service_package_api.dart';
-import 'package:flutter/material.dart';
 
 /// Lớp phụ trách kiểm tra điều kiện truy cập camera theo từng bước rõ ràng.
 class CameraAccessGuard {

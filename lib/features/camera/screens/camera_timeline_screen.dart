@@ -1,5 +1,8 @@
 import 'dart:async';
 
+import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
+
 import 'package:detect_care_caregiver_app/features/camera/controllers/camera_timeline_controller.dart';
 import 'package:detect_care_caregiver_app/features/camera/data/camera_timeline_api.dart';
 import 'package:detect_care_caregiver_app/features/camera/models/camera_entry.dart';
@@ -8,8 +11,6 @@ import 'package:detect_care_caregiver_app/features/camera/widgets/timeline/camer
 import 'package:detect_care_caregiver_app/features/camera/widgets/timeline/camera_timeline_empty_preview.dart';
 import 'package:detect_care_caregiver_app/features/camera/widgets/timeline/camera_timeline_list.dart';
 import 'package:detect_care_caregiver_app/features/camera/widgets/timeline/camera_timeline_mode_selector.dart';
-import 'package:flutter/material.dart';
-import 'package:provider/provider.dart';
 
 class CameraTimelineScreen extends StatefulWidget {
   final CameraEntry camera;

@@ -59,6 +59,7 @@ dependencies:
   app_links: ^6.4.1
   flutter_ringtone_player: ^4.0.0
   crypto: ^3.0.6
+  video_player: ^2.10.1
 
 dev_dependencies:
   flutter_test:
