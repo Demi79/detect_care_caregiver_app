@@ -158,20 +158,42 @@ class CameraService {
   /// Chụp ảnh từ luồng video hiện tại và lưu dưới dạng thumbnail.
   ///
   /// Trả về đường dẫn file của thumbnail đã lưu, hoặc null nếu thất bại.
-  Future<String?> takeSnapshot() async {
-    final controller = _controller;
-    if (controller == null) return null;
+  Future<String?> takeSnapshot({VlcPlayerController? controller}) async {
+    final target = controller ?? _controller;
+    if (target == null) {
+      AppLogger.d(
+        '[CameraService.takeSnapshot] No controller available, returning null',
+      );
+      return null;
+    }
 
     try {
-      final bytes = await controller.takeSnapshot();
+      AppLogger.api(
+        '📸 [CameraService.takeSnapshot] Starting snapshot capture...',
+      );
+
+      final bytes = await target.takeSnapshot();
       if (bytes.isEmpty) {
-        AppLogger.w('Snapshot returned empty bytes');
+        AppLogger.w('⚠️ [CameraService.takeSnapshot] Snapshot bytes empty');
         return null;
       }
 
-      return await _saveThumbnail(bytes);
+      AppLogger.api(
+        '📸 [CameraService.takeSnapshot] Captured ${bytes.length} bytes',
+      );
+
+      final thumbsDir = await CameraHelpers.getThumbsDirectory();
+      final timestamp = DateTime.now().millisecondsSinceEpoch;
+      final filename = CameraHelpers.generateThumbnailFilename('', timestamp);
+      final file = File('${thumbsDir.path}/$filename');
+
+      await file.writeAsBytes(bytes, flush: true);
+      await CameraHelpers.cleanupOldThumbs(thumbsDir);
+
+      AppLogger.api('✅ [CameraService.takeSnapshot] Saved to: ${file.path}');
+      return file.path;
     } catch (e, st) {
-      AppLogger.e('Failed to take snapshot', e, st);
+      AppLogger.e('❌ [CameraService.takeSnapshot] Failed: $e', e, st);
       return null;
     }
   }

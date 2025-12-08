@@ -820,8 +820,15 @@ class EventService {
     try {
       final rds = EventsRemoteDataSource(api: _api);
 
+      // Get userId from AuthStorage
+      final userId = await AuthStorage.getUserId();
+      if (userId == null || userId.isEmpty) {
+        throw Exception('User ID is required to send manual alarm');
+      }
+
       final data = await rds.createManualAlert(
         cameraId: cameraId,
+        userId: userId,
         imagePath: snapshotPath,
         notes: notes ?? "Manual alarm triggered from LiveCameraScreen",
         contextData: {

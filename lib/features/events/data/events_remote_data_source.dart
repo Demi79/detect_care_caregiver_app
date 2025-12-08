@@ -566,12 +566,14 @@ class EventsRemoteDataSource {
 
   Future<Map<String, dynamic>> createManualAlert({
     required String cameraId,
+    required String userId,
     required String imagePath,
     String? notes,
     Map<String, dynamic>? contextData,
   }) async {
     final fields = {
       "camera_id": cameraId,
+      "user_id": userId,
       "event_type": "emergency",
       "status": "danger",
       "notes": notes ?? "Manual alarm triggered",

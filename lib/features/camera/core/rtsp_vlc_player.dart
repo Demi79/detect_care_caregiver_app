@@ -9,6 +9,7 @@ class RtspVlcPlayer implements ICameraPlayer {
   final String url;
   VlcPlayerController? _controller;
   bool _isDisposed = false;
+  VlcPlayerController? get controller => _controller;
 
   RtspVlcPlayer(this.url);
 

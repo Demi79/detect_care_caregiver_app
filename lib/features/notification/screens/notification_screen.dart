@@ -761,17 +761,17 @@ class _NotificationScreenState extends State<NotificationScreen> {
                                                 color: Colors.grey.shade500,
                                               ),
                                             ),
-                                            const Spacer(),
-                                            if (!_isSelectionMode &&
-                                                _shouldShowSeverityActionButton(
-                                                  n,
-                                                  severity,
-                                                ))
-                                              _buildSeverityActionButton(
-                                                context,
-                                                n,
-                                                severity,
-                                              ),
+                                            // const Spacer(),
+                                            // if (!_isSelectionMode &&
+                                            //     _shouldShowSeverityActionButton(
+                                            //       n,
+                                            //       severity,
+                                            //     ))
+                                            //   _buildSeverityActionButton(
+                                            //     context,
+                                            //     n,
+                                            //     severity,
+                                            //   ),
                                           ],
                                         ),
                                       ],
