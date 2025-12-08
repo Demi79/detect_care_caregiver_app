@@ -260,7 +260,7 @@ class _HealthInsightsScreenState extends State<HealthInsightsScreen> {
             children: [
               Row(
                 children: [
-                  Icon(
+                  const Icon(
                     Icons.compare_arrows_rounded,
                     color: AppTheme.primaryBlue,
                   ),
@@ -411,7 +411,7 @@ class _DateRangeFilterCard extends StatelessWidget {
                   color: AppTheme.primaryBlue.withAlpha((0.1 * 255).round()),
                   borderRadius: BorderRadius.circular(10),
                 ),
-                child: Icon(
+                child: const Icon(
                   Icons.date_range_rounded,
                   color: AppTheme.primaryBlue,
                   size: 20,
@@ -453,7 +453,7 @@ class _DateRangeFilterCard extends StatelessWidget {
                       builder: (context, child) {
                         return Theme(
                           data: Theme.of(context).copyWith(
-                            colorScheme: ColorScheme.light(
+                            colorScheme: const ColorScheme.light(
                               primary: AppTheme.primaryBlue,
                             ),
                           ),
@@ -468,7 +468,7 @@ class _DateRangeFilterCard extends StatelessWidget {
                   borderRadius: BorderRadius.circular(10),
                   child: Container(
                     padding: const EdgeInsets.all(10),
-                    child: Icon(
+                    child: const Icon(
                       Icons.edit_calendar_rounded,
                       color: AppTheme.primaryBlue,
                       size: 20,
@@ -557,7 +557,7 @@ class _QuickFilterChip extends StatelessWidget {
                 Flexible(
                   child: Text(
                     label,
-                    style: TextStyle(
+                    style: const TextStyle(
                       fontSize: 13,
                       fontWeight: FontWeight.w600,
                       color: AppTheme.primaryBlue,
@@ -665,7 +665,7 @@ class _TopEventTypeCard extends StatelessWidget {
       ),
       child: Row(
         children: [
-          Icon(Icons.local_activity_rounded, color: AppTheme.primaryBlue),
+          const Icon(Icons.local_activity_rounded, color: AppTheme.primaryBlue),
           const SizedBox(width: 8),
           Expanded(
             child: Text(
@@ -807,7 +807,7 @@ class _AiRecommendationCard extends StatelessWidget {
                         ),
                         child: Text(
                           '${index + 1}',
-                          style: TextStyle(
+                          style: const TextStyle(
                             color: AppTheme.warningColor,
                             fontWeight: FontWeight.w700,
                             fontSize: 13,
@@ -830,7 +830,7 @@ class _AiRecommendationCard extends StatelessWidget {
                                 ),
                                 borderRadius: BorderRadius.circular(6),
                               ),
-                              child: Text(
+                              child: const Text(
                                 'Độ ưu tiên: Trung bình',
                                 style: TextStyle(
                                   color: AppTheme.warningColor,
@@ -876,7 +876,7 @@ class _AiRecommendationCard extends StatelessWidget {
                             children: [
                               Text(
                                 cta,
-                                style: TextStyle(
+                                style: const TextStyle(
                                   fontWeight: FontWeight.w700,
                                   color: AppTheme.primaryBlue,
                                   fontSize: 13,

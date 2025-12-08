@@ -155,7 +155,7 @@ class _RegisterScreenState extends State<RegisterScreen>
           width: 1,
         ),
       ),
-      child: Column(
+      child: const Column(
         children: [
           // Medical Icon
           // Container(
@@ -174,7 +174,7 @@ class _RegisterScreenState extends State<RegisterScreen>
           // const SizedBox(height: 20),
 
           // Brand Name
-          const Text(
+          Text(
             'Vision AI',
             style: TextStyle(
               fontSize: 28,
@@ -184,9 +184,9 @@ class _RegisterScreenState extends State<RegisterScreen>
             ),
           ),
 
-          const SizedBox(height: 8),
+          SizedBox(height: 8),
 
-          const Text(
+          Text(
             'Tạo tài khoản mới',
             style: TextStyle(
               fontSize: 18,
@@ -195,14 +195,14 @@ class _RegisterScreenState extends State<RegisterScreen>
             ),
           ),
 
-          const SizedBox(height: 4),
+          SizedBox(height: 4),
 
           Text(
             'Đăng ký để sử dụng hệ thống',
             textAlign: TextAlign.center,
             style: TextStyle(
               fontSize: 14,
-              color: const Color(0xFF64748B),
+              color: Color(0xFF64748B),
               fontWeight: FontWeight.w400,
               height: 1.4,
             ),
@@ -245,11 +245,11 @@ class _RegisterScreenState extends State<RegisterScreen>
 
             const SizedBox(height: 8),
 
-            Text(
+            const Text(
               'Vui lòng điền đầy đủ thông tin bên dưới',
               style: TextStyle(
                 fontSize: 14,
-                color: const Color(0xFF64748B),
+                color: Color(0xFF64748B),
                 fontWeight: FontWeight.w400,
               ),
               textAlign: TextAlign.center,
@@ -384,12 +384,12 @@ class _RegisterScreenState extends State<RegisterScreen>
                 Expanded(
                   child: Container(height: 1, color: const Color(0xFFE5E7EB)),
                 ),
-                Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 16),
+                const Padding(
+                  padding: EdgeInsets.symmetric(horizontal: 16),
                   child: Text(
                     'Hoặc',
                     style: TextStyle(
-                      color: const Color(0xFF9CA3AF),
+                      color: Color(0xFF9CA3AF),
                       fontSize: 13,
                       fontWeight: FontWeight.w400,
                     ),
@@ -480,8 +480,8 @@ class _RegisterScreenState extends State<RegisterScreen>
             ),
             decoration: InputDecoration(
               hintText: hintText,
-              hintStyle: TextStyle(
-                color: const Color(0xFF9CA3AF),
+              hintStyle: const TextStyle(
+                color: Color(0xFF9CA3AF),
                 fontSize: 15,
                 fontWeight: FontWeight.w400,
               ),
@@ -563,10 +563,10 @@ class _RegisterScreenState extends State<RegisterScreen>
                   ),
                 ),
                 const SizedBox(height: 8),
-                Text(
+                const Text(
                   'Bao gồm việc xử lý dữ liệu y tế theo tiêu chuẩn bảo mật',
                   style: TextStyle(
-                    color: const Color(0xFF64748B),
+                    color: Color(0xFF64748B),
                     fontSize: 12,
                     fontWeight: FontWeight.w400,
                   ),
@@ -586,10 +586,10 @@ class _RegisterScreenState extends State<RegisterScreen>
         Row(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            Text(
+            const Text(
               'Đã có tài khoản? ',
               style: TextStyle(
-                color: const Color(0xFF6B7280),
+                color: Color(0xFF6B7280),
                 fontSize: 14,
                 fontWeight: FontWeight.w400,
               ),

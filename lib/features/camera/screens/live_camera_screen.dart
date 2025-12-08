@@ -3,6 +3,7 @@ import 'dart:ui';
 
 import 'package:detect_care_caregiver_app/core/utils/logger.dart';
 import 'package:detect_care_caregiver_app/features/alarm/data/alarm_remote_data_source.dart';
+import 'package:detect_care_caregiver_app/features/alarm/services/active_alarm_notifier.dart';
 import 'package:detect_care_caregiver_app/features/auth/data/auth_storage.dart';
 import 'package:detect_care_caregiver_app/features/camera/core/camera_core.dart';
 import 'package:detect_care_caregiver_app/features/camera/models/camera_entry.dart';
@@ -10,16 +11,12 @@ import 'package:detect_care_caregiver_app/features/camera/screens/camera_timelin
 import 'package:detect_care_caregiver_app/features/camera/services/camera_access_guard.dart';
 import 'package:detect_care_caregiver_app/features/camera/widgets/features_panel.dart';
 import 'package:detect_care_caregiver_app/features/camera/widgets/status_chip.dart';
-import 'package:detect_care_caregiver_app/features/emergency/call_action_context.dart';
-import 'package:detect_care_caregiver_app/features/emergency/call_action_service.dart';
-import 'package:detect_care_caregiver_app/features/emergency_contacts/data/emergency_contacts_remote_data_source.dart';
 import 'package:detect_care_caregiver_app/features/emergency/emergency_call_helper.dart';
-import 'package:detect_care_caregiver_app/features/alarm/services/active_alarm_notifier.dart';
 import 'package:detect_care_caregiver_app/features/events/data/events_remote_data_source.dart';
 import 'package:detect_care_caregiver_app/features/home/service/event_service.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'package:flutter_vlc_player/flutter_vlc_player.dart';
+import 'package:flutter_vlc_player_16kb/flutter_vlc_player.dart';
 
 /// Màn hình camera chính với kiến trúc module hóa
 class LiveCameraScreen extends StatefulWidget {
@@ -51,8 +48,8 @@ class _LiveCameraScreenState extends State<LiveCameraScreen> {
   bool _stateDisposed = false;
   bool _alarming = false;
   bool _emergencyCalling = false;
-  bool _infraredEnabled = false;
   bool _cancelingAlarm = false;
+  bool _activatingAlarm = false;
 
   @override
   void initState() {
@@ -175,7 +172,7 @@ class _LiveCameraScreenState extends State<LiveCameraScreen> {
     );
   }
 
-  Future<void> _startPlay({bool allowFallback = true}) async {
+  Future<void> _startPlay() async {
     // Đảm bảo người dùng có quyền (gói) trước khi thử phát
     final allowed = await _accessGuard.ensureSubscriptionAllowed(context);
     if (!allowed) return;
@@ -205,48 +202,34 @@ class _LiveCameraScreenState extends State<LiveCameraScreen> {
       _stateManager.setController(controller);
 
       // Listen for video size changes
-      controller.addListener(() {
-        final size = controller.value.size;
-        if (size.width > 0 && size.height > 0) {
-          final newAspectRatio = size.width / size.height;
-          if (_stateManager.videoAspectRatio != newAspectRatio) {
-            _stateManager.setVideoAspectRatio(newAspectRatio);
+      try {
+        controller.addListener(() {
+          final size = controller.value.size;
+          if (size.width > 0 && size.height > 0) {
+            final newAspectRatio = size.width / size.height;
+            if (_stateManager.videoAspectRatio != newAspectRatio) {
+              _stateManager.setVideoAspectRatio(newAspectRatio);
+            }
           }
-        }
-      });
-
-      final started = await _cameraService.waitForPlayback(
-        CameraConstants.playbackWaitTimeout,
-      );
-
-      if (!mounted) return;
-
-      if (started) {
-        // Phát lại đã bắt đầu thành công. KHÔNG hiển thị status chip lớn
-        // (có thể che luồng video). Vẫn hiển thị controls tạm thời nhưng
-        // tránh đặt thông báo trạng thái cố định.
-        _stateManager.showControlsTemporarily();
-        // Xóa mọi status tạm thời trước đó để giao diện không bị che.
-        _stateManager.setStatusMessage(null);
-        // Quan trọng: tắt flag "starting" để overlay loading không còn hiển
-        // thị nữa.
-        _stateManager.setStarting(false);
-        return;
+        });
+      } catch (e) {
+        AppLogger.w('Warning: addListener failed: $e');
       }
 
-      // Fallback to SD if HD fails
-      if (allowFallback && _stateManager.isHd) {
-        final sdUrl = CameraHelpers.withSubtype(url, CameraConstants.sdSubtype);
-        // context.showCameraMessage(CameraConstants.hdFallbackMessage);
-        _stateManager.updateSettings(isHd: false);
-        _stateManager.urlController.text = sdUrl;
-        _stateManager.setStarting(false);
-        await _startPlay(allowFallback: false);
-        return;
-      }
+      // VLC controller được tạo + play() được gọi = stream đang chạy
+      // Không cần chờ isPlaying() vì trên emulator/network bị hạn chế nó
+      // có thể không bao giờ return true, nhưng stream vẫn "phát" ở backend
+      _stateManager.showControlsTemporarily();
+      _stateManager.setStatusMessage(null);
+      _stateManager.setStarting(false);
 
-      _stateManager.setStatusMessage(CameraConstants.cannotPlayMessage);
-    } catch (e) {
+      // Haptic feedback để người dùng biết đã kết nối
+      HapticFeedback.lightImpact();
+
+      AppLogger.i('✅ [Camera] Stream controller created and playing');
+      return;
+    } catch (e, st) {
+      AppLogger.e('❌ Exception in _startPlay: $e', e, st);
       if (mounted) {
         _stateManager.setStatusMessage(CameraConstants.cannotPlayMessage);
         context.showCameraMessage(CameraConstants.checkUrlMessage);
@@ -274,30 +257,30 @@ class _LiveCameraScreenState extends State<LiveCameraScreen> {
     return null;
   }
 
-  Future<void> _toggleQuality() async {
-    if (_stateManager.isStarting) {
-      context.showCameraMessage(CameraConstants.connectingWaitMessage);
-      return;
-    }
+  // Future<void> _toggleQuality() async {
+  //   if (_stateManager.isStarting) {
+  //     context.showCameraMessage(CameraConstants.connectingWaitMessage);
+  //     return;
+  //   }
 
-    final url = _stateManager.urlController.text.trim();
-    if (url.isEmpty) return;
+  //   final url = _stateManager.urlController.text.trim();
+  //   if (url.isEmpty) return;
 
-    final nextHd = !_stateManager.isHd;
-    final targetSubtype = nextHd
-        ? CameraConstants.hdSubtype
-        : CameraConstants.sdSubtype;
-    final newUrl = CameraHelpers.withSubtype(url, targetSubtype);
+  //   final nextHd = !_stateManager.isHd;
+  //   final targetSubtype = nextHd
+  //       ? CameraConstants.hdSubtype
+  //       : CameraConstants.sdSubtype;
+  //   final newUrl = CameraHelpers.withSubtype(url, targetSubtype);
 
-    _stateManager.updateSettings(isHd: nextHd);
-    _stateManager.urlController.text = newUrl;
+  //   _stateManager.updateSettings(isHd: nextHd);
+  //   _stateManager.urlController.text = newUrl;
 
-    if (newUrl != _stateManager.currentUrl) {
-      await _startPlay();
-    }
+  //   if (newUrl != _stateManager.currentUrl) {
+  //     await _startPlay();
+  //   }
 
-    HapticFeedback.selectionClick();
-  }
+  //   HapticFeedback.selectionClick();
+  // }
 
   Future<void> _changeFps(int newFps) async {
     if (_stateManager.isStarting) return;
@@ -341,11 +324,6 @@ class _LiveCameraScreenState extends State<LiveCameraScreen> {
       final cameraId = (extracted != null && uuidRegex.hasMatch(extracted))
           ? extracted
           : '0fd3f12d-ef70-4d41-a622-79fa5db67a49';
-      if (cameraId == '0fd3f12d-ef70-4d41-a622-79fa5db67a49') {
-        print(
-          '🐛 [Camera] using default cameraId fallback (extracted=$extracted)',
-        );
-      }
 
       if (widget.mappedEventId != null && widget.mappedEventId!.isNotEmpty) {
         final eventId = widget.mappedEventId!;
@@ -353,7 +331,7 @@ class _LiveCameraScreenState extends State<LiveCameraScreen> {
           await EventsRemoteDataSource().updateEventLifecycle(
             eventId: eventId,
             lifecycleState: 'ALARM_ACTIVATED',
-            notes: 'Activated from camera live view',
+            notes: 'Kích hoạt từ giao diện camera trực tiếp',
           );
 
           // Try to notify external alarm control as well.
@@ -375,6 +353,7 @@ class _LiveCameraScreenState extends State<LiveCameraScreen> {
             ScaffoldMessenger.of(context).showSnackBar(
               const SnackBar(content: Text('Kích hoạt báo động cho sự kiện.')),
             );
+            ActiveAlarmNotifier.instance.update(true);
           }
         } catch (e, st) {
           AppLogger.e('Failed to activate mapped event alarm: $e', e, st);
@@ -415,6 +394,7 @@ class _LiveCameraScreenState extends State<LiveCameraScreen> {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(content: Text('Gửi báo động thành công.')),
         );
+        ActiveAlarmNotifier.instance.update(true);
       }
     } catch (e, st) {
       AppLogger.e('❌ [Camera] send manual alarm failed', e, st);
@@ -424,87 +404,102 @@ class _LiveCameraScreenState extends State<LiveCameraScreen> {
     }
   }
 
-  Future<void> _togglePlayPause() async {
-    try {
-      final isPlaying = _stateManager.state.isPlaying;
-      await _cameraService.togglePlayPause(isPlaying);
-    } catch (e, st) {
-      AppLogger.e('Failed to toggle play/pause', e, st);
-    }
-  }
+  // Future<void> _togglePlayPause() async {
+  //   try {
+  //     final isPlaying = _stateManager.state.isPlaying;
+  //     await _cameraService.togglePlayPause(isPlaying);
+  //   } catch (e, st) {
+  //     AppLogger.e('Failed to toggle play/pause', e, st);
+  //   }
+  // }
 
   Future<void> _reloadStream() async {
     try {
+      // Haptic feedback
+      HapticFeedback.mediumImpact();
+
+      // Show loading state
+      _stateManager.setStarting(true);
+      _stateManager.setStatusMessage('Đang tải lại...');
+
+      // Cleanup và đợi để đảm bảo resources được giải phóng
       await _disposeStreamResources();
-      await Future.delayed(const Duration(milliseconds: 150));
+      await Future.delayed(const Duration(milliseconds: 300));
+
+      // Restart stream
       await _startPlay();
+
+      AppLogger.i('✅ [Camera] Stream reloaded successfully');
     } catch (e, st) {
-      AppLogger.e('Failed to reload stream', e, st);
+      AppLogger.e('❌ [Camera] Failed to reload stream', e, st);
+      if (mounted) {
+        _stateManager.setStatusMessage('Không thể tải lại');
+        _stateManager.setStarting(false);
+        context.showCameraMessage('Lỗi khi tải lại camera. Vui lòng thử lại.');
+      }
     }
   }
 
-  Future<void> _onCaptureAndAlarm() async {
+  Future<void> _onCapture() async {
     setState(() => _alarming = true);
     String? snapshotPath;
+
     try {
+      // 1) Chụp snapshot
       snapshotPath = await _cameraService.takeSnapshot();
       if (snapshotPath == null) {
         if (mounted) context.showCameraMessage('Không chụp được khung hình.');
         return;
       }
 
+      // 2) Extract cameraId từ URL
       final extracted = _extractCameraIdFromUrl(
         _stateManager.currentUrl ?? _stateManager.urlController.text,
       );
+
       final uuidRegex = RegExp(
-        r'^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}\u0000'
-            .replaceAll('\u0000', ''),
+        r'^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$',
       );
+
       final cameraId = (extracted != null && uuidRegex.hasMatch(extracted))
           ? extracted
           : '0fd3f12d-ef70-4d41-a622-79fa5db67a49';
+
       if (cameraId == '0fd3f12d-ef70-4d41-a622-79fa5db67a49') {
         AppLogger.d(
           '🐛 [Camera] using default cameraId fallback (extracted=$extracted)',
         );
       }
 
+      // 3) Nếu mappedEventId có tồn tại
       if (widget.mappedEventId != null && widget.mappedEventId!.isNotEmpty) {
         final eventId = widget.mappedEventId!;
+
         try {
-          await EventsRemoteDataSource().updateEventLifecycle(
-            eventId: eventId,
-            lifecycleState: 'ALARM_ACTIVATED',
-            notes: 'Activated from camera live view',
-          );
-
-          try {
-            final userId = await AuthStorage.getUserId();
-            if (userId != null && userId.isNotEmpty) {
-              await AlarmRemoteDataSource().setAlarm(
-                eventId: eventId,
-                userId: userId,
-                cameraId: cameraId,
-                enabled: true,
-              );
-            }
-          } catch (e) {
-            AppLogger.e('External alarm call failed for mapped event: $e');
-          }
-
-          if (mounted) {
-            ScaffoldMessenger.of(context).showSnackBar(
-              const SnackBar(content: Text('Kích hoạt báo động cho sự kiện.')),
+          final userId = await AuthStorage.getUserId();
+          if (userId != null && userId.isNotEmpty) {
+            await AlarmRemoteDataSource().setAlarm(
+              eventId: eventId,
+              userId: userId,
+              cameraId: cameraId,
+              enabled: true,
             );
           }
-        } catch (e, st) {
-          AppLogger.e('Failed to activate mapped event alarm: $e', e, st);
-          if (mounted) {
-            context.showCameraMessage('Kích hoạt báo động thất bại.');
-          }
+        } catch (e) {
+          AppLogger.e('External alarm call failed for mapped event: $e');
         }
-      } else {
+
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('Gửi báo động cho sự kiện.')),
+          );
+          ActiveAlarmNotifier.instance.update(true);
+        }
+      }
+      // 4) Nếu không có mappedEvent → tạo sự kiện mới rồi gọi alarm
+      else {
         final svc = EventService.withDefaultClient();
+
         final createdEvent = await svc.sendManualAlarm(
           cameraId: cameraId,
           snapshotPath: snapshotPath,
@@ -534,30 +529,31 @@ class _LiveCameraScreenState extends State<LiveCameraScreen> {
 
         if (!mounted) return;
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Gửi báo động thành công.')),
+          const SnackBar(content: Text('Tạo báo động thành công.')),
         );
       }
     } catch (e, st) {
       AppLogger.e('❌ [Camera] send manual alarm failed', e, st);
-      if (mounted) context.showCameraMessage('Gửi báo động thất bại.');
+      if (mounted) context.showCameraMessage('Tạo báo động thất bại.');
     } finally {
       if (mounted) setState(() => _alarming = false);
     }
   }
 
-  Future<void> _toggleMute() async {
-    await _cameraService.toggleMute(_stateManager.isMuted);
-  }
+  // Future<void> _toggleMute() async {
+  //   await _cameraService.toggleMute(_stateManager.isMuted);
+  // }
 
-  void _toggleInfrared() {
-    setState(() => _infraredEnabled = !_infraredEnabled);
-    if (!mounted) return;
-    context.showCameraMessage(
-      _infraredEnabled ? 'Đã bật hồng ngoại.' : 'Đã tắt hồng ngoại.',
-    );
-  }
+  // void _toggleInfrared() {
+  //   setState(() => _infraredEnabled = !_infraredEnabled);
+  //   if (!mounted) return;
+  //   context.showCameraMessage(
+  //     _infraredEnabled ? 'Đã bật hồng ngoại.' : 'Đã tắt hồng ngoại.',
+  //   );
+  // }
 
   Future<void> _handleEmergencyCall() async {
+    if (_emergencyCalling) return;
     setState(() => _emergencyCalling = true);
     try {
       await EmergencyCallHelper.initiateEmergencyCall(context);
@@ -569,35 +565,19 @@ class _LiveCameraScreenState extends State<LiveCameraScreen> {
     }
   }
 
-  Future<String> _chooseEmergencyPhone() async {
-    String phone = '115';
-    try {
-      final ds = EmergencyContactsRemoteDataSource();
-      final customerId = await ds.resolveCustomerId();
-      if (customerId != null && customerId.isNotEmpty) {
-        final list = await ds.list(customerId);
-        if (list.isNotEmpty) {
-          list.sort((a, b) => b.alertLevel.compareTo(a.alertLevel));
-          EmergencyContactDto? chosen;
-          for (final c in list) {
-            if (c.phone.trim().isNotEmpty) {
-              chosen = c;
-              break;
-            }
-          }
-          chosen ??= list.first;
-          if (chosen.phone.trim().isNotEmpty) {
-            phone = chosen.phone.trim();
-          }
-        }
-      }
-    } catch (_) {}
-    return phone.isEmpty ? '115' : phone;
-  }
-
   Future<void> _onCancelAlarm() async {
     final eventId = widget.mappedEventId;
-    if (eventId == null || eventId.isEmpty) return;
+    AppLogger.d(
+      '[Camera] _onCancelAlarm called with eventId=$eventId, alarmActive=${ActiveAlarmNotifier.instance.value}',
+    );
+
+    // If no mapped event, still allow canceling active alarms via the notifier
+    if ((eventId == null || eventId.isEmpty) &&
+        !ActiveAlarmNotifier.instance.value) {
+      AppLogger.w('[Camera] _onCancelAlarm: no eventId and no active alarm');
+      return;
+    }
+
     if (_cancelingAlarm) return;
     setState(() => _cancelingAlarm = true);
     try {
@@ -606,11 +586,17 @@ class _LiveCameraScreenState extends State<LiveCameraScreen> {
         const SnackBar(content: Text('Đang hủy báo động...')),
       );
 
-      await EventsRemoteDataSource().cancelEvent(eventId: eventId);
+      // Cancel mapped event if it exists
+      if (eventId != null && eventId.isNotEmpty) {
+        await EventsRemoteDataSource().cancelEvent(eventId: eventId);
+      }
 
       try {
         final userId = await AuthStorage.getUserId();
-        if (userId != null && userId.isNotEmpty) {
+        if (userId != null &&
+            userId.isNotEmpty &&
+            eventId != null &&
+            eventId.isNotEmpty) {
           await AlarmRemoteDataSource().cancelAlarm(
             eventId: eventId,
             userId: userId,
@@ -626,11 +612,62 @@ class _LiveCameraScreenState extends State<LiveCameraScreen> {
           context,
         ).showSnackBar(const SnackBar(content: Text('Đã hủy báo động.')));
       }
+      ActiveAlarmNotifier.instance.update(false);
     } catch (e, st) {
       AppLogger.e('Failed to cancel mapped event alarm: $e', e, st);
       if (mounted) context.showCameraMessage('Hủy báo động thất bại.');
     } finally {
       if (mounted) setState(() => _cancelingAlarm = false);
+    }
+  }
+
+  Future<void> _onActivateAlarm() async {
+    final eventId = widget.mappedEventId;
+    AppLogger.d('[Camera] _onActivateAlarm: eventId=$eventId');
+    if (eventId == null || eventId.isEmpty) {
+      AppLogger.w('[Camera] _onActivateAlarm: eventId is null or empty');
+      return;
+    }
+    if (_activatingAlarm) return;
+    setState(() => _activatingAlarm = true);
+    try {
+      final messenger = ScaffoldMessenger.of(context);
+      messenger.showSnackBar(
+        const SnackBar(content: Text('Đang kích hoạt báo động...')),
+      );
+
+      final userId = await AuthStorage.getUserId();
+      if (userId == null || userId.isEmpty) {
+        if (mounted) {
+          context.showCameraMessage('Không xác thực được người dùng.');
+        }
+        return;
+      }
+
+      AppLogger.d(
+        '[Camera] Calling setAlarm: eventId=$eventId, userId=$userId',
+      );
+      await AlarmRemoteDataSource().setAlarm(
+        eventId: eventId,
+        userId: userId,
+        cameraId: null,
+        enabled: true,
+      );
+      AppLogger.d('[Camera] setAlarm completed successfully');
+
+      // Reflect activation in UI notifier
+      ActiveAlarmNotifier.instance.update(true);
+
+      if (mounted) {
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(const SnackBar(content: Text('Đã kích hoạt báo động.')));
+      }
+    } catch (e, st) {
+      AppLogger.e('Failed to activate alarm: $e', e, st);
+      if (mounted) context.showCameraMessage('Kích hoạt báo động thất bại.');
+    } finally {
+      if (mounted) setState(() => _activatingAlarm = false);
     }
   }
 
@@ -949,7 +986,7 @@ class _LiveCameraScreenState extends State<LiveCameraScreen> {
   Widget _buildCornerIconButtons(CameraState state) {
     return Row(
       children: [
-        _buildCircleIconButton(
+        _buildIconButton(
           icon: state.isFullscreen
               ? Icons.fullscreen_exit_rounded
               : Icons.fullscreen_rounded,
@@ -957,7 +994,7 @@ class _LiveCameraScreenState extends State<LiveCameraScreen> {
           onTap: _stateManager.toggleFullscreen,
         ),
         const SizedBox(width: 8),
-        _buildCircleIconButton(
+        _buildIconButton(
           icon: Icons.refresh_rounded,
           tooltip: 'Tải lại luồng',
           onTap: () => unawaited(_reloadStream()),
@@ -990,9 +1027,9 @@ class _LiveCameraScreenState extends State<LiveCameraScreen> {
           const SizedBox(width: 6),
           Text(
             'LIVE',
-            style: const TextStyle(
+            style: const Tconst extStyle(
               color: Colors.white,
-              fontSize: 12,
+        fontSize: 12,
               fontWeight: FontWeight.w600,
             ),
           ),
@@ -1046,8 +1083,8 @@ class _LiveCameraScreenState extends State<LiveCameraScreen> {
     CameraState state, {
     bool fullscreen = false,
   }) {
-    final horizontalPadding = fullscreen ? 20.0 : 12.0;
-    final verticalPadding = fullscreen ? 24.0 : 14.0;
+    final horizontalPadding = fullscreen ? 8.0 : 12.0;
+    final verticalPadding = fullscreen ? 10.0 : 14.0;
 
     return Align(
       alignment: Alignment.bottomCenter,
@@ -1062,14 +1099,16 @@ class _LiveCameraScreenState extends State<LiveCameraScreen> {
           child: BackdropFilter(
             filter: ImageFilter.blur(sigmaX: 16, sigmaY: 16),
             child: _buildActionPanelBackground(
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  _buildActionIconRow(state, fullscreen),
-                  const SizedBox(height: 12),
-                  _buildActionPanelButtons(state),
-                ],
-              ),
+              child: fullscreen
+                  ? _buildFullscreenActionRow(state)
+                  : Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        _buildActionIconRow(state, fullscreen),
+                        const SizedBox(height: 12),
+                        _buildActionPanelButtons(state, iconOnly: fullscreen),
+                      ],
+                    ),
             ),
           ),
         ),
@@ -1077,44 +1116,100 @@ class _LiveCameraScreenState extends State<LiveCameraScreen> {
     );
   }
 
-  Widget _buildActionIconRow(CameraState state, bool fullscreen) {
-    return Row(
-      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-      children: [
-        Row(
+  Widget _buildFullscreenActionRow(CameraState state) {
+    return ValueListenableBuilder<bool>(
+      valueListenable: ActiveAlarmNotifier.instance,
+      builder: (context, alarmActive, _) {
+        final mainLabel = alarmActive
+            ? (_cancelingAlarm ? 'Đang hủy...' : 'Hủy báo động')
+            : (_alarming ? 'Đang...' : 'Chụp ảnh');
+        final mainIcon = alarmActive
+            ? Icons.close_rounded
+            : Icons.warning_amber_rounded;
+        final onMainTap = alarmActive ? _onCancelAlarm : _onCapture;
+        final mainLoading = alarmActive ? _cancelingAlarm : _alarming;
+
+        return Row(
+          mainAxisAlignment: MainAxisAlignment.center,
+          mainAxisSize: MainAxisSize.min,
           children: [
-            const SizedBox(width: 8),
-            _buildCircleIconButton(
-              icon: fullscreen
+            _buildIconButton(
+              icon: state.isFullscreen
                   ? Icons.fullscreen_exit_rounded
                   : Icons.fullscreen_rounded,
-              tooltip: fullscreen ? 'Thoát toàn màn hình' : 'Toàn màn hình',
+              tooltip: state.isFullscreen
+                  ? 'Thoát toàn màn hình'
+                  : 'Toàn màn hình',
               onTap: _stateManager.toggleFullscreen,
             ),
-          ],
-        ),
-        Row(
-          children: [
-            _buildCircleIconButton(
+            const SizedBox(width: 8),
+            _buildIconButton(
               icon: Icons.refresh_rounded,
               tooltip: 'Tải lại luồng',
               onTap: () => unawaited(_reloadStream()),
             ),
+            const SizedBox(width: 8),
+            _buildIconButton(
+              icon: mainIcon,
+              tooltip: mainLabel,
+              onTap: mainLoading ? null : () => unawaited(onMainTap()),
+            ),
+            const SizedBox(width: 8),
+            _buildIconButton(
+              icon: Icons.phone_in_talk,
+              tooltip: 'Gọi khẩn cấp',
+              onTap: _emergencyCalling
+                  ? null
+                  : () => unawaited(_handleEmergencyCall()),
+            ),
+            if (widget.mappedEventId?.isNotEmpty == true && !alarmActive) ...[
+              const SizedBox(width: 8),
+              _buildIconButton(
+                icon: Icons.notifications_active,
+                tooltip: 'Kích hoạt báo động',
+                onTap: _activatingAlarm
+                    ? null
+                    : () => unawaited(_onActivateAlarm()),
+              ),
+            ],
           ],
+        );
+      },
+    );
+  }
+
+  Widget _buildActionIconRow(CameraState state, bool fullscreen) {
+    return Row(
+      mainAxisAlignment: MainAxisAlignment.center,
+      children: [
+        _buildIconButton(
+          icon: state.isFullscreen
+              ? Icons.fullscreen_exit_rounded
+              : Icons.fullscreen_rounded,
+          tooltip: state.isFullscreen ? 'Thoát toàn màn hình' : 'Toàn màn hình',
+          onTap: _stateManager.toggleFullscreen,
+        ),
+        const SizedBox(width: 8),
+        _buildIconButton(
+          icon: Icons.refresh_rounded,
+          tooltip: 'Tải lại luồng',
+          onTap: () => unawaited(_reloadStream()),
         ),
       ],
     );
   }
 
-  Widget _buildCircleIconButton({
+  /// Xây dựng icon button với style thống nhất
+  Widget _buildIconButton({
     required IconData icon,
     required String tooltip,
-    required VoidCallback onTap,
+    required VoidCallback? onTap,
+    double opacity = 0.10,
   }) {
     return Tooltip(
       message: tooltip,
       child: Material(
-        color: Colors.white.withOpacity(0.10),
+        color: Colors.white.withOpacity(opacity),
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
         child: InkWell(
           onTap: onTap,
@@ -1134,60 +1229,65 @@ class _LiveCameraScreenState extends State<LiveCameraScreen> {
     required List<Color> colors,
     required Future<void> Function() onTap,
     bool loading = false,
+    bool iconOnly = false,
   }) {
-    return Material(
-      color: Colors.transparent,
-      child: InkWell(
-        onTap: loading ? null : () => unawaited(onTap()),
+    return Container(
+      height: iconOnly ? 44 : 48,
+      decoration: BoxDecoration(
+        gradient: LinearGradient(
+          colors: colors,
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+        ),
         borderRadius: BorderRadius.circular(18),
-        splashColor: Colors.white24,
-        child: Container(
-          height: 48,
-          padding: const EdgeInsets.symmetric(horizontal: 10),
-          decoration: BoxDecoration(
-            gradient: LinearGradient(
-              colors: colors,
-              begin: Alignment.topLeft,
-              end: Alignment.bottomRight,
-            ),
-            borderRadius: BorderRadius.circular(18),
-            boxShadow: [
-              BoxShadow(
-                color: colors.last.withOpacity(0.45),
-                blurRadius: 14,
-                offset: const Offset(0, 6),
-              ),
-            ],
+        boxShadow: [
+          BoxShadow(
+            color: colors.last.withOpacity(0.45),
+            blurRadius: 14,
+            offset: const Offset(0, 6),
           ),
-          child: Row(
-            mainAxisAlignment: MainAxisAlignment.center,
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Icon(icon, color: Colors.white, size: 20),
-              const SizedBox(width: 8),
-              Flexible(
-                child: Text(
-                  label,
-                  overflow: TextOverflow.ellipsis,
-                  style: const TextStyle(
-                    color: Colors.white,
-                    fontWeight: FontWeight.w700,
-                    letterSpacing: 0.3,
+        ],
+      ),
+      child: Material(
+        color: Colors.transparent,
+        child: InkWell(
+          onTap: loading ? null : () => unawaited(onTap()),
+          borderRadius: BorderRadius.circular(18),
+          splashColor: Colors.white24,
+          child: Container(
+            padding: EdgeInsets.symmetric(horizontal: iconOnly ? 12 : 10),
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Icon(icon, color: Colors.white, size: iconOnly ? 22 : 20),
+                if (!iconOnly) ...[
+                  const SizedBox(width: 8),
+                  Flexible(
+                    child: Text(
+                      label,
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(
+                        color: Colors.white,
+                        fontWeight: FontWeight.w700,
+                        letterSpacing: 0.3,
+                      ),
+                    ),
                   ),
-                ),
-              ),
-              if (loading) ...[
-                const SizedBox(width: 8),
-                const SizedBox(
-                  width: 14,
-                  height: 14,
-                  child: CircularProgressIndicator(
-                    strokeWidth: 2,
-                    color: Colors.white,
+                ],
+                if (loading) ...[
+                  const SizedBox(width: 8),
+                  const SizedBox(
+                    width: 14,
+                    height: 14,
+                    child: CircularProgressIndicator(
+                      strokeWidth: 2,
+                      color: Colors.white,
+                    ),
                   ),
-                ),
+                ],
               ],
-            ],
+            ),
           ),
         ),
       ),
@@ -1220,7 +1320,8 @@ class _LiveCameraScreenState extends State<LiveCameraScreen> {
     );
   }
 
-  Widget _buildActionPanelButtons(CameraState state) {
+  Widget _buildActionPanelButtons(CameraState state, {bool iconOnly = false}) {
+    const spacing = SizedBox(width: 12);
     return ValueListenableBuilder<bool>(
       valueListenable: ActiveAlarmNotifier.instance,
       builder: (context, alarmActive, _) {
@@ -1230,10 +1331,43 @@ class _LiveCameraScreenState extends State<LiveCameraScreen> {
         final mainLabel = alarmActive
             ? (_cancelingAlarm ? 'Đang hủy...' : 'HỦY BÁO ĐỘNG')
             : (_alarming ? 'Đang...' : 'BÁO ĐỘNG');
-        final showCancelButton =
-            widget.mappedEventId?.isNotEmpty == true && !alarmActive;
-        final onMainTap = alarmActive ? _onCancelAlarm : _onCaptureAndAlarm;
+        final mainIcon = alarmActive
+            ? Icons.close_rounded
+            : Icons.warning_amber_rounded;
+        final onMainTap = alarmActive ? _onCancelAlarm : _onCapture;
         final mainLoading = alarmActive ? _cancelingAlarm : _alarming;
+
+        if (iconOnly) {
+          return Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              _buildIconButton(
+                icon: mainIcon,
+                tooltip: mainLabel,
+                onTap: mainLoading ? null : () => unawaited(onMainTap()),
+              ),
+              const SizedBox(width: 8),
+              _buildIconButton(
+                icon: Icons.phone_in_talk,
+                tooltip: 'Gọi khẩn cấp',
+                onTap: _emergencyCalling
+                    ? null
+                    : () => unawaited(_handleEmergencyCall()),
+              ),
+              if (widget.mappedEventId?.isNotEmpty == true && !alarmActive) ...[
+                const SizedBox(width: 8),
+                _buildIconButton(
+                  icon: Icons.notifications_active,
+                  tooltip: 'Kích hoạt báo động',
+                  onTap: _activatingAlarm
+                      ? null
+                      : () => unawaited(_onActivateAlarm()),
+                ),
+              ],
+            ],
+          );
+        }
 
         return Column(
           mainAxisSize: MainAxisSize.min,
@@ -1242,23 +1376,39 @@ class _LiveCameraScreenState extends State<LiveCameraScreen> {
               children: [
                 Expanded(
                   child: _buildGradientActionButton(
+                    icon: Icons.warning_amber_rounded,
+                    label: mainLabel,
+                    colors: mainGradient,
+                    onTap: onMainTap,
+                    loading: mainLoading,
+                    iconOnly: iconOnly,
+                  ),
+                ),
+                spacing,
+                Expanded(
+                  child: _buildGradientActionButton(
                     icon: Icons.phone_in_talk,
                     label: _emergencyCalling ? 'Đang...' : 'GỌI KHẨN CẤP',
                     colors: const [Color(0xFF26C6DA), Color(0xFF00ACC1)],
                     onTap: _handleEmergencyCall,
                     loading: _emergencyCalling,
+                    iconOnly: iconOnly,
                   ),
                 ),
               ],
             ),
-            if (showCancelButton) ...[
+            // Activate alarm button (always show when mappedEventId exists)
+            if (widget.mappedEventId?.isNotEmpty == true && !alarmActive) ...[
               const SizedBox(height: 10),
               _buildGradientActionButton(
-                icon: Icons.cancel_presentation_rounded,
-                label: _cancelingAlarm ? 'Đang hủy...' : 'HỦY BÁO ĐỘNG',
-                colors: const [Color(0xFFB0BEC5), Color(0xFF78909C)],
-                onTap: _onCancelAlarm,
-                loading: _cancelingAlarm,
+                icon: Icons.notifications_active,
+                label: _activatingAlarm
+                    ? 'Đang kích hoạt...'
+                    : 'KÍCH HOẠT BÁO ĐỘNG',
+                colors: const [Color(0xFF42A5F5), Color(0xFF1E88E5)],
+                onTap: _onActivateAlarm,
+                loading: _activatingAlarm,
+                iconOnly: iconOnly,
               ),
             ],
           ],
@@ -1275,7 +1425,7 @@ class _LiveCameraScreenState extends State<LiveCameraScreen> {
         child: BackdropFilter(
           filter: ImageFilter.blur(sigmaX: 16, sigmaY: 16),
           child: _buildActionPanelBackground(
-            child: _buildActionPanelButtons(state),
+            child: _buildActionPanelButtons(state, iconOnly: false),
           ),
         ),
       ),

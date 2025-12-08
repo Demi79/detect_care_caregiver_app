@@ -71,8 +71,8 @@ class _NotificationScreenState extends State<NotificationScreen> {
     {'label': 'Đang chờ', 'value': 'pending'},
     {'label': 'Đã gửi', 'value': 'sent'},
     {'label': 'Đã giao', 'value': 'delivered'},
-    {'label': 'Thất bại', 'value': 'failed'},
-    {'label': 'Không đến được', 'value': 'bounced'},
+    // {'label': 'Thất bại', 'value': 'failed'},
+    // {'label': 'Không đến được', 'value': 'bounced'},
   ];
 
   @override
@@ -337,7 +337,7 @@ class _NotificationScreenState extends State<NotificationScreen> {
         shadowColor: Colors.black.withValues(alpha: 0.1),
         title: Text(
           _isSelectionMode ? '${_selectedIds.length} đã chọn' : 'Thông báo',
-          style: TextStyle(
+          style: const TextStyle(
             color: Color(0xFF1E293B),
             fontSize: 20,
             fontWeight: FontWeight.w700,
@@ -741,8 +741,8 @@ class _NotificationScreenState extends State<NotificationScreen> {
                                                 ),
                                               ),
                                             ),
-                                            if (!_isSelectionMode)
-                                              _buildSeverityIndicator(severity),
+                                            // if (!_isSelectionMode)
+                                            //   _buildSeverityIndicator(severity),
                                           ],
                                         ),
                                         const SizedBox(height: 8),
@@ -788,10 +788,10 @@ class _NotificationScreenState extends State<NotificationScreen> {
                                         borderRadius: BorderRadius.circular(12),
                                       ),
                                       itemBuilder: (context) => [
-                                        PopupMenuItem(
+                                        const PopupMenuItem(
                                           value: 'delete',
                                           child: Row(
-                                            children: const [
+                                            children: [
                                               Icon(
                                                 Icons.delete_outline,
                                                 color: Colors.red,
@@ -1591,13 +1591,13 @@ class _NotificationScreenState extends State<NotificationScreen> {
   }
 }
 
-// import 'package:detect_care_app/features/notification/utils/notification_translator.dart';
-// import 'package:detect_care_app/services/notification_api_service.dart';
+// import 'package:detect_care_caregiver_app/features/notification/utils/notification_translator.dart';
+// import 'package:detect_care_caregiver_app/services/notification_api_service.dart';
 // import 'package:flutter/material.dart';
 // import 'package:intl/intl.dart';
-// import 'package:detect_care_app/core/models/notification.dart';
-// import 'package:detect_care_app/core/utils/backend_enums.dart';
-// import 'package:detect_care_app/features/notification/screens/notification_detail_screen.dart';
+// import 'package:detect_care_caregiver_app/core/models/notification.dart';
+// import 'package:detect_care_caregiver_app/core/utils/backend_enums.dart';
+// import 'package:detect_care_caregiver_app/features/notification/screens/notification_detail_screen.dart';
 
 // class NotificationScreen extends StatefulWidget {
 //   const NotificationScreen({super.key});

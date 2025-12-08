@@ -165,10 +165,10 @@ class _NotificationSettingsScreenState extends State<NotificationSettingsScreen>
           Container(
             padding: const EdgeInsets.all(16),
             decoration: BoxDecoration(
-              gradient: LinearGradient(
+              gradient: const LinearGradient(
                 begin: Alignment.topLeft,
                 end: Alignment.bottomRight,
-                colors: [const Color(0xFF2E7BF0), const Color(0xFF06B6D4)],
+                colors: [Color(0xFF2E7BF0), Color(0xFF06B6D4)],
               ),
               borderRadius: BorderRadius.circular(16),
               boxShadow: [
@@ -186,11 +186,11 @@ class _NotificationSettingsScreenState extends State<NotificationSettingsScreen>
             ),
           ),
           const SizedBox(width: 20),
-          Expanded(
+          const Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                const Text(
+                Text(
                   'Kênh thông báo',
                   style: TextStyle(
                     fontSize: 20,
@@ -199,12 +199,12 @@ class _NotificationSettingsScreenState extends State<NotificationSettingsScreen>
                     letterSpacing: -0.5,
                   ),
                 ),
-                const SizedBox(height: 6),
+                SizedBox(height: 6),
                 Text(
                   'Cấu hình cách thức nhận thông báo khẩn cấp và cảnh báo',
                   style: TextStyle(
                     fontSize: 14,
-                    color: const Color(0xFF64748B),
+                    color: Color(0xFF64748B),
                     fontWeight: FontWeight.w500,
                     height: 1.4,
                   ),
@@ -245,11 +245,8 @@ class _NotificationSettingsScreenState extends State<NotificationSettingsScreen>
             padding: const EdgeInsets.all(12),
             decoration: BoxDecoration(
               gradient: _masterNotifications
-                  ? LinearGradient(
-                      colors: [
-                        const Color(0xFF2E7BF0),
-                        const Color(0xFF06B6D4),
-                      ],
+                  ? const LinearGradient(
+                      colors: [Color(0xFF2E7BF0), Color(0xFF06B6D4)],
                     )
                   : null,
               color: _masterNotifications ? null : const Color(0xFFF1F5F9),
@@ -281,11 +278,11 @@ class _NotificationSettingsScreenState extends State<NotificationSettingsScreen>
                   ),
                 ),
                 const SizedBox(height: 4),
-                Text(
+                const Text(
                   'Điều khiển toàn bộ hệ thống thông báo',
                   style: TextStyle(
                     fontSize: 13,
-                    color: const Color(0xFF64748B),
+                    color: Color(0xFF64748B),
                     fontWeight: FontWeight.w400,
                   ),
                 ),
@@ -306,10 +303,16 @@ class _NotificationSettingsScreenState extends State<NotificationSettingsScreen>
                 }
               });
             },
-            activeThumbColor: Colors.white,
-            activeTrackColor: const Color(0xFF2E7BF0),
-            inactiveThumbColor: const Color(0xFFD1D5DB),
-            inactiveTrackColor: const Color(0xFFF3F4F6),
+            thumbColor: WidgetStateProperty.resolveWith(
+              (states) => states.contains(WidgetState.selected)
+                  ? Colors.white
+                  : const Color(0xFFD1D5DB),
+            ),
+            trackColor: WidgetStateProperty.resolveWith(
+              (states) => states.contains(WidgetState.selected)
+                  ? const Color(0xFF2E7BF0)
+                  : const Color(0xFFF3F4F6),
+            ),
           ),
         ],
       ),
@@ -526,10 +529,16 @@ class _NotificationSettingsScreenState extends State<NotificationSettingsScreen>
           Switch(
             value: value,
             onChanged: onChanged,
-            activeThumbColor: Colors.white,
-            activeTrackColor: color,
-            inactiveThumbColor: const Color(0xFFD1D5DB),
-            inactiveTrackColor: const Color(0xFFF3F4F6),
+            thumbColor: WidgetStateProperty.resolveWith(
+              (states) => states.contains(WidgetState.selected)
+                  ? Colors.white
+                  : const Color(0xFFD1D5DB),
+            ),
+            trackColor: WidgetStateProperty.resolveWith(
+              (states) => states.contains(WidgetState.selected)
+                  ? color
+                  : const Color(0xFFF3F4F6),
+            ),
             materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
           ),
         ],
@@ -633,10 +642,10 @@ class _NotificationSettingsScreenState extends State<NotificationSettingsScreen>
       height: 56,
       decoration: BoxDecoration(
         borderRadius: BorderRadius.circular(16),
-        gradient: LinearGradient(
+        gradient: const LinearGradient(
           begin: Alignment.topLeft,
           end: Alignment.bottomRight,
-          colors: [const Color(0xFF2E7BF0), const Color(0xFF06B6D4)],
+          colors: [Color(0xFF2E7BF0), Color(0xFF06B6D4)],
         ),
         boxShadow: [
           BoxShadow(
@@ -650,11 +659,11 @@ class _NotificationSettingsScreenState extends State<NotificationSettingsScreen>
         onPressed: () {
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(
-              content: Row(
+              content: const Row(
                 children: [
-                  const Icon(Icons.check_circle, color: Colors.white),
-                  const SizedBox(width: 12),
-                  const Text(
+                  Icon(Icons.check_circle, color: Colors.white),
+                  SizedBox(width: 12),
+                  Text(
                     'Đã lưu cài đặt thông báo thành công',
                     style: TextStyle(fontWeight: FontWeight.w600),
                   ),

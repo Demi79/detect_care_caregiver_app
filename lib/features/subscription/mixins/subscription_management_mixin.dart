@@ -237,11 +237,11 @@ mixin SubscriptionManagementMixin<T extends StatefulWidget> on State<T> {
       builder: (dialogContext) => StatefulBuilder(
         builder: (context, setState) => AlertDialog(
           title: const Text('Nâng cấp gói dịch vụ'),
-          content: Column(
+          content: const Column(
             mainAxisSize: MainAxisSize.min,
             children: [
               // Plan selection logic would go here
-              const Text('Chọn gói nâng cấp:'),
+              Text('Chọn gói nâng cấp:'),
               // ... existing upgrade dialog content
             ],
           ),

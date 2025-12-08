@@ -431,7 +431,7 @@ class SupabaseService {
 
   Future<List<Map<String, dynamic>>> fetchRecentEvents({int limit = 20}) async {
     try {
-      final select =
+      const select =
           'event_id,event_type,confidence_score,detected_at,status,lifecycle_state,snapshot_id, '
           'event_description,notes,created_at,detection_data,ai_analysis_result,context_data,bounding_boxes, '
           'confirm_status,confirmation_state,pending_until,proposed_status,proposed_event_type,proposed_reason,proposed_by, '

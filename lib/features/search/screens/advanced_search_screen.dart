@@ -289,7 +289,7 @@ class _AdvancedSearchScreenState extends State<AdvancedSearchScreen> {
           ),
           const SizedBox(height: 8),
           DropdownButtonFormField<String>(
-            initialValue: _selectedStatus,
+            value: _selectedStatus,
             decoration: const InputDecoration(
               border: OutlineInputBorder(),
               contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 8),

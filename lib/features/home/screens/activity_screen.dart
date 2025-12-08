@@ -10,7 +10,7 @@ class ActivityScreen extends StatelessWidget {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(title: const Text('Hoạt động')),
-      body: Center(child: const Text('Nội dung màn Hoạt động…')),
+      body: const Center(child: Text('Nội dung màn Hoạt động…')),
       bottomNavigationBar: TabSelector(
         selectedTab: 'activity',
         onTabChanged: (label) {

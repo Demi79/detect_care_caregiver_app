@@ -408,7 +408,7 @@ class _SleepCheckinScreenState extends State<SleepCheckinScreen> {
       ),
       child: Text(
         label,
-        style: TextStyle(
+        style: const TextStyle(
           fontSize: 15,
           fontWeight: FontWeight.w600,
           color: AppTheme.primaryBlue,

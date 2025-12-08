@@ -8,20 +8,20 @@ class CameraConstants {
   static const String kPrefRtspUrl = 'rtsp_url';
 
   // Default values
-  static const int defaultFps = 25;
+  static const int defaultFps = 15;
   static const int defaultRetentionDays = 7;
   static const Set<String> defaultChannels = {'App'};
   static const bool defaultHd = true;
 
   // UI Constants
-  static const Duration statusPollInterval = Duration(seconds: 4);
+  static const Duration statusPollInterval = Duration(seconds: 10);
   static const Duration controlsAutoHideDelay = Duration(seconds: 3);
   static const Duration startDebounceDelay = Duration(milliseconds: 300);
   static const Duration playbackWaitTimeout = Duration(seconds: 8);
 
   // VLC Options
-  static const int networkCaching = 500;
-  static const int liveCaching = 300;
+  static const int networkCaching = 200;
+  static const int liveCaching = 100;
 
   // Quality subtypes
   static const int hdSubtype = 0; // Main stream

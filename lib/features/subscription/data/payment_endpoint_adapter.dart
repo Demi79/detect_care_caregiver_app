@@ -214,7 +214,7 @@ class PaymentEndpointAdapter {
     int maxRetries = 3,
     Duration retryDelay = const Duration(milliseconds: 400),
   }) async {
-    final path = '/plan';
+    const path = '/plan';
     final headers = _buildHeaders(token: token);
 
     final responseData = await _requestWithRetries(
@@ -249,7 +249,7 @@ class PaymentEndpointAdapter {
     Duration retryDelay = const Duration(milliseconds: 400),
   }) async {
     // Use standardized target endpoint for creating checkout/payment sessions
-    final path = '/payments/create';
+    const path = '/payments/create';
     final body = {
       'plan_code': planCode,
       'amount': amount,
@@ -349,7 +349,7 @@ class PaymentEndpointAdapter {
     int maxRetries = 3,
     Duration retryDelay = const Duration(milliseconds: 400),
   }) async {
-    final path = '/payments/vnpay';
+    const path = '/payments/vnpay';
     final body = {
       'plan_code': planCode,
       if (billingCycle != null) 'billing_cycle': billingCycle,
@@ -545,7 +545,7 @@ class PaymentEndpointAdapter {
     // Target architecture: subscription is created automatically after
     // successful checkout on the backend. To surface the subscription to
     // the client, fetch the user's subscriptions list and return it.
-    final path = '/subscriptions/me';
+    const path = '/subscriptions/me';
     final responseData = await _requestWithRetries(
       'GET',
       path,

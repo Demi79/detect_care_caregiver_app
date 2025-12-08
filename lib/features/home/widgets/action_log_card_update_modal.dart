@@ -102,7 +102,7 @@ extension _ActionLogCardUpdateModal on ActionLogCard {
   }
 
   Widget _jsonPreview(Map<String, dynamic> json) {
-    final jsonString = convert.JsonEncoder.withIndent('  ').convert(json);
+    final jsonString = const convert.JsonEncoder.withIndent('  ').convert(json);
     return Container(
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
@@ -271,10 +271,10 @@ extension _ActionLogCardUpdateModal on ActionLogCard {
                             ),
                           ),
                           const SizedBox(width: 14),
-                          Expanded(
+                          const Expanded(
                             child: Column(
                               crossAxisAlignment: CrossAxisAlignment.start,
-                              children: const [
+                              children: [
                                 Text(
                                   'Cập nhật sự kiện',
                                   style: TextStyle(
@@ -984,7 +984,7 @@ extension _ActionLogCardUpdateModal on ActionLogCard {
                               ),
                               child: Text(
                                 hasChanges() ? 'Huỷ thay đổi' : 'Đóng',
-                                style: TextStyle(
+                                style: const TextStyle(
                                   fontWeight: FontWeight.w700,
                                   fontSize: 15,
                                 ),
@@ -1003,14 +1003,14 @@ extension _ActionLogCardUpdateModal on ActionLogCard {
                                           dialogCtx,
                                         ).showSnackBar(
                                           SnackBar(
-                                            content: Row(
+                                            content: const Row(
                                               children: [
-                                                const Icon(
+                                                Icon(
                                                   Icons.info_outline_rounded,
                                                   color: Colors.white,
                                                 ),
-                                                const SizedBox(width: 12),
-                                                const Expanded(
+                                                SizedBox(width: 12),
+                                                Expanded(
                                                   child: Text(
                                                     'Vui lòng chọn trạng thái hoặc loại sự kiện mới',
                                                   ),

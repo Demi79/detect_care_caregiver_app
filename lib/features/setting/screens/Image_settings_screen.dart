@@ -313,10 +313,10 @@ class _ImageSettingsScreenState extends State<ImageSettingsScreen>
           Container(
             padding: const EdgeInsets.all(16),
             decoration: BoxDecoration(
-              gradient: LinearGradient(
+              gradient: const LinearGradient(
                 begin: Alignment.topLeft,
                 end: Alignment.bottomRight,
-                colors: [const Color(0xFF10B981), const Color(0xFF059669)],
+                colors: [Color(0xFF10B981), Color(0xFF059669)],
               ),
               borderRadius: BorderRadius.circular(16),
               boxShadow: [
@@ -330,11 +330,11 @@ class _ImageSettingsScreenState extends State<ImageSettingsScreen>
             child: const Icon(Icons.camera_alt, color: Colors.white, size: 28),
           ),
           const SizedBox(width: 20),
-          Expanded(
+          const Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                const Text(
+                Text(
                   'Cài đặt hình ảnh',
                   style: TextStyle(
                     fontSize: 20,
@@ -343,12 +343,12 @@ class _ImageSettingsScreenState extends State<ImageSettingsScreen>
                     letterSpacing: -0.5,
                   ),
                 ),
-                const SizedBox(height: 6),
+                SizedBox(height: 6),
                 Text(
                   'Cấu hình chất lượng và lưu trữ hình ảnh giám sát',
                   style: TextStyle(
                     fontSize: 14,
-                    color: const Color(0xFF64748B),
+                    color: Color(0xFF64748B),
                     fontWeight: FontWeight.w500,
                     height: 1.4,
                   ),
@@ -696,10 +696,16 @@ class _ImageSettingsScreenState extends State<ImageSettingsScreen>
           Switch(
             value: value,
             onChanged: onChanged,
-            activeThumbColor: Colors.white,
-            activeTrackColor: color,
-            inactiveThumbColor: const Color(0xFFD1D5DB),
-            inactiveTrackColor: const Color(0xFFF3F4F6),
+            thumbColor: WidgetStateProperty.resolveWith(
+              (states) => states.contains(WidgetState.selected)
+                  ? Colors.white
+                  : const Color(0xFFD1D5DB),
+            ),
+            trackColor: WidgetStateProperty.resolveWith(
+              (states) => states.contains(WidgetState.selected)
+                  ? color
+                  : const Color(0xFFF3F4F6),
+            ),
             materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
           ),
         ],
@@ -955,8 +961,8 @@ class _ImageSettingsScreenState extends State<ImageSettingsScreen>
           );
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(
-              content: Row(
-                children: const [
+              content: const Row(
+                children: [
                   Icon(Icons.check_circle, color: Colors.white),
                   SizedBox(width: 12),
                   Text(

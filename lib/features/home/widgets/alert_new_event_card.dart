@@ -5,18 +5,15 @@ import 'package:detect_care_caregiver_app/core/network/api_client.dart';
 import 'package:detect_care_caregiver_app/core/utils/logger.dart';
 import 'package:detect_care_caregiver_app/features/assignments/data/assignments_remote_data_source.dart';
 import 'package:detect_care_caregiver_app/features/auth/data/auth_storage.dart';
-import 'package:detect_care_caregiver_app/features/auth/providers/auth_provider.dart';
 import 'package:detect_care_caregiver_app/features/camera/data/camera_api.dart';
 import 'package:detect_care_caregiver_app/features/camera/models/camera_entry.dart';
 import 'package:detect_care_caregiver_app/features/camera/screens/live_camera_screen.dart';
-import 'package:detect_care_caregiver_app/features/fcm/widgets/fcm_quick_send_sheet.dart';
 import 'package:detect_care_caregiver_app/features/home/models/event_log.dart';
 import 'package:detect_care_caregiver_app/features/home/service/event_images_loader.dart';
 import 'package:detect_care_caregiver_app/l10n/vi.dart';
 import 'package:detect_care_caregiver_app/services/audio_service.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'package:provider/provider.dart';
 import 'package:detect_care_caregiver_app/features/emergency/emergency_call_helper.dart';
 import 'package:detect_care_caregiver_app/features/events/data/events_remote_data_source.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -630,15 +627,15 @@ class _AlertEventCardState extends State<AlertEventCard>
                               ),
                               onSelected: (secs) => _snoozeNow(secs),
                               itemBuilder: (ctx) => [
-                                PopupMenuItem<int>(
+                                const PopupMenuItem<int>(
                                   value: 30,
                                   child: Text(L10nVi.snooze30s),
                                 ),
-                                PopupMenuItem<int>(
+                                const PopupMenuItem<int>(
                                   value: 60,
                                   child: Text(L10nVi.snooze1m),
                                 ),
-                                PopupMenuItem<int>(
+                                const PopupMenuItem<int>(
                                   value: 300,
                                   child: Text(L10nVi.snooze5m),
                                 ),
@@ -1261,7 +1258,7 @@ class _AlertEventCardState extends State<AlertEventCard>
     final event = buildEventFromWidget();
     final future = loadEventImageUrls(event).then((urls) => urls);
 
-    final bool _isUpdateWindowExpired = (() {
+    final bool isUpdateWindowExpired = (() {
       final created = widget.createdAt ?? widget.timestamp;
       try {
         final expiry = created.add(const Duration(days: 2));
@@ -1477,7 +1474,7 @@ class _AlertEventCardState extends State<AlertEventCard>
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
-                    if (!_isUpdateWindowExpired)
+                    if (!isUpdateWindowExpired)
                       ElevatedButton.icon(
                         onPressed: () => _initiateEmergencyCall(ctx),
                         icon: const Icon(Icons.call),

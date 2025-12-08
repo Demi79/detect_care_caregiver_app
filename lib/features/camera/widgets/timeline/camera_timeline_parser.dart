@@ -14,7 +14,7 @@ List<CameraTimelineEntry> buildEntries(List<CameraTimelineClip> clips) {
 
 List<CameraTimelineClip> parseRecordingClips(dynamic payload) {
   final items = _extractItems(payload);
-  final colors = Colors.primaries;
+  const colors = Colors.primaries;
   final clips = <CameraTimelineClip>[];
   for (var i = 0; i < items.length; i++) {
     final item = items[i];
@@ -68,7 +68,7 @@ List<CameraTimelineClip> parseRecordingClips(dynamic payload) {
 
 List<CameraTimelineClip> parseSnapshotClips(dynamic payload) {
   final items = _extractItems(payload);
-  final colors = Colors.accents;
+  const colors = Colors.accents;
   final clips = <CameraTimelineClip>[];
   for (var i = 0; i < items.length; i++) {
     final item = items[i];

@@ -319,9 +319,9 @@ class _PendingAssignmentsScreenState extends State<PendingAssignmentsScreen> {
       backgroundColor: _backgroundColor,
 
       appBar: AppBar(
-        title: Text(
+        title: const Text(
           "Lời mời đang chờ ",
-          style: const TextStyle(
+          style: TextStyle(
             color: Colors.white,
             fontSize: 25,
             fontWeight: FontWeight.w700,
@@ -381,13 +381,13 @@ class _PendingAssignmentsScreenState extends State<PendingAssignmentsScreen> {
               color: _primaryBlue,
               borderRadius: BorderRadius.vertical(bottom: Radius.circular(32)),
             ),
-            child: SafeArea(
+            child: const SafeArea(
               bottom: false,
               child: Padding(
-                padding: const EdgeInsets.fromLTRB(20, 0, 20, 16),
+                padding: EdgeInsets.fromLTRB(20, 0, 20, 16),
                 child: Column(
                   children: [
-                    const SizedBox(height: 12),
+                    SizedBox(height: 12),
 
                     // Container(
                     //   width: double.infinity,

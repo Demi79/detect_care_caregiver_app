@@ -283,11 +283,11 @@ class ActionLogCard extends StatelessWidget {
             color: Colors.white,
             borderRadius: BorderRadius.circular(16),
             border: Border.all(color: borderColor, width: 1),
-            boxShadow: [
+            boxShadow: const [
               BoxShadow(
-                color: const Color.fromRGBO(0, 0, 0, 0.04),
+                color: Color.fromRGBO(0, 0, 0, 0.04),
                 blurRadius: 12,
-                offset: const Offset(0, 3),
+                offset: Offset(0, 3),
               ),
             ],
           ),
@@ -903,7 +903,7 @@ class ActionLogCard extends StatelessWidget {
     final options = <Map<String, String>>[];
     for (final c in valid) {
       final lvl = (c.alertLevel == null) ? '' : 'CẤP ${c.alertLevel}';
-      final label = (c.name?.trim().isNotEmpty == true)
+      final label = (c.name.trim().isNotEmpty == true)
           ? '$lvl: ${c.name} — ${c.phone}'
           : '$lvl: ${c.phone}';
       options.add({'label': label, 'phone': c.phone.trim()});
@@ -927,8 +927,8 @@ class ActionLogCard extends StatelessWidget {
             child: Column(
               mainAxisSize: MainAxisSize.min,
               children: [
-                Padding(
-                  padding: const EdgeInsets.all(16.0),
+                const Padding(
+                  padding: EdgeInsets.all(16.0),
                   child: Text(
                     'Chọn số để gọi',
                     style: TextStyle(fontSize: 16, fontWeight: FontWeight.w700),

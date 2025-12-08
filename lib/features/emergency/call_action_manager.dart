@@ -109,7 +109,7 @@ class CallActionManager {
         return CallActionPolicy.caregiverDefault;
       case CallerRole.unknown:
       default:
-        return CallActionPolicy(
+        return const CallActionPolicy(
           canCallEmergency: true,
           canCallCaregiver: false,
           canCallDoctor: false,

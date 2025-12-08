@@ -5,11 +5,8 @@ import 'package:detect_care_caregiver_app/core/utils/logger.dart';
 import 'package:detect_care_caregiver_app/features/home/service/event_service.dart';
 import 'package:detect_care_caregiver_app/features/home/widgets/alert_new_event_card.dart';
 import 'package:flutter/material.dart';
-import 'package:detect_care_caregiver_app/features/emergency/call_action_context.dart';
-import 'package:detect_care_caregiver_app/features/emergency/call_action_service.dart';
 import 'package:detect_care_caregiver_app/features/emergency/emergency_call_helper.dart';
 
-import '../../features/auth/data/auth_storage.dart';
 import '../../features/emergency_contacts/data/emergency_contacts_remote_data_source.dart';
 import '../../features/events/data/events_remote_data_source.dart';
 import '../../features/home/models/log_entry.dart';

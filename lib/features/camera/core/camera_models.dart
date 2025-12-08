@@ -101,7 +101,7 @@ class CameraState {
   }
 
   factory CameraState.initial() {
-    return CameraState(
+    return const CameraState(
       isPlaying: false,
       isMuted: false,
       isFullscreen: false,
@@ -109,7 +109,7 @@ class CameraState {
       isStarting: false,
       initLoading: true,
       controlsVisible: true,
-      settings: const CameraSettings(
+      settings: CameraSettings(
         isHd: true,
         fps: 25,
         retentionDays: 7,

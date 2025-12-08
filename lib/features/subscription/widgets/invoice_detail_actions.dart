@@ -32,7 +32,7 @@ class InvoiceDetailActions extends StatelessWidget {
           child: ElevatedButton.icon(
             onPressed: busy ? null : onShare,
             icon: const Icon(Icons.share_outlined),
-            label: Text(L10nVi.share),
+            label: const Text(L10nVi.share),
             style: ElevatedButton.styleFrom(
               padding: const EdgeInsets.symmetric(vertical: 12),
             ),

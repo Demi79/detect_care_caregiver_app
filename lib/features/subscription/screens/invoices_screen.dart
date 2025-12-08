@@ -229,11 +229,11 @@ class _InvoicesScreenState extends State<InvoicesScreen> {
       // final statusBarHeight = MediaQuery.of(context).padding.top;
       // final appBarHeight =
       //     AppBarTheme.of(context).toolbarHeight ?? kToolbarHeight;
-      final topOffset = 36.0;
+      const topOffset = 36.0;
       return SafeArea(
         top: false,
         child: Padding(
-          padding: EdgeInsets.only(top: topOffset),
+          padding: const EdgeInsets.only(top: topOffset),
           child: content,
         ),
       );

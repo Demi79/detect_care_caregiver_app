@@ -47,7 +47,7 @@ class NotificationService {
             ? ByteArrayAndroidBitmap(bigPicture)
             : null,
         sound: AppConfig.useCustomNotificationSounds
-            ? RawResourceAndroidNotificationSound(_soundResource)
+            ? const RawResourceAndroidNotificationSound(_soundResource)
             : null,
         vibrationPattern: Int64List.fromList([0, 500, 200, 500]),
       );

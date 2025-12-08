@@ -18,5 +18,6 @@
     "titleBar.inactiveBackground": "#a2940999",
     "titleBar.inactiveForeground": "#15202b99"
   },
-  "peacock.color": "#a29409"
+  "peacock.color": "#a29409",
+  "dart.flutterSdkPath": ".fvm/versions/3.32.4"
 }

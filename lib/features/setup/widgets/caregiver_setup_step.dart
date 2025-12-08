@@ -176,7 +176,7 @@ class _CaregiverSetupStepState extends State<CaregiverSetupStep>
         children: [
           Row(
             children: [
-              Icon(Icons.person_add_outlined, color: const Color(0xFF3B82F6)),
+              const Icon(Icons.person_add_outlined, color: Color(0xFF3B82F6)),
               const SizedBox(width: 8),
               Text(
                 'Mời người chăm sóc',
@@ -266,7 +266,7 @@ class _CaregiverSetupStepState extends State<CaregiverSetupStep>
         children: [
           Row(
             children: [
-              Icon(Icons.group_outlined, color: const Color(0xFF3B82F6)),
+              const Icon(Icons.group_outlined, color: Color(0xFF3B82F6)),
               const SizedBox(width: 8),
               Text(
                 'Danh sách người chăm sóc',
@@ -356,7 +356,7 @@ class _CaregiverSetupStepState extends State<CaregiverSetupStep>
         children: [
           CircleAvatar(
             backgroundColor: const Color(0xFF3B82F6).withValues(alpha: 0.1),
-            child: Icon(Icons.person, color: const Color(0xFF3B82F6)),
+            child: const Icon(Icons.person, color: Color(0xFF3B82F6)),
           ),
           const SizedBox(width: 12),
           Expanded(
@@ -457,7 +457,7 @@ class _CaregiverSetupStepState extends State<CaregiverSetupStep>
     required ValueChanged<String?> onChanged,
   }) {
     return DropdownButtonFormField<String>(
-      initialValue: value,
+      value: value,
       onChanged: onChanged,
       items: items.map((item) {
         return DropdownMenuItem(value: item, child: Text(item));

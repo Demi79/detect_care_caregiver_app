@@ -45,9 +45,9 @@ class PatientHeaderCard extends StatelessWidget {
           Stack(
             alignment: Alignment.center,
             children: [
-              CircleAvatar(
+              const CircleAvatar(
                 radius: 48,
-                backgroundColor: const Color(0xFFF8FAFC),
+                backgroundColor: Color(0xFFF8FAFC),
                 child: Icon(Icons.person, size: 48, color: _Palette.primary),
               ),
               Positioned(

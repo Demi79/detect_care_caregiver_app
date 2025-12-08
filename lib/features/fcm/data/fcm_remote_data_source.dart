@@ -95,7 +95,7 @@ class FcmRemoteDataSource {
     dev.log('\n📤 [FCM] Sending push message:');
     dev.log('URL: ${endpoints.postMessageUri}');
     dev.log('Payload:');
-    dev.log(JsonEncoder.withIndent('  ').convert(payload));
+    dev.log(const JsonEncoder.withIndent('  ').convert(payload));
 
     if (_api != null) {
       final res = await _api.post(endpoints.postMessagePath, body: payload);

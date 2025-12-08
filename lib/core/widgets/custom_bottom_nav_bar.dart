@@ -233,7 +233,7 @@ class FloatingNotchPainter extends CustomPainter {
 
     final path = Path();
     final centerX = size.width / 2;
-    final notchTop = 0.0;
+    const notchTop = 0.0;
 
     path.moveTo(borderRadius, 0);
     path.lineTo(centerX - notchRadius - notchMargin, notchTop);

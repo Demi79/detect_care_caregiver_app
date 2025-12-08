@@ -974,7 +974,7 @@ class PaymentController {
         final message = (res['message'] ?? '').toString().toLowerCase();
 
         if (code == '404' || message.contains('not found')) {
-          final msg = 'Không tìm thấy giao dịch. Vui lòng thử lại.';
+          const msg = 'Không tìm thấy giao dịch. Vui lòng thử lại.';
           updateLoading(false);
           _setStatusInfoMessage(msg);
           return (
@@ -1008,7 +1008,7 @@ class PaymentController {
       }
     }
 
-    final msg =
+    const msg =
         'Không xác định được trạng thái giao dịch. Vui lòng thử lại sau ít phút.';
     return (success: false, throttled: false, message: msg, retryAfter: null);
   }

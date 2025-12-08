@@ -8,7 +8,6 @@ import 'package:detect_care_caregiver_app/core/network/api_client.dart';
 import 'package:detect_care_caregiver_app/features/auth/data/auth_storage.dart';
 import 'package:detect_care_caregiver_app/features/profile/data/user_remote_data_source.dart';
 
-
 class ProfileScreen extends StatefulWidget {
   final String? userId;
   final UsersService? service;

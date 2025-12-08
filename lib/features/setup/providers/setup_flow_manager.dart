@@ -384,12 +384,12 @@ class SetupFlowManager extends ChangeNotifier {
     return showDialog(
       context: context,
       builder: (context) => AlertDialog(
-        title: Text('Lỗi'),
+        title: const Text('Lỗi'),
         content: Text(message),
         actions: [
           TextButton(
             onPressed: () => Navigator.of(context).pop(),
-            child: Text('OK'),
+            child: const Text('OK'),
           ),
         ],
       ),
@@ -560,19 +560,19 @@ class SetupService {
     return showDialog(
       context: context,
       builder: (context) => AlertDialog(
-        title: Text('Quyền Bị Từ Chối'),
+        title: const Text('Quyền Bị Từ Chối'),
         content: Text(message),
         actions: [
           TextButton(
             onPressed: () => Navigator.of(context).pop(),
-            child: Text('Hủy'),
+            child: const Text('Hủy'),
           ),
           TextButton(
             onPressed: () {
               openAppSettings(); // Mở cài đặt để user bật quyền
               Navigator.of(context).pop();
             },
-            child: Text('Mở Cài Đặt'),
+            child: const Text('Mở Cài Đặt'),
           ),
         ],
       ),
@@ -583,12 +583,12 @@ class SetupService {
     return showDialog(
       context: context,
       builder: (context) => AlertDialog(
-        title: Text('Lỗi'),
+        title: const Text('Lỗi'),
         content: Text(message),
         actions: [
           TextButton(
             onPressed: () => Navigator.of(context).pop(),
-            child: Text('OK'),
+            child: const Text('OK'),
           ),
         ],
       ),

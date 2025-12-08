@@ -1,14 +1,10 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
-    <uses-permission android:name="android.permission.INTERNET"/>
-    <!-- Android 13+ notifications permission -->
-    <uses-permission android:name="android.permission.POST_NOTIFICATIONS"/>
-    <!-- Optional: keep CPU awake for streaming (handled by wakelock_plus) -->
-    <uses-permission android:name="android.permission.WAKE_LOCK"/>
     <application
         android:label="detect_care_caregiver_app"
         android:name="${applicationName}"
         android:icon="@mipmap/ic_launcher"
-        android:usesCleartextTraffic="true">
+        android:usesCleartextTraffic="true"
+        android:enableOnBackInvokedCallback="true">
         <activity
             android:name=".MainActivity"
             android:exported="true"

@@ -33,7 +33,7 @@ class LowConfidenceEventsScreen extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final lowAllowed = const {'unknown', 'suspect'};
+    const lowAllowed = {'unknown', 'suspect'};
     final filtered = logs.where((log) {
       final st = log.status.toLowerCase();
       if (!lowAllowed.contains(st)) return false;
@@ -249,7 +249,7 @@ class _SummaryCard extends StatelessWidget {
                 textAlign: TextAlign.center,
                 maxLines: 2,
                 softWrap: true,
-                style: TextStyle(
+                style: const TextStyle(
                   fontSize: 12,
                   fontWeight: FontWeight.w500,
                   color: AppTheme.unselectedTextColor,

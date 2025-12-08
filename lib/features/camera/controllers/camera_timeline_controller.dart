@@ -1,6 +1,7 @@
 import 'dart:convert';
 
 import 'package:flutter/foundation.dart';
+import 'package:flutter/scheduler.dart';
 import 'package:detect_care_caregiver_app/core/utils/logger.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:detect_care_caregiver_app/features/camera/data/camera_timeline_api.dart';
@@ -33,13 +34,14 @@ class CameraTimelineController extends ChangeNotifier {
     required DateTime initialDay,
     this.loadFromApi = true,
   }) : selectedDay = initialDay {
-    // Initialize data
     if (loadFromApi) {
-      loadTimeline();
-      // subscribe to realtime updates for this camera so timeline refreshes
-      _setupRealtime();
+      SchedulerBinding.instance.addPostFrameCallback((_) {
+        if (_disposed) return;
+        loadTimeline();
+        _setupRealtime();
+      });
     } else {
-      loadDemo();
+      Future.microtask(loadDemo);
     }
   }
 

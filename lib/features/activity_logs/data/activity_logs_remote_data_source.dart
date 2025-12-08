@@ -15,7 +15,7 @@ class ActivityLogsRemoteDataSource {
     int? offset,
     String? search,
   }) async {
-    final path = '/activity-logs';
+    const path = '/activity-logs';
 
     final res = await _api.get(path, query: {'user_id': userId});
 

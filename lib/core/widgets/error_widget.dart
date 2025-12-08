@@ -16,7 +16,11 @@ class ErrorDisplay extends StatelessWidget {
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            Icon(Icons.error_outline, size: 64, color: AppTheme.dangerColor),
+            const Icon(
+              Icons.error_outline,
+              size: 64,
+              color: AppTheme.dangerColor,
+            ),
             const SizedBox(height: AppTheme.spacingL),
             Text(
               'Đã xảy ra lỗi',

@@ -180,7 +180,7 @@ class WeeklyAlertsBar extends StatelessWidget {
         children: [
           Row(
             children: [
-              Icon(
+              const Icon(
                 Icons.bar_chart_rounded,
                 color: AppTheme.primaryBlue,
                 size: 20,
@@ -293,7 +293,7 @@ class StatusBreakdownBar extends StatelessWidget {
         children: [
           Row(
             children: [
-              Icon(
+              const Icon(
                 Icons.segment_rounded,
                 color: AppTheme.primaryBlue,
                 size: 20,
@@ -332,9 +332,9 @@ class StatusBreakdownBar extends StatelessWidget {
             ),
           ),
           const SizedBox(height: AppTheme.spacingS),
-          Wrap(
+          const Wrap(
             spacing: 12,
-            children: const [
+            children: [
               _LegendDot(color: Colors.red, label: 'Nguy'),
               _LegendDot(color: Colors.orange, label: 'Cảnh'),
               _LegendDot(color: Colors.blue, label: 'Thường'),
@@ -447,7 +447,7 @@ class TimeOfDayHistogram extends StatelessWidget {
         children: [
           Row(
             children: [
-              Icon(
+              const Icon(
                 Icons.schedule_rounded,
                 color: AppTheme.primaryBlue,
                 size: 20,
@@ -546,7 +546,7 @@ class ResolutionGauge extends StatelessWidget {
               children: [
                 Row(
                   children: [
-                    Icon(
+                    const Icon(
                       Icons.donut_large_rounded,
                       color: AppTheme.primaryBlue,
                       size: 20,
