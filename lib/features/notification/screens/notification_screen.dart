@@ -71,8 +71,8 @@ class _NotificationScreenState extends State<NotificationScreen> {
     {'label': 'Đang chờ', 'value': 'pending'},
     {'label': 'Đã gửi', 'value': 'sent'},
     {'label': 'Đã giao', 'value': 'delivered'},
-    {'label': 'Thất bại', 'value': 'failed'},
-    {'label': 'Không đến được', 'value': 'bounced'},
+    // {'label': 'Thất bại', 'value': 'failed'},
+    // {'label': 'Không đến được', 'value': 'bounced'},
   ];
 
   @override
@@ -741,8 +741,8 @@ class _NotificationScreenState extends State<NotificationScreen> {
                                                 ),
                                               ),
                                             ),
-                                            if (!_isSelectionMode)
-                                              _buildSeverityIndicator(severity),
+                                            // if (!_isSelectionMode)
+                                            //   _buildSeverityIndicator(severity),
                                           ],
                                         ),
                                         const SizedBox(height: 8),

@@ -358,7 +358,9 @@ class _RegisterCaregiverScreenState extends State<RegisterCaregiverScreen> {
                 labelText: label,
                 prefixIcon: Icon(
                   icon,
-                  color: hasFocus ? const Color(0xFF2E7BF0) : const Color(0xFF64748B),
+                  color: hasFocus
+                      ? const Color(0xFF2E7BF0)
+                      : const Color(0xFF64748B),
                 ),
                 border: const OutlineInputBorder(
                   borderRadius: BorderRadius.all(Radius.circular(16)),

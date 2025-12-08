@@ -59,10 +59,7 @@ class NotificationFilterPanel extends StatelessWidget {
             hintStyle: TextStyle(color: Color(0xFF94A3B8)),
             prefixIcon: Icon(Icons.search, color: Color(0xFF64748B)),
             border: InputBorder.none,
-            contentPadding: EdgeInsets.symmetric(
-              horizontal: 16,
-              vertical: 12,
-            ),
+            contentPadding: EdgeInsets.symmetric(horizontal: 16, vertical: 12),
           ),
           onChanged: onSearchChanged,
         ),
@@ -92,10 +89,8 @@ class NotificationFilterPanel extends StatelessWidget {
               label: Text(
                 option['label'],
                 style: TextStyle(
-                  color:
-                      isSelected ? Colors.white : const Color(0xFF64748B),
-                  fontWeight:
-                      isSelected ? FontWeight.w600 : FontWeight.w500,
+                  color: isSelected ? Colors.white : const Color(0xFF64748B),
+                  fontWeight: isSelected ? FontWeight.w600 : FontWeight.w500,
                   fontSize: 13,
                 ),
               ),
@@ -107,8 +102,7 @@ class NotificationFilterPanel extends StatelessWidget {
                     ? const Color(0xFF3B82F6)
                     : const Color(0xFFE2E8F0),
               ),
-              onSelected: (selected) =>
-                  onSelected(selected ? value : null),
+              onSelected: (selected) => onSelected(selected ? value : null),
             ),
           );
         },

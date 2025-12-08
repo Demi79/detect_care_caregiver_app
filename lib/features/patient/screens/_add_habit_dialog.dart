@@ -67,7 +67,9 @@ class AddHabitDialogState extends State<AddHabitDialog> {
                 onChanged: (v) => _typicalTime = v,
               ),
               TextFormField(
-                decoration: const InputDecoration(labelText: 'Thời lượng (phút)'),
+                decoration: const InputDecoration(
+                  labelText: 'Thời lượng (phút)',
+                ),
                 keyboardType: TextInputType.number,
                 onChanged: (v) => _durationMinutes = int.tryParse(v),
               ),

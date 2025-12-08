@@ -172,7 +172,7 @@ class _LiveCameraScreenState extends State<LiveCameraScreen> {
     );
   }
 
-  Future<void> _startPlay({bool allowFallback = true}) async {
+  Future<void> _startPlay() async {
     // Đảm bảo người dùng có quyền (gói) trước khi thử phát
     final allowed = await _accessGuard.ensureSubscriptionAllowed(context);
     if (!allowed) return;
@@ -440,69 +440,66 @@ class _LiveCameraScreenState extends State<LiveCameraScreen> {
     }
   }
 
-  Future<void> _onCaptureAndAlarm() async {
+  Future<void> _onCapture() async {
     setState(() => _alarming = true);
     String? snapshotPath;
+
     try {
+      // 1) Chụp snapshot
       snapshotPath = await _cameraService.takeSnapshot();
       if (snapshotPath == null) {
         if (mounted) context.showCameraMessage('Không chụp được khung hình.');
         return;
       }
 
+      // 2) Extract cameraId từ URL
       final extracted = _extractCameraIdFromUrl(
         _stateManager.currentUrl ?? _stateManager.urlController.text,
       );
+
       final uuidRegex = RegExp(
-        r'^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}\u0000'
-            .replaceAll('\u0000', ''),
+        r'^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$',
       );
+
       final cameraId = (extracted != null && uuidRegex.hasMatch(extracted))
           ? extracted
           : '0fd3f12d-ef70-4d41-a622-79fa5db67a49';
+
       if (cameraId == '0fd3f12d-ef70-4d41-a622-79fa5db67a49') {
         AppLogger.d(
           '🐛 [Camera] using default cameraId fallback (extracted=$extracted)',
         );
       }
 
+      // 3) Nếu mappedEventId có tồn tại
       if (widget.mappedEventId != null && widget.mappedEventId!.isNotEmpty) {
         final eventId = widget.mappedEventId!;
+
         try {
-          await EventsRemoteDataSource().updateEventLifecycle(
-            eventId: eventId,
-            lifecycleState: 'ALARM_ACTIVATED',
-            notes: 'Kích hoạt từ giao diện camera trực tiếp',
-          );
-
-          try {
-            final userId = await AuthStorage.getUserId();
-            if (userId != null && userId.isNotEmpty) {
-              await AlarmRemoteDataSource().setAlarm(
-                eventId: eventId,
-                userId: userId,
-                cameraId: cameraId,
-                enabled: true,
-              );
-            }
-          } catch (e) {
-            AppLogger.e('External alarm call failed for mapped event: $e');
-          }
-
-          if (mounted) {
-            ScaffoldMessenger.of(context).showSnackBar(
-              const SnackBar(content: Text('Kích hoạt báo động cho sự kiện.')),
+          final userId = await AuthStorage.getUserId();
+          if (userId != null && userId.isNotEmpty) {
+            await AlarmRemoteDataSource().setAlarm(
+              eventId: eventId,
+              userId: userId,
+              cameraId: cameraId,
+              enabled: true,
             );
-            ActiveAlarmNotifier.instance.update(true);
           }
-        } catch (e, st) {
-          AppLogger.e('Failed to activate mapped event alarm: $e', e, st);
-          if (mounted) {
-            context.showCameraMessage('Kích hoạt báo động thất bại.');
-          }
+        } catch (e) {
+          AppLogger.e('External alarm call failed for mapped event: $e');
         }
-      } else {
+
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('Gửi báo động cho sự kiện.')),
+          );
+          ActiveAlarmNotifier.instance.update(true);
+        }
+      }
+      // 4) Nếu không có mappedEvent → tạo sự kiện mới rồi gọi alarm
+      else {
         final svc = EventService.withDefaultClient();
+
         final createdEvent = await svc.sendManualAlarm(
           cameraId: cameraId,
           snapshotPath: snapshotPath,
@@ -532,12 +529,12 @@ class _LiveCameraScreenState extends State<LiveCameraScreen> {
 
         if (!mounted) return;
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Gửi báo động thành công.')),
+          const SnackBar(content: Text('Tạo báo động thành công.')),
         );
       }
     } catch (e, st) {
       AppLogger.e('❌ [Camera] send manual alarm failed', e, st);
-      if (mounted) context.showCameraMessage('Gửi báo động thất bại.');
+      if (mounted) context.showCameraMessage('Tạo báo động thất bại.');
     } finally {
       if (mounted) setState(() => _alarming = false);
     }
@@ -1030,9 +1027,9 @@ class _LiveCameraScreenState extends State<LiveCameraScreen> {
           const SizedBox(width: 6),
           Text(
             'LIVE',
-            style: const TextStyle(
+            style: const Tconst extStyle(
               color: Colors.white,
-              fontSize: 12,
+        fontSize: 12,
               fontWeight: FontWeight.w600,
             ),
           ),
@@ -1125,11 +1122,11 @@ class _LiveCameraScreenState extends State<LiveCameraScreen> {
       builder: (context, alarmActive, _) {
         final mainLabel = alarmActive
             ? (_cancelingAlarm ? 'Đang hủy...' : 'Hủy báo động')
-            : (_alarming ? 'Đang...' : 'Báo động');
+            : (_alarming ? 'Đang...' : 'Chụp ảnh');
         final mainIcon = alarmActive
             ? Icons.close_rounded
             : Icons.warning_amber_rounded;
-        final onMainTap = alarmActive ? _onCancelAlarm : _onCaptureAndAlarm;
+        final onMainTap = alarmActive ? _onCancelAlarm : _onCapture;
         final mainLoading = alarmActive ? _cancelingAlarm : _alarming;
 
         return Row(
@@ -1337,7 +1334,7 @@ class _LiveCameraScreenState extends State<LiveCameraScreen> {
         final mainIcon = alarmActive
             ? Icons.close_rounded
             : Icons.warning_amber_rounded;
-        final onMainTap = alarmActive ? _onCancelAlarm : _onCaptureAndAlarm;
+        final onMainTap = alarmActive ? _onCancelAlarm : _onCapture;
         final mainLoading = alarmActive ? _cancelingAlarm : _alarming;
 
         if (iconOnly) {

@@ -681,9 +681,10 @@ class _SearchScreenState extends State<SearchScreen> {
                                   child: LinearProgressIndicator(
                                     value: result.confidenceScore,
                                     backgroundColor: const Color(0xFFF1F5F9),
-                                    valueColor: const AlwaysStoppedAnimation<Color>(
-                                      AppTheme.primaryBlue,
-                                    ),
+                                    valueColor:
+                                        const AlwaysStoppedAnimation<Color>(
+                                          AppTheme.primaryBlue,
+                                        ),
                                     minHeight: 6,
                                   ),
                                 ),

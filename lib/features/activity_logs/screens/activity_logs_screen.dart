@@ -916,7 +916,11 @@ class _EmptyView extends StatelessWidget {
                 color: lightBlue,
                 borderRadius: BorderRadius.circular(20),
               ),
-              child: const Icon(Icons.inbox_rounded, size: 40, color: primaryBlue),
+              child: const Icon(
+                Icons.inbox_rounded,
+                size: 40,
+                color: primaryBlue,
+              ),
             ),
             const SizedBox(height: 20),
             const Text(

@@ -649,9 +649,7 @@ class EventService {
           'Yêu cầu không hợp lệ hoặc dữ liệu sai định dạng. $serverMsg',
         );
       } else if (res.statusCode == 403) {
-        throw Exception(
-          'Chỉ caregiver mới được phép gửi đề xuất. $serverMsg',
-        );
+        throw Exception('Chỉ caregiver mới được phép gửi đề xuất. $serverMsg');
       } else if (res.statusCode == 409) {
         // Server says there's already a pending proposal for this event.
         // Log the full response body to help debugging and include details
@@ -662,9 +660,7 @@ class EventService {
             name: 'EventService',
           );
         } catch (_) {}
-        throw Exception(
-          'Đã có đề xuất chờ duyệt cho sự kiện này. $serverMsg',
-        );
+        throw Exception('Đã có đề xuất chờ duyệt cho sự kiện này. $serverMsg');
       } else {
         throw Exception(serverMsg);
       }
