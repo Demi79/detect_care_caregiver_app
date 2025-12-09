@@ -58,7 +58,7 @@ class EmergencyCallHelper {
       options.add({'label': label, 'phone': c.phone.trim()});
       if (options.length >= 2) break;
     }
-    options.add({'label': 'Gọi số khẩn cấp (112)', 'phone': '112'});
+    options.add({'label': 'Gọi số khẩn cấp (115)', 'phone': '115'});
 
     String? chosen;
     try {

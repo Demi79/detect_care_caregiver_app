@@ -1,4 +1,7 @@
+import 'dart:io';
+
 import 'package:detect_care_caregiver_app/core/utils/logger.dart';
+import 'package:detect_care_caregiver_app/features/camera/core/camera_helpers.dart';
 import 'package:detect_care_caregiver_app/features/camera/core/i_camera_player.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_vlc_player_16kb/flutter_vlc_player.dart';
@@ -112,6 +115,46 @@ class RtspVlcPlayer implements ICameraPlayer {
       AppLogger.i('[RtspVlcPlayer] Disposed');
     } catch (e) {
       AppLogger.e('[RtspVlcPlayer] Dispose error: $e', e);
+    }
+  }
+
+  @override
+  Future<String?> takeSnapshot() async {
+    if (_controller == null) {
+      AppLogger.w('[RtspVlcPlayer] takeSnapshot: controller is null');
+      return null;
+    }
+
+    try {
+      final bytes = await _controller!.takeSnapshot();
+      if (bytes == null || bytes.isEmpty) {
+        AppLogger.w('[RtspVlcPlayer] takeSnapshot returned empty/null bytes');
+        return null;
+      }
+
+      // Save to thumbnails directory
+      try {
+        final thumbsDir = await CameraHelpers.getThumbsDirectory();
+        final timestamp = DateTime.now().millisecondsSinceEpoch;
+        final filename = CameraHelpers.generateThumbnailFilename(
+          url,
+          timestamp,
+        );
+        final file = File('${thumbsDir.path}/$filename');
+        AppLogger.d(
+          '[RtspVlcPlayer] Writing snapshot ${bytes.length} bytes to ${file.path}',
+        );
+        await file.writeAsBytes(bytes, flush: true);
+        await CameraHelpers.cleanupOldThumbs(thumbsDir);
+        AppLogger.d('[RtspVlcPlayer] Snapshot saved: ${file.path}');
+        return file.path;
+      } catch (e, st) {
+        AppLogger.e('[RtspVlcPlayer] Failed to save snapshot: $e', e, st);
+        return null;
+      }
+    } catch (e, st) {
+      AppLogger.e('[RtspVlcPlayer] takeSnapshot failed: $e', e, st);
+      return null;
     }
   }
 }

@@ -221,7 +221,11 @@ extension _ActionLogCardHelpers on ActionLogCard {
       Navigator.push(
         context,
         MaterialPageRoute(
-          builder: (_) => LiveCameraScreen(initialUrl: cameraUrl),
+          builder: (_) => LiveCameraScreen(
+            initialUrl: cameraUrl,
+            loadCache: false,
+            camera: matched,
+          ),
         ),
       );
     } catch (e) {

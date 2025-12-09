@@ -1620,8 +1620,11 @@ class _AlertEventCardState extends State<AlertEventCard>
       //  Điều hướng sang màn hình camera
       await Navigator.of(context).push(
         MaterialPageRoute(
-          builder: (_) =>
-              LiveCameraScreen(initialUrl: cameraUrl, loadCache: false),
+          builder: (_) => LiveCameraScreen(
+            initialUrl: cameraUrl,
+            loadCache: false,
+            camera: matched,
+          ),
         ),
       );
     } catch (e, st) {

@@ -92,6 +92,30 @@ class EventRepository {
     }
   }
 
+  Future<EventLog> proposeDeleteEvent({
+    required String eventId,
+    required String reason,
+    DateTime? pendingUntil,
+  }) async {
+    try {
+      dev.log('🔧 [Repository] proposeDeleteEvent');
+      if (eventId.trim().isEmpty) {
+        throw Exception(
+          'Không tìm thấy ID sự kiện. Không thể gửi đề xuất xóa.',
+        );
+      }
+
+      return await _service.proposeDeleteEvent(
+        eventId: eventId,
+        reason: reason,
+        pendingUntil: pendingUntil,
+      );
+    } catch (e) {
+      dev.log('❌ Repository proposeDeleteEvent error: $e');
+      rethrow;
+    }
+  }
+
   Future<bool> confirmEvent(String eventId) async {
     try {
       dev.log('✅ confirmEvent: $eventId');

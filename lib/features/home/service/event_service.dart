@@ -674,6 +674,95 @@ class EventService {
     }
   }
 
+  /// Gửi đề xuất xóa sự kiện
+  Future<EventLog> proposeDeleteEvent({
+    required String eventId,
+    required String reason,
+    DateTime? pendingUntil,
+  }) async {
+    try {
+      if (eventId.trim().isEmpty) {
+        throw Exception('ID sự kiện không hợp lệ. Vui lòng thử lại.');
+      }
+
+      final body = <String, dynamic>{
+        'reason': reason,
+        if (pendingUntil != null)
+          'pending_until': pendingUntil.toUtc().toIso8601String(),
+      };
+
+      dev.log(
+        '📤 [EventService] proposeDeleteEvent($eventId): $body',
+        name: 'EventService',
+      );
+
+      final res = await _api.post(
+        '/events/$eventId/propose-delete',
+        body: body,
+      );
+      dev.log(
+        '📥 [EventService] proposeDeleteEvent → ${res.statusCode}',
+        name: 'EventService',
+      );
+
+      if (res.statusCode == 200 || res.statusCode == 201) {
+        final decoded = _api.extractDataFromResponse(res);
+        if (decoded is Map<String, dynamic>) {
+          return EventLog.fromJson(decoded);
+        } else {
+          throw Exception('Phản hồi không hợp lệ từ server.');
+        }
+      }
+
+      String messageFromResponse(http.Response r) {
+        try {
+          final decoded = _api.extractDataFromResponse(r);
+          if (decoded is Map) {
+            for (final key in ['message', 'error', 'detail', 'description']) {
+              if (decoded.containsKey(key) && decoded[key] != null) {
+                return decoded[key].toString();
+              }
+            }
+            if (decoded.containsKey('errors')) {
+              return decoded['errors'].toString();
+            }
+          }
+        } catch (_) {}
+        try {
+          if (r.body.trim().isNotEmpty) return r.body;
+        } catch (_) {}
+        return 'Lỗi không xác định (${r.statusCode}).';
+      }
+
+      final serverMsg = messageFromResponse(res);
+
+      if (res.statusCode == 400) {
+        throw Exception(
+          'Yêu cầu không hợp lệ hoặc dữ liệu sai định dạng. $serverMsg',
+        );
+      } else if (res.statusCode == 403) {
+        throw Exception('Chỉ caregiver mới được phép gửi đề xuất. $serverMsg');
+      } else if (res.statusCode == 409) {
+        try {
+          dev.log(
+            '[EventService] proposeDeleteEvent 409 response body: ${res.body}',
+            name: 'EventService',
+          );
+        } catch (_) {}
+        throw Exception('Đã có đề xuất chờ duyệt cho sự kiện này. $serverMsg');
+      } else {
+        throw Exception(serverMsg);
+      }
+    } catch (e, st) {
+      dev.log(
+        '❌ [EventService] proposeDeleteEvent error: $e',
+        name: 'EventService',
+        stackTrace: st,
+      );
+      rethrow;
+    }
+  }
+
   Future<EventLog> createLog(Map<String, dynamic> data) async {
     try {
       final row = await _supabase

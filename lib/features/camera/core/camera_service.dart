@@ -160,18 +160,45 @@ class CameraService {
   /// Trả về đường dẫn file của thumbnail đã lưu, hoặc null nếu thất bại.
   Future<String?> takeSnapshot() async {
     final controller = _controller;
-    if (controller == null) return null;
+    AppLogger.d(
+      'takeSnapshot called; controller=${controller != null}, lastUrl=$_lastUrl',
+    );
+    if (controller == null) {
+      AppLogger.w(
+        'takeSnapshot aborted: controller is null; lastUrl=$_lastUrl',
+      );
+      return null;
+    }
 
     try {
+      bool? isPlaying;
+      try {
+        isPlaying = await controller.isPlaying();
+      } catch (e) {
+        AppLogger.w('Error checking isPlaying before snapshot: $e');
+        isPlaying = null;
+      }
+      AppLogger.d('Controller isPlaying=$isPlaying for url=$_lastUrl');
+
       final bytes = await controller.takeSnapshot();
-      if (bytes.isEmpty) {
-        AppLogger.w('Snapshot returned empty bytes');
+
+      if (bytes == null) {
+        AppLogger.w('Snapshot returned null bytes for url=$_lastUrl');
         return null;
       }
 
-      return await _saveThumbnail(bytes);
+      AppLogger.d('Snapshot bytes length=${bytes.length} for url=$_lastUrl');
+
+      if (bytes.isEmpty) {
+        AppLogger.w('Snapshot returned empty bytes for url=$_lastUrl');
+        return null;
+      }
+
+      final path = await _saveThumbnail(bytes);
+      AppLogger.d('Snapshot saved to path=$path');
+      return path;
     } catch (e, st) {
-      AppLogger.e('Failed to take snapshot', e, st);
+      AppLogger.e('Failed to take snapshot for url=$_lastUrl: $e', e, st);
       return null;
     }
   }
@@ -265,11 +292,18 @@ class CameraService {
     final filename = CameraHelpers.generateThumbnailFilename('', timestamp);
     final file = File('${thumbsDir.path}/$filename');
 
-    await file.writeAsBytes(bytes, flush: true);
-    await CameraHelpers.cleanupOldThumbs(thumbsDir);
-
-    AppLogger.d('Thumbnail saved: ${file.path}');
-    return file.path;
+    try {
+      AppLogger.d(
+        'Writing thumbnail bytes length=${bytes.length} to ${file.path}',
+      );
+      await file.writeAsBytes(bytes, flush: true);
+      await CameraHelpers.cleanupOldThumbs(thumbsDir);
+      AppLogger.d('Thumbnail saved: ${file.path}');
+      return file.path;
+    } catch (e, st) {
+      AppLogger.e('Failed to write thumbnail file ${file.path}: $e', e, st);
+      return null;
+    }
   }
 }
 

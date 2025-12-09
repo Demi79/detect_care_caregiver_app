@@ -761,17 +761,17 @@ class _NotificationScreenState extends State<NotificationScreen> {
                                                 color: Colors.grey.shade500,
                                               ),
                                             ),
-                                            const Spacer(),
-                                            if (!_isSelectionMode &&
-                                                _shouldShowSeverityActionButton(
-                                                  n,
-                                                  severity,
-                                                ))
-                                              _buildSeverityActionButton(
-                                                context,
-                                                n,
-                                                severity,
-                                              ),
+                                            // const Spacer(),
+                                            // if (!_isSelectionMode &&
+                                            //     _shouldShowSeverityActionButton(
+                                            //       n,
+                                            //       severity,
+                                            //     ))
+                                            //   _buildSeverityActionButton(
+                                            //     context,
+                                            //     n,
+                                            //     severity,
+                                            //   ),
                                           ],
                                         ),
                                       ],
@@ -861,27 +861,27 @@ class _NotificationScreenState extends State<NotificationScreen> {
     );
   }
 
-  Widget _buildSeverityActionButton(
-    BuildContext context,
-    NotificationModel notification,
-    _NotificationSeverity severity,
-  ) {
-    final color = _severityColor(severity);
-    return TextButton.icon(
-      onPressed: () =>
-          _showNotificationActionSheet(context, notification, severity),
-      icon: Icon(_severityActionIcon(severity), size: 16, color: color),
-      label: Text(
-        _severityActionLabel(severity),
-        style: TextStyle(color: color, fontWeight: FontWeight.w600),
-      ),
-      style: TextButton.styleFrom(
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
-        backgroundColor: color.withOpacity(0.08),
-        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-      ),
-    );
-  }
+  // Widget _buildSeverityActionButton(
+  //   BuildContext context,
+  //   NotificationModel notification,
+  //   _NotificationSeverity severity,
+  // ) {
+  //   final color = _severityColor(severity);
+  //   return TextButton.icon(
+  //     onPressed: () =>
+  //         _showNotificationActionSheet(context, notification, severity),
+  //     icon: Icon(_severityActionIcon(severity), size: 16, color: color),
+  //     label: Text(
+  //       _severityActionLabel(severity),
+  //       style: TextStyle(color: color, fontWeight: FontWeight.w600),
+  //     ),
+  //     style: TextButton.styleFrom(
+  //       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+  //       backgroundColor: color.withOpacity(0.08),
+  //       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+  //     ),
+  //   );
+  // }
 
   bool _hasSeverityActions(_NotificationSeverity severity) {
     return severity == _NotificationSeverity.danger ||
@@ -1497,7 +1497,7 @@ class _NotificationScreenState extends State<NotificationScreen> {
       print('[NotificationScreen] load contacts error: $e');
     }
     if (phoneToCall == null || phoneToCall.isEmpty) {
-      return '112';
+      return '115';
     }
     return phoneToCall;
   }

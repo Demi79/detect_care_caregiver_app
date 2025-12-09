@@ -190,6 +190,14 @@ class WebrtcPlayer implements ICameraPlayer {
     }
   }
 
+  @override
+  Future<String?> takeSnapshot() async {
+    AppLogger.w(
+      '[WebrtcPlayer] takeSnapshot not supported (stubbed WebRTC player)',
+    );
+    return null;
+  }
+
   /// Get connection quality (for UI feedback)
   Future<String> getConnectionQuality() async {
     return 'Unknown - WebRTC unavailable';

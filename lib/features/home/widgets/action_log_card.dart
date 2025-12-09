@@ -293,6 +293,7 @@ class ActionLogCard extends StatelessWidget {
           ),
           child: Column(
             children: [
+              // ---------- HEADER ----------
               Container(
                 padding: const EdgeInsets.all(16),
                 decoration: BoxDecoration(
@@ -322,8 +323,6 @@ class ActionLogCard extends StatelessWidget {
                             crossAxisAlignment: WrapCrossAlignment.center,
                             children: [
                               _statusChip(status, statusColor),
-
-                              // Lifecycle badge may be long; allow it to wrap to next run.
                               if ((data.lifecycleState ?? '')
                                   .toString()
                                   .isNotEmpty)
@@ -353,11 +352,6 @@ class ActionLogCard extends StatelessWidget {
                           mainAxisSize: MainAxisSize.min,
                           crossAxisAlignment: CrossAxisAlignment.end,
                           children: [
-                            // if (_hasSeverityActions(severity))
-                            //   _buildSeverityCTA(context, severity)
-                            // else
-                            //   _buildSeverityIndicator(severity),
-                            // const SizedBox(height: 8),
                             if (!_isUpdateWindowExpired)
                               IconButton(
                                 padding: EdgeInsets.zero,
@@ -373,6 +367,7 @@ class ActionLogCard extends StatelessWidget {
 
                     const SizedBox(height: 16),
 
+                    // ---------- EVENT TITLE ----------
                     Row(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
@@ -390,10 +385,10 @@ class ActionLogCard extends StatelessWidget {
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
                               Text(
-                                overflow: TextOverflow.ellipsis,
                                 data.eventDescription?.trim().isNotEmpty == true
                                     ? data.eventDescription!.trim()
                                     : _titleFromType(data.eventType),
+                                overflow: TextOverflow.ellipsis,
                                 style: const TextStyle(
                                   fontSize: 16,
                                   fontWeight: FontWeight.w700,
@@ -436,6 +431,7 @@ class ActionLogCard extends StatelessWidget {
                 ),
               ),
 
+              // ---------- FOOTER ----------
               Padding(
                 padding: const EdgeInsets.all(16),
                 child: Column(
@@ -459,6 +455,35 @@ class ActionLogCard extends StatelessWidget {
                           ),
                         ),
                       ),
+                    ),
+
+                    const SizedBox(height: 12),
+
+                    // Delete propose
+                    FutureBuilder<EventLog>(
+                      future: EventRepository(
+                        EventService.withDefaultClient(),
+                      ).getEventDetails(data.eventId),
+                      builder: (context, snap) {
+                        bool disabled = !_canEditEvent;
+                        String tooltip = '';
+
+                        if (snap.connectionState == ConnectionState.done &&
+                            !snap.hasError &&
+                            snap.data != null) {
+                          final detail = snap.data!;
+                          final hasPending = detail.pendingUntil != null;
+                          if (hasPending) {
+                            disabled = true;
+                            tooltip = 'Sự kiện đang có đề xuất chờ duyệt';
+                          }
+                        }
+
+                        // Removed inline "Đề xuất xóa" button; that flow
+                        // has been moved into `ProposeScreen` to centralize
+                        // proposal UI/logic and avoid duplicated dialogs.
+                        return const SizedBox.shrink();
+                      },
                     ),
                   ],
                 ),
@@ -1598,11 +1623,7 @@ class ActionLogCard extends StatelessWidget {
                                     snap.data != null) {
                                   final detail = snap.data!;
                                   final hasPending =
-                                      detail.proposedStatus != null &&
-                                      (detail.pendingUntil != null &&
-                                          detail.pendingUntil!.isAfter(
-                                            DateTime.now(),
-                                          ));
+                                      detail.pendingUntil != null;
                                   if (hasPending) {
                                     disabled = true;
                                     tooltip =
@@ -1843,12 +1864,12 @@ class ActionLogCard extends StatelessWidget {
                               typeColor,
                               Icons.category_outlined,
                             ),
-                            // _kvRow(
-                            //   'Mã sự kiện',
-                            //   _shortId(data.eventId),
-                            //   Colors.grey.shade600,
-                            //   Icons.fingerprint_outlined,
-                            // ),
+                            _kvRow(
+                              'Mã sự kiện',
+                              _shortId(data.eventId),
+                              Colors.grey.shade600,
+                              Icons.fingerprint_outlined,
+                            ),
                             _kvRow(
                               'Thời gian tạo',
                               _formatDateTime(data.createdAt),

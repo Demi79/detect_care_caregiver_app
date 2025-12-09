@@ -107,4 +107,12 @@ class HlsVideoPlayer implements ICameraPlayer {
       AppLogger.e('[HlsVideoPlayer] Dispose error: $e', e);
     }
   }
+
+  @override
+  Future<String?> takeSnapshot() async {
+    AppLogger.w(
+      '[HlsVideoPlayer] takeSnapshot not supported for HLS/MP4 players',
+    );
+    return null;
+  }
 }

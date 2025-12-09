@@ -375,6 +375,41 @@ class EventsRemoteDataSource {
     throw Exception('Unexpected proposal details response format: ${res.body}');
   }
 
+  /// Gửi đề xuất xóa sự kiện
+  /// POST /api/events/{eventId}/propose-delete
+  Future<Map<String, dynamic>> proposeDelete({
+    required String eventId,
+    required String reason,
+    String? pendingUntil,
+  }) async {
+    AppLogger.api(
+      'POST /api/events/$eventId/propose-delete reason=${reason.length}chars pendingUntil=$pendingUntil',
+    );
+    final body = <String, dynamic>{'reason': reason};
+    if (pendingUntil != null) body['pending_until'] = pendingUntil;
+
+    final res = await _api.post('/events/$eventId/propose-delete', body: body);
+    dev.log('📤 [Events] proposeDelete status=${res.statusCode}');
+    dev.log('Body: ${res.body}');
+
+    if (res.statusCode < 200 || res.statusCode >= 300) {
+      AppLogger.apiError(
+        'Propose delete failed: ${res.statusCode} ${res.body}',
+      );
+      throw Exception('Propose delete failed: ${res.statusCode} ${res.body}');
+    }
+
+    final decoded = convert.jsonDecode(res.body);
+    if (decoded is Map<String, dynamic>) {
+      if (decoded.containsKey('data') && decoded['data'] is Map) {
+        return Map<String, dynamic>.from(decoded['data']);
+      }
+      return Map<String, dynamic>.from(decoded);
+    }
+
+    throw Exception('Unexpected propose-delete response format: ${res.body}');
+  }
+
   /// Lấy lịch sử thay đổi sự kiện (timeline)
   /// GET /api/events/{event_id}/history?expand_limit=20
   Future<List<Map<String, dynamic>>> getEventHistory({

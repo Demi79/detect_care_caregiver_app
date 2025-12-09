@@ -337,7 +337,18 @@ class _LiveCameraScreenState extends State<LiveCameraScreen>
     setState(() => _alarming = true);
     String? snapshotPath;
     try {
-      snapshotPath = await _cameraService.takeSnapshot();
+      AppLogger.d(
+        '[Camera] Attempting to take snapshot for alarm (currentUrl=${_stateManager.currentUrl})',
+      );
+      snapshotPath = await _currentPlayer?.takeSnapshot();
+      AppLogger.d('[Camera] player.takeSnapshot returned: $snapshotPath');
+      if (snapshotPath == null) {
+        AppLogger.d('[Camera] falling back to cameraService.takeSnapshot()');
+        snapshotPath = await _cameraService.takeSnapshot();
+        AppLogger.d(
+          '[Camera] cameraService.takeSnapshot returned: $snapshotPath',
+        );
+      }
 
       final extracted = _extractCameraIdFromUrl(
         _stateManager.currentUrl ?? _stateManager.urlController.text,
@@ -470,106 +481,71 @@ class _LiveCameraScreenState extends State<LiveCameraScreen>
     }
   }
 
-  Future<void> _onCaptureAndAlarm() async {
+  Future<void> _onCaptureManualEvent() async {
     setState(() => _alarming = true);
-    String? snapshotPath;
-    try {
-      snapshotPath = await _cameraService.takeSnapshot();
 
+    try {
+      // 1. Chụp snapshot
+      AppLogger.d(
+        '[Camera] Attempting manual capture (currentUrl=${_stateManager.currentUrl})',
+      );
+      AppLogger.d(
+        '[Camera] currentPlayer=${_currentPlayer != null ? _currentPlayer.runtimeType : 'null'}, protocol=${_currentPlayer?.protocol}',
+      );
+      // Prefer player snapshot when available
+      String? snapshotPath = await _currentPlayer?.takeSnapshot();
+      AppLogger.d('[Camera] player.takeSnapshot returned: $snapshotPath');
+      if (snapshotPath == null) {
+        AppLogger.d('[Camera] falling back to cameraService.takeSnapshot()');
+        snapshotPath = await _cameraService.takeSnapshot();
+        AppLogger.d(
+          '[Camera] cameraService.takeSnapshot returned: $snapshotPath',
+        );
+      }
+      if (snapshotPath == null || snapshotPath.isEmpty) {
+        AppLogger.w(
+          '[Camera] Manual capture failed: snapshotPath is null/empty',
+        );
+        if (mounted) context.showCameraMessage('Không thể chụp ảnh.');
+        return;
+      }
+
+      // 2. Lấy cameraId từ URL
       final extracted = _extractCameraIdFromUrl(
         _stateManager.currentUrl ?? _stateManager.urlController.text,
       );
+
       final uuidRegex = RegExp(
-        r'^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}\u0000'
-            .replaceAll('\u0000', ''),
+        r'^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$',
       );
+
       final cameraId = (extracted != null && uuidRegex.hasMatch(extracted))
           ? extracted
           : '0fd3f12d-ef70-4d41-a622-79fa5db67a49';
+
       if (cameraId == '0fd3f12d-ef70-4d41-a622-79fa5db67a49') {
         AppLogger.d(
-          '🐛 [Camera] using default cameraId fallback (extracted=$extracted)',
+          '🐛 [Camera] using default fallback cameraId (extracted=$extracted)',
         );
       }
 
-      if (widget.mappedEventId != null && widget.mappedEventId!.isNotEmpty) {
-        final eventId = widget.mappedEventId!;
-        try {
-          await EventsRemoteDataSource().updateEventLifecycle(
-            eventId: eventId,
-            lifecycleState: 'ALARM_ACTIVATED',
-            notes: 'Kích hoạt từ giao diện camera trực tiếp',
-          );
+      // 3. TẠO SỰ KIỆN MỚI TỪ ẢNH
+      final svc = EventService.withDefaultClient();
+      await svc.sendManualAlarm(
+        cameraId: cameraId,
+        snapshotPath: snapshotPath,
+        cameraName: widget.camera?.name ?? 'Camera',
+        streamUrl: _stateManager.currentUrl,
+      );
 
-          try {
-            final userId = await AuthStorage.getUserId();
-            if (userId != null && userId.isNotEmpty) {
-              await AlarmRemoteDataSource().setAlarm(
-                eventId: eventId,
-                userId: userId,
-                cameraId: cameraId,
-                enabled: true,
-              );
-            }
-          } catch (e) {
-            AppLogger.e('External alarm call failed for mapped event: $e');
-          }
-
-          if (mounted) {
-            ScaffoldMessenger.of(context).showSnackBar(
-              const SnackBar(content: Text('Kích hoạt báo động cho sự kiện.')),
-            );
-            ActiveAlarmNotifier.instance.update(true);
-          }
-        } catch (e, st) {
-          AppLogger.e('Failed to activate mapped event alarm: $e', e, st);
-          if (mounted) {
-            context.showCameraMessage('Kích hoạt báo động thất bại.');
-          }
-        }
-      } else {
-        // Check if snapshot was captured successfully
-        if (snapshotPath == null || snapshotPath.isEmpty) {
-          if (mounted) context.showCameraMessage('Không thể chụp ảnh.');
-          return;
-        }
-
-        final svc = EventService.withDefaultClient();
-        final createdEvent = await svc.sendManualAlarm(
-          cameraId: cameraId,
-          snapshotPath: snapshotPath,
-          cameraName: widget.camera?.name ?? 'Camera',
-          streamUrl: _stateManager.currentUrl,
-        );
-
-        try {
-          final userId = await AuthStorage.getUserId();
-          if (userId != null && userId.isNotEmpty) {
-            try {
-              await AlarmRemoteDataSource().setAlarm(
-                eventId: createdEvent.eventId,
-                userId: userId,
-                cameraId: cameraId,
-                enabled: true,
-              );
-            } catch (e) {
-              AppLogger.e('External alarm call failed from camera overlay: $e');
-            }
-          } else {
-            AppLogger.d('Cannot call external alarm: userId not available');
-          }
-        } catch (e) {
-          AppLogger.e('Failed to resolve userId for external alarm: $e');
-        }
-
-        if (!mounted) return;
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Gửi báo động thành công.')),
-        );
-      }
+      // 4. UI thông báo
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Tạo sự kiện mới từ ảnh thành công.')),
+      );
     } catch (e, st) {
-      AppLogger.e('❌ [Camera] send manual alarm failed', e, st);
-      if (mounted) context.showCameraMessage('Gửi báo động thất bại.');
+      AppLogger.e('❌ [Camera] create manual event failed', e, st);
+      if (mounted) context.showCameraMessage('Gửi sự kiện thất bại.');
     } finally {
       if (mounted) setState(() => _alarming = false);
     }
@@ -745,8 +721,28 @@ class _LiveCameraScreenState extends State<LiveCameraScreen>
         // Take snapshot before disposing resources
         String? snapshotPath;
         try {
-          snapshotPath = await _cameraService.takeSnapshot();
-        } catch (_) {}
+          AppLogger.d(
+            '[Camera] onPop: attempting snapshot before pop (currentUrl=${_stateManager.currentUrl})',
+          );
+          AppLogger.d(
+            '[Camera] onPop currentPlayer=${_currentPlayer != null ? _currentPlayer.runtimeType : 'null'}, protocol=${_currentPlayer?.protocol}',
+          );
+          snapshotPath = await _currentPlayer?.takeSnapshot();
+          AppLogger.d(
+            '[Camera] onPop player.takeSnapshot result: $snapshotPath',
+          );
+          if (snapshotPath == null) {
+            AppLogger.d(
+              '[Camera] onPop falling back to cameraService.takeSnapshot()',
+            );
+            snapshotPath = await _cameraService.takeSnapshot();
+            AppLogger.d(
+              '[Camera] onPop cameraService.takeSnapshot result: $snapshotPath',
+            );
+          }
+        } catch (e, st) {
+          AppLogger.e('[Camera] onPop snapshot error: $e', e, st);
+        }
 
         if (snapshotPath != null && context.mounted) {
           Navigator.of(context).pop(snapshotPath);
@@ -1180,7 +1176,7 @@ class _LiveCameraScreenState extends State<LiveCameraScreen>
         final mainIcon = alarmActive
             ? Icons.close_rounded
             : Icons.warning_amber_rounded;
-        final onMainTap = alarmActive ? _onCancelAlarm : _onCaptureAndAlarm;
+        final onMainTap = alarmActive ? _onCancelAlarm : _onCaptureManualEvent;
         final mainLoading = alarmActive ? _cancelingAlarm : _alarming;
 
         return Row(
@@ -1383,12 +1379,12 @@ class _LiveCameraScreenState extends State<LiveCameraScreen>
             ? const [Color(0xFFB0BEC5), Color(0xFF78909C)]
             : const [Color(0xFFFF7043), Color(0xFFEF4444)];
         final mainLabel = alarmActive
-            ? (_cancelingAlarm ? 'Đang hủy...' : 'HỦY BÁO ĐỘNG')
-            : (_alarming ? 'Đang...' : 'BÁO ĐỘNG');
+            ? (_cancelingAlarm ? 'Đang hủy...' : 'HỦY CHỤP ẢNH')
+            : (_alarming ? 'Đang...' : 'CHỤP ẢNH');
         final mainIcon = alarmActive
             ? Icons.close_rounded
             : Icons.warning_amber_rounded;
-        final onMainTap = alarmActive ? _onCancelAlarm : _onCaptureAndAlarm;
+        final onMainTap = alarmActive ? _onCancelAlarm : _onCaptureManualEvent;
         final mainLoading = alarmActive ? _cancelingAlarm : _alarming;
 
         if (iconOnly) {
