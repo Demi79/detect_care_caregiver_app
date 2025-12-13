@@ -33,8 +33,12 @@ class LowConfidenceEventsScreen extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    const lowAllowed = {'unknown', 'suspect'};
+    final lowAllowed = const {'unknowns', 'suspect'};
     final filtered = logs.where((log) {
+      try {
+        final ls = log.lifecycleState?.toString().toLowerCase();
+        if (ls != null && ls == 'canceled') return false;
+      } catch (_) {}
       final st = log.status.toLowerCase();
       if (!lowAllowed.contains(st)) return false;
 
@@ -94,8 +98,7 @@ class LowConfidenceEventsScreen extends StatelessWidget {
         crossAxisAlignment: CrossAxisAlignment.center,
         children: [
           FilterBar(
-            // Low-confidence should not include 'normal' (now shown in high-confidence)
-            statusOptions: const ['all', 'unknown', 'suspect'],
+            statusOptions: const ['all', 'suspect', 'unknowns'],
             periodOptions: HomeFilters.periodOptions,
             selectedDayRange: selectedDayRange,
             selectedStatus: selectedStatus,
@@ -105,7 +108,7 @@ class LowConfidenceEventsScreen extends StatelessWidget {
             onPeriodChanged: onPeriodChanged,
           ),
           const SizedBox(height: 24),
-          _SummaryRow(logs: filtered),
+          _SummaryRow(logs: filtered, selectedStatus: selectedStatus),
           const SizedBox(height: 12),
           const Divider(height: 1),
           const SizedBox(height: 12),
@@ -142,45 +145,124 @@ class LowConfidenceEventsScreen extends StatelessWidget {
 }
 
 class _SummaryRow extends StatelessWidget {
-  const _SummaryRow({required this.logs});
+  const _SummaryRow({required this.logs, required this.selectedStatus});
   final List<LogEntry> logs;
+  final String selectedStatus;
 
   @override
   Widget build(BuildContext context) {
-    final int total = logs.length;
-    final int suspectCount = logs
-        .where((e) => e.status.toLowerCase() == 'suspect')
-        .length;
-    final int others = (total - suspectCount).clamp(0, total);
+    final sel = selectedStatus.toLowerCase();
+
+    final int suspectCount = logs.where((e) {
+      try {
+        return e.status.toLowerCase() == 'suspect';
+      } catch (_) {
+        return false;
+      }
+    }).length;
+
+    final int unknownCount = logs.where((e) {
+      try {
+        return e.status.toLowerCase() == 'unknowns';
+      } catch (_) {
+        return false;
+      }
+    }).length;
+
+    final int totalLow = suspectCount + unknownCount;
+
+    late final Widget leftCard;
+    late final Widget middleCard;
+    late final Widget rightCard;
+
+    if (sel == 'all') {
+      leftCard = _SummaryCard(
+        title: 'Đáng ngờ',
+        value: '$suspectCount',
+        icon: Icons.help_outline_rounded,
+        color: const Color(0xFFF59E0B),
+      );
+
+      middleCard = _SummaryCard(
+        title: 'Tổng nhật ký',
+        value: '$totalLow',
+        icon: Icons.list_alt_rounded,
+        color: AppTheme.reportColor,
+      );
+      rightCard = _SummaryCard(
+        title: 'Sự kiện khác',
+        value: '$unknownCount',
+        icon: Icons.help_outline_rounded,
+        color: AppTheme.activityColor,
+      );
+    } else if (sel == 'suspect') {
+      leftCard = _SummaryCard(
+        title: 'Đáng ngờ',
+        value: '$suspectCount',
+        icon: Icons.help_outline_rounded,
+        color: const Color(0xFFF59E0B),
+      );
+
+      middleCard = _SummaryCard(
+        title: 'Tổng nhật ký',
+        value: '$suspectCount',
+        icon: Icons.list_alt_rounded,
+        color: AppTheme.reportColor,
+      );
+      rightCard = _SummaryCard(
+        title: 'Sự kiện khác',
+        value: '0',
+        icon: Icons.help_outline_rounded,
+        color: AppTheme.activityColor,
+      );
+    } else if (sel == 'unknowns') {
+      leftCard = _SummaryCard(
+        title: 'Không xác định',
+        value: '$unknownCount',
+        icon: Icons.help_outline_rounded,
+        color: Colors.grey,
+      );
+      middleCard = _SummaryCard(
+        title: 'Tổng nhật ký',
+        value: '$unknownCount',
+        icon: Icons.list_alt_rounded,
+        color: AppTheme.reportColor,
+      );
+      rightCard = _SummaryCard(
+        title: 'Sự kiện khác',
+        value: '0',
+        icon: Icons.report_off_rounded,
+        color: AppTheme.activityColor,
+      );
+    } else {
+      leftCard = _SummaryCard(
+        title: 'Đáng ngờ',
+        value: '$suspectCount',
+        icon: Icons.help_outline_rounded,
+        color: const Color(0xFFF59E0B),
+      );
+
+      middleCard = _SummaryCard(
+        title: 'Tổng nhật ký',
+        value: '$totalLow',
+        icon: Icons.list_alt_rounded,
+        color: AppTheme.reportColor,
+      );
+      rightCard = _SummaryCard(
+        title: 'Sự kiện khác',
+        value: '$unknownCount',
+        icon: Icons.help_outline_rounded,
+        color: AppTheme.activityColor,
+      );
+    }
 
     return Row(
       children: [
-        Expanded(
-          child: _SummaryCard(
-            title: 'Đáng ngờ',
-            value: '$suspectCount',
-            icon: Icons.emergency_rounded,
-            color: Colors.red,
-          ),
-        ),
+        Expanded(child: leftCard),
         const SizedBox(width: 12),
-        Expanded(
-          child: _SummaryCard(
-            title: 'Tổng nhật ký',
-            value: '$total',
-            icon: Icons.list_alt_rounded,
-            color: AppTheme.reportColor,
-          ),
-        ),
+        Expanded(child: middleCard),
         const SizedBox(width: 12),
-        Expanded(
-          child: _SummaryCard(
-            title: 'Sự kiện khác',
-            value: '$others',
-            icon: Icons.monitor_heart_rounded,
-            color: AppTheme.activityColor,
-          ),
-        ),
+        Expanded(child: rightCard),
       ],
     );
   }
@@ -249,7 +331,7 @@ class _SummaryCard extends StatelessWidget {
                 textAlign: TextAlign.center,
                 maxLines: 2,
                 softWrap: true,
-                style: const TextStyle(
+                style: TextStyle(
                   fontSize: 12,
                   fontWeight: FontWeight.w500,
                   color: AppTheme.unselectedTextColor,

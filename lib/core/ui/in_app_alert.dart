@@ -16,6 +16,7 @@ import '../../services/alert_settings_manager.dart';
 import '../../services/audio_service.dart';
 import '../events/app_events.dart';
 import '../utils/app_lifecycle.dart';
+import 'package:detect_care_caregiver_app/features/auth/data/auth_storage.dart';
 
 class InAppAlert {
   static bool _showing = false;
@@ -25,6 +26,28 @@ class InAppAlert {
     print('🧩 [InAppAlert] Request to show popup for event ${e.eventId}');
     print(' - _showing: $_showing');
     print(' - isForeground: ${AppLifecycle.isForeground}');
+
+    await Future.delayed(const Duration(milliseconds: 300));
+
+    final currentUserId = await AuthStorage.getUserId();
+
+    if (e.confirmStatus == true) {
+      print(
+        '❌ Popup suppressed: event already confirmed (likely manual alarm)',
+      );
+      return;
+    }
+
+    try {
+      final actor = e.contextData?['actor']?.toString();
+      if (actor != null && actor.isNotEmpty && currentUserId != null) {
+        if (actor == currentUserId) {
+          print('❌ Popup suppressed: self-triggered event by current user');
+          return;
+        }
+      }
+    } catch (_) {}
+
     final eventTime = e.detectedAt ?? e.createdAt ?? DateTime.now();
     DateTime truncateToMinute(DateTime t) =>
         DateTime(t.year, t.month, t.day, t.hour, t.minute);
@@ -170,7 +193,9 @@ class InAppAlert {
                       severity: _mapSeverityFrom(e),
                       description: (e.eventDescription?.isNotEmpty ?? false)
                           ? e.eventDescription!
-                          : 'Chạm “Chi tiết” để xem thêm…',
+                          : (e.notes?.isNotEmpty ?? false)
+                          ? e.notes!
+                          : 'Chạm "Chi tiết" để xem thêm…',
                       isHandled: _isHandled(e),
                       detectionData: e.detectionData,
                       contextData: e.contextData,

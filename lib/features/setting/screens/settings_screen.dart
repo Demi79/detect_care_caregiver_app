@@ -155,16 +155,16 @@ class _SettingsScreenState extends State<SettingsScreen> {
         //   ),
         // ),
       ),
-      const SettingsDivider(),
-      SettingsItem(
-        icon: Icons.local_activity_outlined,
-        title: 'Quản lý nhật ký hoạt động',
-        onTap: () {
-          Navigator.of(
-            context,
-          ).push(MaterialPageRoute(builder: (_) => const ActivityLogsScreen()));
-        },
-      ),
+      // const SettingsDivider(),
+      // SettingsItem(
+      //   icon: Icons.local_activity_outlined,
+      //   title: 'Quản lý nhật ký hoạt động',
+      //   onTap: () {
+      //     Navigator.of(
+      //       context,
+      //     ).push(MaterialPageRoute(builder: (_) => const ActivityLogsScreen()));
+      //   },
+      // ),
       const SettingsDivider(),
     ],
   );

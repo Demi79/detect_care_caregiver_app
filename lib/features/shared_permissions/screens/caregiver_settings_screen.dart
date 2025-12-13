@@ -2,6 +2,7 @@ import 'package:detect_care_caregiver_app/features/auth/data/auth_storage.dart';
 import 'package:detect_care_caregiver_app/features/shared_permissions/data/shared_permissions_remote_data_source.dart';
 import 'package:detect_care_caregiver_app/features/shared_permissions/models/shared_permissions.dart';
 import 'package:detect_care_caregiver_app/features/assignments/data/assignments_remote_data_source.dart';
+import 'package:detect_care_caregiver_app/core/utils/error_handler.dart';
 import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';

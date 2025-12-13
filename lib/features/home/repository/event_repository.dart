@@ -9,7 +9,7 @@ class EventRepository {
 
   Future<List<EventLog>> getEvents({
     int page = 1,
-    int limit = 100,
+    int limit = 50,
     String? status,
     DateTimeRange? dayRange,
     String? period,

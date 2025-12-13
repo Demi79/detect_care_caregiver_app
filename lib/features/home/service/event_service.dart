@@ -1,14 +1,18 @@
 import 'dart:convert' as convert;
 import 'dart:developer' as dev;
 
+import 'package:detect_care_caregiver_app/features/home/repository/event_repository.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:http/http.dart' as http;
 
 import 'package:detect_care_caregiver_app/core/network/api_client.dart';
+import 'package:detect_care_caregiver_app/core/utils/logger.dart';
 import 'package:detect_care_caregiver_app/features/auth/data/auth_storage.dart';
 import 'package:detect_care_caregiver_app/features/home/data/event_endpoints.dart';
 import 'package:detect_care_caregiver_app/features/events/data/events_remote_data_source.dart';
+import 'package:detect_care_caregiver_app/features/home/service/event_isolate_worker.dart';
 
 import '../models/event_log.dart';
 
@@ -34,7 +38,7 @@ class EventService {
 
   Future<List<EventLog>> fetchLogs({
     int page = 1,
-    int limit = 100,
+    int limit = 50,
     String? status,
     DateTimeRange? dayRange,
     String? period,
@@ -537,6 +541,10 @@ class EventService {
               .single();
 
           final normalized = await _normalizeRow(row);
+          dev.log(
+            '[EventService] Supabase detail pending_until=${normalized['pending_until']}',
+            name: 'EventService',
+          );
           return EventLog.fromJson(normalized);
         } catch (e) {
           print(
@@ -554,6 +562,12 @@ class EventService {
       print('[EventService] backend fetch status=${res.statusCode}');
       if (res.statusCode == 200) {
         final data = _api.extractDataFromResponse(res);
+        try {
+          dev.log(
+            '[EventService] API detail pending_until=${data['pending_until']}',
+            name: 'EventService',
+          );
+        } catch (_) {}
         return EventLog.fromJson(data);
       } else if (res.statusCode == 401 || res.statusCode == 403) {
         throw Exception(
@@ -791,6 +805,122 @@ class EventService {
     }
   }
 
+  Future<EventLog> sendManualAlarm({
+    required String cameraId,
+    required String snapshotPath,
+    String? cameraName,
+    String? notes,
+    String? streamUrl,
+  }) async {
+    try {
+      if (snapshotPath.isEmpty) {
+        throw Exception('Snapshot path is empty');
+      }
+
+      final rds = EventsRemoteDataSource(api: _api);
+
+      AppLogger.api('[sendManualAlarm] 1️⃣ Creating manual alert...');
+      // 1️⃣ Create manual alert
+      final data = await rds.createManualAlert(
+        cameraId: cameraId,
+        imagePath: snapshotPath,
+        notes: notes ?? 'Manual alarm triggered from LiveCameraScreen',
+        contextData: {
+          'camera_name': cameraName,
+          'stream_url': streamUrl,
+          'source': 'manual_button',
+        },
+      );
+
+      AppLogger.api('[sendManualAlarm] Raw response from createManualAlert:');
+      AppLogger.api('  - Full data: ${data.toString().substring(0, 200)}...');
+      AppLogger.api('  - Keys: ${data.keys.toList()}');
+
+      final eventData = data['event'] is Map ? data['event'] : data;
+      final eventId =
+          eventData['event_id'] ?? eventData['eventId'] ?? eventData['id'];
+
+      AppLogger.api(
+        '[sendManualAlarm] ✅ Created alert - eventId=$eventId confirm_status=${eventData['confirm_status']}',
+      );
+
+      if (eventId == null || eventId.toString().isEmpty) {
+        AppLogger.apiError(
+          '[sendManualAlarm] ❌ EventID extraction failed - eventData keys=${eventData.keys.toList()}',
+        );
+        throw Exception('createManualAlert did not return eventId');
+      }
+
+      // 2️⃣ Confirm event on server
+      AppLogger.api(
+        '[sendManualAlarm] 2️⃣ Calling confirmEvent API for eventId=$eventId...',
+      );
+      try {
+        await rds.confirmEvent(
+          eventId: eventId.toString(),
+          confirmStatusBool: true,
+        );
+        AppLogger.api(
+          '[sendManualAlarm] ✅ confirmEvent API call completed (no error)',
+        );
+      } catch (e) {
+        AppLogger.apiError(
+          '[sendManualAlarm] ❌ confirmEvent API failed - eventId=$eventId error=$e',
+        );
+      }
+
+      // 3️⃣ Try to fetch fresh event from REST API (SOURCE OF TRUTH)
+      // But if it fails, return a constructed EventLog from creation response
+      AppLogger.api(
+        '[sendManualAlarm] 3️⃣ Fetching fresh event directly from REST API...',
+      );
+      EventLog? freshEvent;
+      try {
+        final rdsForFetch = EventsRemoteDataSource(api: _api);
+        final freshEventData = await rdsForFetch.getEventById(
+          eventId: eventId.toString(),
+        );
+        freshEvent = EventLog.fromJson(freshEventData);
+
+        AppLogger.api('[sendManualAlarm] ✅ Fetched fresh event from REST API:');
+        AppLogger.api('  - eventId: ${freshEvent.eventId}');
+        AppLogger.api('  - confirm_status: ${freshEvent.confirmStatus}');
+        AppLogger.api('  - status: ${freshEvent.status}');
+
+        if (freshEvent.confirmStatus != true) {
+          AppLogger.apiError(
+            '[sendManualAlarm] ⚠️ WARNING: confirm_status is still ${freshEvent.confirmStatus}, expected TRUE!',
+          );
+        }
+      } catch (fetchErr) {
+        AppLogger.apiError(
+          '[sendManualAlarm] ⚠️ REST fetch failed (non-fatal): $fetchErr - falling back to created event',
+        );
+        try {
+          freshEvent = EventLog.fromJson(eventData);
+          AppLogger.api(
+            '[sendManualAlarm] ✅ Using creation response as fallback for eventId=$eventId',
+          );
+        } catch (fbErr) {
+          AppLogger.apiError(
+            '[sendManualAlarm] ❌ Fallback EventLog creation also failed: $fbErr',
+          );
+          rethrow;
+        }
+      }
+
+      AppLogger.api(
+        '[sendManualAlarm] ✅ Complete - confirm_status=${freshEvent.confirmStatus}',
+      );
+
+      return freshEvent;
+    } catch (e, st) {
+      AppLogger.apiError('[sendManualAlarm] ❌ Fatal error: $e');
+      dev.log('sendManualAlarm stackTrace: $st', name: 'EventService');
+      rethrow;
+    }
+  }
+
   Future<Map<String, dynamic>> _normalizeRow(Map<String, dynamic> row) async {
     final rawDetected = row[EventEndpoints.detectedAt];
     final dt = _parseDetectedAtAny(rawDetected);
@@ -896,34 +1026,6 @@ class EventService {
         name: 'EventService.fetchLogs',
         stackTrace: st,
       );
-    }
-  }
-
-  Future<EventLog> sendManualAlarm({
-    required String cameraId,
-    required String snapshotPath,
-    String? cameraName,
-    String? notes,
-    String? streamUrl,
-  }) async {
-    try {
-      final rds = EventsRemoteDataSource(api: _api);
-
-      final data = await rds.createManualAlert(
-        cameraId: cameraId,
-        imagePath: snapshotPath,
-        notes: notes ?? "Manual alarm triggered from LiveCameraScreen",
-        contextData: {
-          "camera_name": cameraName,
-          "stream_url": streamUrl,
-          "source": "manual_button",
-        },
-      );
-
-      return EventLog.fromJson(data);
-    } catch (e) {
-      print("❌ [EventService.sendManualAlarm] $e");
-      rethrow;
     }
   }
 }

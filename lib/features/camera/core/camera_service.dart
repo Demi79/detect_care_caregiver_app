@@ -156,49 +156,43 @@ class CameraService {
   }
 
   /// Chụp ảnh từ luồng video hiện tại và lưu dưới dạng thumbnail.
-  ///
   /// Trả về đường dẫn file của thumbnail đã lưu, hoặc null nếu thất bại.
-  Future<String?> takeSnapshot() async {
-    final controller = _controller;
-    AppLogger.d(
-      'takeSnapshot called; controller=${controller != null}, lastUrl=$_lastUrl',
-    );
-    if (controller == null) {
-      AppLogger.w(
-        'takeSnapshot aborted: controller is null; lastUrl=$_lastUrl',
+  Future<String?> takeSnapshot({VlcPlayerController? controller}) async {
+    final target = controller ?? _controller;
+    if (target == null) {
+      AppLogger.d(
+        '[CameraService.takeSnapshot] No controller available, returning null',
       );
       return null;
     }
 
     try {
-      bool? isPlaying;
-      try {
-        isPlaying = await controller.isPlaying();
-      } catch (e) {
-        AppLogger.w('Error checking isPlaying before snapshot: $e');
-        isPlaying = null;
-      }
-      AppLogger.d('Controller isPlaying=$isPlaying for url=$_lastUrl');
+      AppLogger.api(
+        '📸 [CameraService.takeSnapshot] Starting snapshot capture...',
+      );
 
-      final bytes = await controller.takeSnapshot();
-
-      if (bytes == null) {
-        AppLogger.w('Snapshot returned null bytes for url=$_lastUrl');
-        return null;
-      }
-
-      AppLogger.d('Snapshot bytes length=${bytes.length} for url=$_lastUrl');
-
+      final bytes = await target.takeSnapshot();
       if (bytes.isEmpty) {
-        AppLogger.w('Snapshot returned empty bytes for url=$_lastUrl');
+        AppLogger.w('⚠️ [CameraService.takeSnapshot] Snapshot bytes empty');
         return null;
       }
 
-      final path = await _saveThumbnail(bytes);
-      AppLogger.d('Snapshot saved to path=$path');
-      return path;
+      AppLogger.api(
+        '📸 [CameraService.takeSnapshot] Captured ${bytes.length} bytes',
+      );
+
+      final thumbsDir = await CameraHelpers.getThumbsDirectory();
+      final timestamp = DateTime.now().millisecondsSinceEpoch;
+      final filename = CameraHelpers.generateThumbnailFilename('', timestamp);
+      final file = File('${thumbsDir.path}/$filename');
+
+      await file.writeAsBytes(bytes, flush: true);
+      await CameraHelpers.cleanupOldThumbs(thumbsDir);
+
+      AppLogger.api('✅ [CameraService.takeSnapshot] Saved to: ${file.path}');
+      return file.path;
     } catch (e, st) {
-      AppLogger.e('Failed to take snapshot for url=$_lastUrl: $e', e, st);
+      AppLogger.e('❌ [CameraService.takeSnapshot] Failed: $e', e, st);
       return null;
     }
   }

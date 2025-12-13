@@ -1,6 +1,8 @@
 import 'dart:async';
+import 'dart:io';
 import 'dart:ui';
 
+import 'package:detect_care_caregiver_app/core/network/api_client.dart';
 import 'package:detect_care_caregiver_app/core/utils/logger.dart';
 import 'package:detect_care_caregiver_app/features/alarm/data/alarm_remote_data_source.dart';
 import 'package:detect_care_caregiver_app/features/alarm/services/active_alarm_notifier.dart';
@@ -9,16 +11,20 @@ import 'package:detect_care_caregiver_app/features/camera/core/camera_core.dart'
 import 'package:detect_care_caregiver_app/features/camera/core/camera_player_factory.dart';
 import 'package:detect_care_caregiver_app/features/camera/core/camera_stream_helper.dart';
 import 'package:detect_care_caregiver_app/features/camera/core/i_camera_player.dart';
+import 'package:detect_care_caregiver_app/features/camera/core/rtsp_vlc_player.dart';
 import 'package:detect_care_caregiver_app/features/camera/models/camera_entry.dart';
 import 'package:detect_care_caregiver_app/features/camera/screens/camera_timeline_screen.dart';
 import 'package:detect_care_caregiver_app/features/camera/services/camera_access_guard.dart';
+import 'package:detect_care_caregiver_app/features/camera/services/camera_screenshot_use_case.dart';
 import 'package:detect_care_caregiver_app/features/camera/widgets/features_panel.dart';
 import 'package:detect_care_caregiver_app/features/camera/widgets/status_chip.dart';
 import 'package:detect_care_caregiver_app/features/emergency/emergency_call_helper.dart';
 import 'package:detect_care_caregiver_app/features/events/data/events_remote_data_source.dart';
+import 'package:detect_care_caregiver_app/features/home/models/event_log.dart';
 import 'package:detect_care_caregiver_app/features/home/service/event_service.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:http/http.dart' as http;
 
 /// Màn hình camera chính với kiến trúc module hóa
 class LiveCameraScreen extends StatefulWidget {
@@ -54,31 +60,54 @@ class _LiveCameraScreenState extends State<LiveCameraScreen>
   bool _emergencyCalling = false;
   bool _cancelingAlarm = false;
   bool _activatingAlarm = false;
+  late final CameraScreenshotUseCase _screenshotUseCase;
 
+  @override
   @override
   void initState() {
     super.initState();
     // Thêm observer để monitor lifecycle
     WidgetsBinding.instance.addObserver(this);
 
-    // Nếu `initialUrl` được truyền vào, ưu tiên nó thay vì phục hồi
-    // URL/cấu hình đã lưu trước đó. Trong trường hợp đó, tắt loadCache.
+    // Lightweight init - chỉ setup state managers (không load/play)
     final shouldLoadCache = widget.initialUrl == null && widget.loadCache;
     _stateManager = CameraStateManager(loadCache: shouldLoadCache);
-    // Use the shared singleton service so all modules observe the same
-    // VlcPlayerController instance (avoids situations where UI/debug
-    // shows `controller=null` because a different CameraService was used).
     _cameraService = cameraService;
+    _screenshotUseCase = CameraScreenshotUseCase(
+      ApiClient(tokenProvider: AuthStorage.getAccessToken),
+    );
     _accessGuard = CameraAccessGuard();
-    _stateManager.init();
 
-    // Nếu có initial URL, gán vào controller để màn hình dùng URL này
-    // thay vì giá trị đã lưu, và có thể auto-play.
-    if (widget.initialUrl != null && widget.initialUrl!.isNotEmpty) {
-      _stateManager.urlController.text = widget.initialUrl!;
-      _stateManager.setCurrentUrl(widget.initialUrl!);
-      // Start playback automatically when initialUrl is supplied.
-      _startPlay();
+    // Defer heavy initialization đến sau khi UI hiển thị
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _initializeHeavyResources();
+    });
+  }
+
+  /// Khởi tạo các resource nặng sau khi UI đã render
+  Future<void> _initializeHeavyResources() async {
+    try {
+      // Load configuration từ cache (non-async)
+      _stateManager.init();
+
+      // Set initial URL nếu có
+      if (widget.initialUrl != null && widget.initialUrl!.isNotEmpty) {
+        _stateManager.urlController.text = widget.initialUrl!;
+        _stateManager.setCurrentUrl(widget.initialUrl!);
+      }
+
+      // Defer camera playback đến microtask untuk không block UI
+      Future.microtask(() async {
+        try {
+          if (widget.initialUrl != null && widget.initialUrl!.isNotEmpty) {
+            await _startPlay();
+          }
+        } catch (e) {
+          AppLogger.w('⚠️ [Camera] Auto-play failed: $e');
+        }
+      });
+    } catch (e) {
+      AppLogger.e('❌ [Camera] Heavy init failed: $e');
     }
   }
 
@@ -336,6 +365,7 @@ class _LiveCameraScreenState extends State<LiveCameraScreen>
 
     setState(() => _alarming = true);
     String? snapshotPath;
+    bool createdOk = false;
     try {
       AppLogger.d(
         '[Camera] Attempting to take snapshot for alarm (currentUrl=${_stateManager.currentUrl})',
@@ -399,25 +429,29 @@ class _LiveCameraScreenState extends State<LiveCameraScreen>
         }
       } else {
         // Check if snapshot was captured successfully
-        if (snapshotPath == null || snapshotPath.isEmpty) {
-          if (mounted) context.showCameraMessage('Không thể chụp ảnh.');
+        snapshotPath = snapshotPath ?? '';
+        EventLog? createdEvent;
+        try {
+          final svc = EventService.withDefaultClient();
+          createdEvent = await svc.sendManualAlarm(
+            cameraId: cameraId,
+            snapshotPath: snapshotPath,
+            cameraName: widget.camera?.name ?? 'Camera',
+            streamUrl: _stateManager.currentUrl,
+          );
+          createdOk = true;
+        } catch (e, st) {
+          AppLogger.e('❌ [Camera] sendManualAlarm failed', e, st);
+          if (mounted) context.showCameraMessage('Gửi báo động thất bại.');
           return;
         }
-
-        final svc = EventService.withDefaultClient();
-        final createdEvent = await svc.sendManualAlarm(
-          cameraId: cameraId,
-          snapshotPath: snapshotPath,
-          cameraName: widget.camera?.name ?? 'Camera',
-          streamUrl: _stateManager.currentUrl,
-        );
 
         try {
           final userId = await AuthStorage.getUserId();
           if (userId != null && userId.isNotEmpty) {
             try {
               await AlarmRemoteDataSource().setAlarm(
-                eventId: createdEvent.eventId,
+                eventId: createdEvent!.eventId,
                 userId: userId,
                 cameraId: cameraId,
                 enabled: true,
@@ -433,14 +467,18 @@ class _LiveCameraScreenState extends State<LiveCameraScreen>
         }
 
         if (!mounted) return;
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Gửi báo động thành công.')),
-        );
+        if (createdOk) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('Gửi báo động thành công.')),
+          );
+        }
         ActiveAlarmNotifier.instance.update(true);
       }
     } catch (e, st) {
-      AppLogger.e('❌ [Camera] send manual alarm failed', e, st);
-      if (mounted) context.showCameraMessage('Gửi báo động thất bại.');
+      AppLogger.e('❌ [Camera] send manual alarm flow error', e, st);
+      if (!createdOk && mounted) {
+        context.showCameraMessage('Gửi báo động thất bại.');
+      }
     } finally {
       if (mounted) setState(() => _alarming = false);
     }
@@ -482,73 +520,91 @@ class _LiveCameraScreenState extends State<LiveCameraScreen>
   }
 
   Future<void> _onCaptureManualEvent() async {
+    if (_alarming) return;
     setState(() => _alarming = true);
 
     try {
-      // 1. Chụp snapshot
-      AppLogger.d(
-        '[Camera] Attempting manual capture (currentUrl=${_stateManager.currentUrl})',
-      );
-      AppLogger.d(
-        '[Camera] currentPlayer=${_currentPlayer != null ? _currentPlayer.runtimeType : 'null'}, protocol=${_currentPlayer?.protocol}',
-      );
-      // Prefer player snapshot when available
-      String? snapshotPath = await _currentPlayer?.takeSnapshot();
-      AppLogger.d('[Camera] player.takeSnapshot returned: $snapshotPath');
-      if (snapshotPath == null) {
-        AppLogger.d('[Camera] falling back to cameraService.takeSnapshot()');
-        snapshotPath = await _cameraService.takeSnapshot();
-        AppLogger.d(
-          '[Camera] cameraService.takeSnapshot returned: $snapshotPath',
-        );
+      // 1️⃣ Capture snapshot
+      String? snapshotPath;
+      try {
+        snapshotPath = await _captureCurrentSnapshot();
+      } catch (e) {
+        AppLogger.w('[Camera] Snapshot capture failed: $e');
       }
+
       if (snapshotPath == null || snapshotPath.isEmpty) {
-        AppLogger.w(
-          '[Camera] Manual capture failed: snapshotPath is null/empty',
-        );
-        if (mounted) context.showCameraMessage('Không thể chụp ảnh.');
+        if (mounted) {
+          context.showCameraMessage('Không thể chụp ảnh. Vui lòng thử lại.');
+        }
         return;
       }
 
-      // 2. Lấy cameraId từ URL
-      final extracted = _extractCameraIdFromUrl(
-        _stateManager.currentUrl ?? _stateManager.urlController.text,
-      );
-
-      final uuidRegex = RegExp(
-        r'^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$',
-      );
-
-      final cameraId = (extracted != null && uuidRegex.hasMatch(extracted))
-          ? extracted
-          : '0fd3f12d-ef70-4d41-a622-79fa5db67a49';
-
-      if (cameraId == '0fd3f12d-ef70-4d41-a622-79fa5db67a49') {
-        AppLogger.d(
-          '🐛 [Camera] using default fallback cameraId (extracted=$extracted)',
-        );
-      }
-
-      // 3. TẠO SỰ KIỆN MỚI TỪ ẢNH
+      // 2️⃣ Create manual event (confirm_status=true inside sendManualAlarm)
+      // This automatically:
+      // - Creates event on server
+      // - Calls confirmEvent to set confirm_status=true
+      // - Fetches fresh event via REST to validate
+      // - In-app popup will be suppressed by debounce + confirmStatus check
       final svc = EventService.withDefaultClient();
-      await svc.sendManualAlarm(
-        cameraId: cameraId,
+      final createdEvent = await svc.sendManualAlarm(
+        cameraId: widget.camera?.id ?? '',
         snapshotPath: snapshotPath,
-        cameraName: widget.camera?.name ?? 'Camera',
+        cameraName: widget.camera?.name,
         streamUrl: _stateManager.currentUrl,
       );
 
-      // 4. UI thông báo
+      AppLogger.i(
+        '✅ [Camera] Manual event created & confirmed '
+        'eventId=${createdEvent.eventId} '
+        'confirm_status=${createdEvent.confirmStatus}',
+      );
+
       if (!mounted) return;
+
+      // 3️⃣ Show success — no external alarm activation
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Tạo sự kiện mới từ ảnh thành công.')),
+        const SnackBar(content: Text('Đã ghi nhận báo động thủ công.')),
       );
     } catch (e, st) {
-      AppLogger.e('❌ [Camera] create manual event failed', e, st);
-      if (mounted) context.showCameraMessage('Gửi sự kiện thất bại.');
+      AppLogger.e('❌ [Camera] Manual event creation failed', e, st);
+      if (mounted) {
+        context.showCameraMessage('Không thể ghi nhận báo động.');
+      }
     } finally {
-      if (mounted) setState(() => _alarming = false);
+      if (mounted) {
+        setState(() => _alarming = false);
+      }
     }
+  }
+
+  Future<String?> _captureCurrentSnapshot() async {
+    // 1. Try RTSP snapshot (nếu có)
+    final controller = _currentPlayer is RtspVlcPlayer
+        ? (_currentPlayer as RtspVlcPlayer).controller
+        : null;
+
+    final localPath = await _cameraService.takeSnapshot(controller: controller);
+    if (localPath != null) return localPath;
+
+    // 2. Remote screenshot fallback
+    final cameraId = widget.camera?.id ?? '';
+    if (cameraId.isEmpty) {
+      AppLogger.d('[Camera] cameraId empty, cannot fallback');
+      return null;
+    }
+
+    final imageUrl = await _screenshotUseCase.captureScreenshotWithFallback(
+      cameraId: cameraId,
+      fallbackImageUrl: widget.camera?.thumb,
+    );
+
+    if (imageUrl == null) {
+      AppLogger.d('[Camera] Remote screenshot returned null');
+      return null;
+    }
+
+    // 3. Download image về local
+    return _downloadImageToLocalFile(imageUrl, cameraId);
   }
 
   // Future<void> _toggleMute() async {
@@ -1342,6 +1398,51 @@ class _LiveCameraScreenState extends State<LiveCameraScreen>
         ),
       ),
     );
+  }
+
+  Future<String?> _downloadImageToLocalFile(String url, String cameraId) async {
+    try {
+      final uri = Uri.tryParse(url);
+      if (uri == null) {
+        AppLogger.w('[Camera] Screenshot URL invalid: $url');
+        return null;
+      }
+
+      final response = await http
+          .get(uri)
+          .timeout(
+            const Duration(seconds: 10),
+            onTimeout: () {
+              AppLogger.w('[Camera] Screenshot download timed out for $url');
+              throw TimeoutException('Image download timeout');
+            },
+          );
+
+      if (response.statusCode != 200) {
+        AppLogger.w(
+          '[Camera] Screenshot download failed (${response.statusCode}): $url',
+        );
+        return null;
+      }
+      if (response.bodyBytes.isEmpty) {
+        AppLogger.w('[Camera] Screenshot download returned empty body');
+        return null;
+      }
+
+      final thumbsDir = await CameraHelpers.getThumbsDirectory();
+      final safeId = cameraId.replaceAll(RegExp(r'[^A-Za-z0-9]+'), '_');
+      final timestamp = DateTime.now().millisecondsSinceEpoch;
+      final file = File(
+        '${thumbsDir.path}/camera_snapshot_${safeId}_$timestamp.jpg',
+      );
+      await file.writeAsBytes(response.bodyBytes, flush: true);
+
+      AppLogger.i('[Camera] Remote screenshot saved: ${file.path}');
+      return file.path;
+    } catch (e, st) {
+      AppLogger.e('[Camera] Failed to download screenshot: $e', e, st);
+      return null;
+    }
   }
 
   Widget _buildActionPanelBackground({required Widget child}) {

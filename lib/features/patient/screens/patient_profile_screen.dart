@@ -4,6 +4,7 @@ import 'package:intl/intl.dart';
 
 import 'package:detect_care_caregiver_app/features/patient/models/medical_info.dart';
 import 'package:detect_care_caregiver_app/core/utils/backend_enums.dart';
+import 'package:detect_care_caregiver_app/core/utils/error_handler.dart';
 import 'package:detect_care_caregiver_app/features/patient/data/medical_info_remote_data_source.dart';
 import 'package:detect_care_caregiver_app/features/assignments/data/assignments_remote_data_source.dart';
 import 'package:detect_care_caregiver_app/features/auth/data/auth_storage.dart';
@@ -55,7 +56,7 @@ class _PatientProfileScreenState extends State<PatientProfileScreen> {
       });
     } catch (e) {
       setState(() {
-        _error = e.toString();
+        _error = formatErrorMessage(e);
       });
     } finally {
       if (mounted) setState(() => _loading = false);

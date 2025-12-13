@@ -3,6 +3,7 @@ class LogEntry {
   final String status;
   final String eventType;
   final String? eventDescription;
+  final String? notes;
   final String? cameraId;
   final double confidenceScore;
   final DateTime? detectedAt;
@@ -20,6 +21,7 @@ class LogEntry {
     required this.status,
     required this.eventType,
     this.eventDescription,
+    this.notes,
     this.cameraId,
     required this.confidenceScore,
     this.detectedAt,

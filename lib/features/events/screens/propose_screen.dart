@@ -633,26 +633,23 @@ class _ProposeScreenState extends State<ProposeScreen> {
       'danger',
       'warning',
       'normal',
-      'unknown',
+      'unknowns',
       'suspect',
-      'abnormal',
     ];
     final statusLabels = {
       'danger': 'Nguy hiểm',
       'warning': 'Cảnh báo',
       'normal': 'Bình thường',
-      'unknown': 'Không xác định',
+      'unknowns': 'Không xác định',
       'suspect': 'Đáng ngờ',
-      'abnormal': 'Bất thường',
     };
 
     final statusColors = {
       'danger': Colors.red.shade600,
       'warning': Colors.orange.shade600,
       'normal': Colors.green.shade600,
-      'unknown': Colors.grey.shade600,
+      'unknowns': Colors.grey.shade600,
       'suspect': Colors.purple.shade600,
-      'abnormal': Colors.amber.shade700,
     };
 
     return Container(

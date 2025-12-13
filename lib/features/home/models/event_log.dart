@@ -9,6 +9,7 @@ class EventLog implements LogEntry {
   final String eventType;
   @override
   final String? eventDescription;
+  final String? notes;
   @override
   final double confidenceScore;
   @override
@@ -44,6 +45,7 @@ class EventLog implements LogEntry {
     required this.status,
     required this.eventType,
     this.eventDescription,
+    this.notes,
     required this.confidenceScore,
     this.detectedAt,
     this.createdAt,
@@ -277,6 +279,7 @@ class EventLog implements LogEntry {
       eventDescription: s(
         first(json, ['event_description', 'eventDescription']),
       ),
+      notes: s(first(json, ['notes'])),
       confidenceScore: d(
         first(json, ['confidence_score', 'confidenceScore', 'confidence']),
       ),
@@ -316,6 +319,7 @@ class EventLog implements LogEntry {
       'status': status,
       'event_type': eventType,
       'event_description': eventDescription,
+      'notes': notes,
       'confidence_score': confidenceScore,
       if (detectedAt != null) 'detected_at': detectedAt!.toIso8601String(),
       if (createdAt != null) 'created_at': createdAt!.toIso8601String(),

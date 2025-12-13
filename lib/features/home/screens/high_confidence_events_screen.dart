@@ -2,6 +2,7 @@ import 'package:detect_care_caregiver_app/core/theme/app_theme.dart';
 import 'package:detect_care_caregiver_app/features/home/models/log_entry.dart';
 import 'package:detect_care_caregiver_app/features/home/widgets/filter_bar.dart';
 import 'package:flutter/material.dart';
+
 import '../constants/filter_constants.dart';
 import '../widgets/action_log_card.dart';
 
@@ -33,6 +34,16 @@ class HighConfidenceEventsScreen extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final filtered = logs.where((log) {
+      try {
+        final ls = log.lifecycleState?.toString().toLowerCase();
+        if (ls != null && ls == 'canceled') return false;
+      } catch (_) {}
+      try {
+        if (log.status.toString().toLowerCase() == 'unknowns') return false;
+      } catch (_) {}
+      try {
+        if (log.status.toString().toLowerCase() == 'suspect') return false;
+      } catch (_) {}
       final st = log.status.toLowerCase();
       final selectedSt = selectedStatus.toLowerCase();
 
@@ -92,7 +103,13 @@ class HighConfidenceEventsScreen extends StatelessWidget {
         crossAxisAlignment: CrossAxisAlignment.center,
         children: [
           FilterBar(
-            statusOptions: HomeFilters.statusOptions,
+            statusOptions: const [
+              'all',
+              'abnormal',
+              'danger',
+              'warning',
+              'normal',
+            ],
             periodOptions: HomeFilters.periodOptions,
             selectedDayRange: selectedDayRange,
             selectedStatus: selectedStatus,
@@ -102,11 +119,12 @@ class HighConfidenceEventsScreen extends StatelessWidget {
             onPeriodChanged: onPeriodChanged,
           ),
           const SizedBox(height: 24),
-          _SummaryRow(logs: filtered),
+          _SummaryRow(logs: filtered, selectedStatus: selectedStatus),
           const SizedBox(height: 12),
           const Divider(height: 1),
           const SizedBox(height: 12),
 
+          // Empty or Log list
           if (filtered.isEmpty)
             _EmptyState(
               onClearFilters: () {
@@ -139,51 +157,150 @@ class HighConfidenceEventsScreen extends StatelessWidget {
 }
 
 class _SummaryRow extends StatelessWidget {
-  const _SummaryRow({required this.logs});
+  const _SummaryRow({required this.logs, required this.selectedStatus});
   final List<LogEntry> logs;
+  final String selectedStatus;
 
   @override
   Widget build(BuildContext context) {
-    // Total events after filters
-    final int total = logs.length;
+    final sel = selectedStatus.toLowerCase();
 
-    // 'Nguy hiểm' (abnormal) is represented in UI as status 'danger' OR 'warning'
-    final int critical = logs.where((e) {
-      final s = e.status.toLowerCase();
-      return s == 'danger' || s == 'warning';
+    final int dangerCount = logs.where((e) {
+      try {
+        return e.status.toString().toLowerCase() == 'danger';
+      } catch (_) {
+        return false;
+      }
     }).length;
 
-    // Remaining events after removing critical
-    final int others = (total - critical).clamp(0, total);
+    final int warningCount = logs.where((e) {
+      try {
+        return e.status.toString().toLowerCase() == 'warning';
+      } catch (_) {
+        return false;
+      }
+    }).length;
+
+    final int normalCount = logs.where((e) {
+      try {
+        return e.status.toString().toLowerCase() == 'normal';
+      } catch (_) {
+        return false;
+      }
+    }).length;
+
+    final int abnormalCount = dangerCount + warningCount;
+    final int total = logs.length;
+
+    late final Widget leftCard;
+    late final Widget middleCard;
+    late final Widget rightCard;
+
+    if (sel == 'abnormal') {
+      leftCard = _SummaryCard(
+        title: 'Nguy hiểm',
+        value: '$dangerCount',
+        icon: Icons.emergency_rounded,
+        color: Colors.red,
+      );
+      middleCard = _SummaryCard(
+        title: 'Tổng nhật ký',
+        value: '$abnormalCount',
+        icon: Icons.list_alt_rounded,
+        color: AppTheme.reportColor,
+      );
+      rightCard = _SummaryCard(
+        title: 'Cảnh báo',
+        value: '$warningCount',
+        icon: Icons.warning_amber_rounded,
+        color: const Color.fromARGB(255, 220, 139, 17),
+      );
+    } else if (sel == 'all') {
+      final totalLogged = dangerCount + warningCount + normalCount;
+      leftCard = _SummaryCard(
+        title: 'Bất thường',
+        value: '$abnormalCount',
+        icon: Icons.emergency_rounded,
+        color: Colors.red,
+      );
+      middleCard = _SummaryCard(
+        title: 'Tổng nhật ký',
+        value: '$totalLogged',
+        icon: Icons.list_alt_rounded,
+        color: AppTheme.reportColor,
+      );
+      rightCard = _SummaryCard(
+        title: 'Bình thường',
+        value: '$normalCount',
+        icon: Icons.monitor_heart_rounded,
+        color: AppTheme.activityColor,
+      );
+    } else if (sel == 'danger') {
+      leftCard = _SummaryCard(
+        title: 'Nguy hiểm',
+        value: '$dangerCount',
+        icon: Icons.emergency_rounded,
+        color: Colors.red,
+      );
+      middleCard = _SummaryCard(
+        title: 'Tổng nhật ký',
+        value: '$dangerCount',
+        icon: Icons.list_alt_rounded,
+        color: AppTheme.reportColor,
+      );
+      rightCard = _SummaryCard(
+        title: 'Sự kiện khác',
+        value: '0',
+        icon: Icons.monitor_heart_rounded,
+        color: AppTheme.activityColor,
+      );
+    } else if (sel == 'warning') {
+      leftCard = _SummaryCard(
+        title: 'Cảnh báo',
+        value: '$warningCount',
+        icon: Icons.warning_amber_rounded,
+        color: const Color.fromARGB(255, 220, 139, 17),
+      );
+      middleCard = _SummaryCard(
+        title: 'Tổng nhật ký',
+        value: '$warningCount',
+        icon: Icons.list_alt_rounded,
+        color: AppTheme.reportColor,
+      );
+      rightCard = _SummaryCard(
+        title: 'Sự kiện khác',
+        value: '0',
+        icon: Icons.monitor_heart_rounded,
+        color: AppTheme.activityColor,
+      );
+    } else {
+      leftCard = _SummaryCard(
+        title: 'Bất thường',
+        value: '$abnormalCount',
+        icon: Icons.emergency_rounded,
+        color: Colors.red,
+      );
+      middleCard = _SummaryCard(
+        title: 'Tổng nhật ký',
+        value: '$total',
+        icon: Icons.list_alt_rounded,
+        color: AppTheme.reportColor,
+      );
+      rightCard = _SummaryCard(
+        title: 'Bình thường',
+        value: '${(total - abnormalCount).clamp(0, total)}',
+        icon: Icons.monitor_heart_rounded,
+        color: AppTheme.activityColor,
+      );
+    }
 
     return Row(
       children: [
-        Expanded(
-          child: _SummaryCard(
-            title: 'Cảnh báo',
-            value: '$critical',
-            icon: Icons.emergency_rounded,
-            color: Colors.red,
-          ),
-        ),
+        Expanded(child: leftCard),
         const SizedBox(width: 12),
-        Expanded(
-          child: _SummaryCard(
-            title: 'Tổng nhật ký',
-            value: '$total',
-            icon: Icons.list_alt_rounded,
-            color: AppTheme.reportColor,
-          ),
-        ),
+        Expanded(child: middleCard),
         const SizedBox(width: 12),
-        Expanded(
-          child: _SummaryCard(
-            title: 'Sự kiện khác',
-            value: '$others',
-            icon: Icons.monitor_heart_rounded,
-            color: AppTheme.activityColor,
-          ),
-        ),
+        Expanded(child: rightCard),
       ],
     );
   }
@@ -252,7 +369,7 @@ class _SummaryCard extends StatelessWidget {
                 textAlign: TextAlign.center,
                 maxLines: 2,
                 softWrap: true,
-                style: const TextStyle(
+                style: TextStyle(
                   fontSize: 12,
                   fontWeight: FontWeight.w500,
                   color: AppTheme.unselectedTextColor,

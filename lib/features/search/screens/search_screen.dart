@@ -584,7 +584,9 @@ class _SearchScreenState extends State<SearchScreen> {
         final result = results[index];
         final displayTitle = result.eventDescription?.isNotEmpty == true
             ? result.eventDescription!
-            : BackendEnums.eventTypeToVietnamese(result.eventType);
+            : (result.notes?.isNotEmpty == true
+                  ? result.notes!
+                  : BackendEnums.eventTypeToVietnamese(result.eventType));
         final displayStatus = switch (result.status) {
           'danger' => 'Nguy hiểm',
           'warning' => 'Cảnh báo',

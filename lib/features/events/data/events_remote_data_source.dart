@@ -17,40 +17,48 @@ class EventsRemoteDataSource {
     int? limit,
     Map<String, dynamic>? extraQuery,
   }) async {
-    dev.log('\n📥 [Events] Listing events via REST /events');
+    // dev.log('\n📥 [Events] Listing events via REST /events');
     final query = <String, dynamic>{};
     if (page != null) query['page'] = page;
     if (limit != null) query['limit'] = limit;
     if (extraQuery != null) query.addAll(extraQuery);
-    try {
-      if (AppConfig.logHttpRequests) {
-        AppLogger.api(
-          '[EventsRemoteDataSource] → GET /events query=$query at=${DateTime.now().toIso8601String()}',
-        );
-      }
-    } catch (_) {}
+    if (!query.containsKey('caregiverId') && !query.containsKey('customerId')) {
+      try {
+        final uid = await AuthStorage.getUserId();
+        if (uid != null && uid.isNotEmpty) {
+          query['caregiverId'] = uid;
+        }
+      } catch (_) {}
+    }
+    // try {
+    //   if (AppConfig.logHttpRequests) {
+    //     AppLogger.api(
+    //       '[EventsRemoteDataSource] → GET /events query=$query at=${DateTime.now().toIso8601String()}',
+    //     );
+    //   }
+    // } catch (_) {}
     final sw = Stopwatch()..start();
-    AppLogger.api('[EventsRemoteDataSource] GET /events started');
-    AppLogger.api('[EventsRemoteDataSource] query parameters: $query');
+    // AppLogger.api('[EventsRemoteDataSource] GET /events started');
+    // AppLogger.api('[EventsRemoteDataSource] query parameters: $query');
     final res = await _api.get('/events', query: query);
-    AppLogger.api('[EventsRemoteDataSource] GET /events completed');
-    AppLogger.api('[EventsRemoteDataSource] response: $res');
+    // AppLogger.api('[EventsRemoteDataSource] GET /events completed');
+    // AppLogger.api('[EventsRemoteDataSource] response: $res');
     sw.stop();
-    try {
-      if (AppConfig.logHttpRequests) {
-        AppLogger.api(
-          '[EventsRemoteDataSource] ← /events status=${res.statusCode} elapsed=${sw.elapsedMilliseconds}ms',
-        );
-        final bodyPreview = res.body.length > 2000
-            ? '${res.body.substring(0, 2000)}...<truncated>'
-            : res.body;
-        AppLogger.api(
-          '[EventsRemoteDataSource] response body preview: $bodyPreview',
-        );
-      }
-    } catch (_) {}
-    dev.log('Status: ${res.statusCode}');
-    dev.log('Body: ${res.body}');
+    // try {
+    // if (AppConfig.logHttpRequests) {
+    // AppLogger.api(
+    //   '[EventsRemoteDataSource] ← /events status=${res.statusCode} elapsed=${sw.elapsedMilliseconds}ms',
+    // );
+    // final bodyPreview = res.body.length > 2000
+    //     ? '${res.body.substring(0, 2000)}...<truncated>'
+    //     : res.body;
+    // AppLogger.api(
+    //   '[EventsRemoteDataSource] response body preview: $bodyPreview',
+    // );
+    // }
+    // } catch (_) {}
+    // dev.log('Status: ${res.statusCode}');
+    // dev.log('Body: ${res.body}');
 
     if (res.statusCode < 200 || res.statusCode >= 300) {
       throw Exception('List events failed: ${res.statusCode} ${res.body}');
@@ -59,35 +67,35 @@ class EventsRemoteDataSource {
     final data = _api.extractDataFromResponse(res);
     if (data == null) return [];
 
-    final decoded = _api.extractDataFromResponse(res);
-    if (AppConfig.logHttpRequests) {
-      AppLogger.api(
-        '[EventsRemoteDataSource] decoded runtimeType=${decoded.runtimeType}',
-      );
-    }
-    if (decoded is List) {
-      if (AppConfig.logHttpRequests) {
-        AppLogger.api(
-          '[EventsRemoteDataSource] decoded list length=${decoded.length}',
-        );
-        if (decoded.isNotEmpty) {
-          AppLogger.api(
-            '[EventsRemoteDataSource] sample=${decoded.take(2).toList()}',
-          );
-        }
-      }
-    } else if (decoded is Map) {
-      if (AppConfig.logHttpRequests) {
-        AppLogger.api(
-          '[EventsRemoteDataSource] decoded map keys=${decoded.keys.toList()}',
-        );
-        if (decoded.containsKey('data') && decoded['data'] is List) {
-          AppLogger.api(
-            '[EventsRemoteDataSource] decoded.data length=${(decoded['data'] as List).length}',
-          );
-        }
-      }
-    }
+    // final decoded = _api.extractDataFromResponse(res);
+    // if (AppConfig.logHttpRequests) {
+    //   AppLogger.api(
+    //     '[EventsRemoteDataSource] decoded runtimeType=${decoded.runtimeType}',
+    //   );
+    // }
+    // if (decoded is List) {
+    //   if (AppConfig.logHttpRequests) {
+    //     AppLogger.api(
+    //       '[EventsRemoteDataSource] decoded list length=${decoded.length}',
+    //     );
+    //     if (decoded.isNotEmpty) {
+    //       AppLogger.api(
+    //         '[EventsRemoteDataSource] sample=${decoded.take(2).toList()}',
+    //       );
+    //     }
+    //   }
+    // } else if (decoded is Map) {
+    //   if (AppConfig.logHttpRequests) {
+    //     AppLogger.api(
+    //       '[EventsRemoteDataSource] decoded map keys=${decoded.keys.toList()}',
+    //     );
+    //     if (decoded.containsKey('data') && decoded['data'] is List) {
+    //       AppLogger.api(
+    //         '[EventsRemoteDataSource] decoded.data length=${(decoded['data'] as List).length}',
+    //       );
+    //     }
+    //   }
+    // }
     if (data is List) {
       return data.map((e) => (e as Map).cast<String, dynamic>()).toList();
     }
@@ -213,9 +221,22 @@ class EventsRemoteDataSource {
     if (confirmStatusBool != null) body['confirm_status'] = confirmStatusBool;
     if (notes != null && notes.isNotEmpty) body['notes'] = notes;
 
+    AppLogger.api(
+      '[confirmEvent] 📤 PATCH /event-detections/$eventId/confirm-status body=$body',
+    );
+
+    final sw = Stopwatch()..start();
     final res = await _api.patch(
       '/event-detections/$eventId/confirm-status',
       body: body,
+    );
+    sw.stop();
+
+    AppLogger.api(
+      '[confirmEvent] 📥 Response status=${res.statusCode} elapsed=${sw.elapsedMilliseconds}ms',
+    );
+    AppLogger.api(
+      '[confirmEvent] Response body: ${res.body.substring(0, 300)}',
     );
 
     if (res.statusCode < 200 || res.statusCode >= 300) {
@@ -235,8 +256,13 @@ class EventsRemoteDataSource {
         }
       } catch (_) {}
 
+      AppLogger.apiError(
+        '[confirmEvent] ❌ Confirm event failed: ${res.statusCode} $serverMsg',
+      );
       throw Exception('Confirm event failed: ${res.statusCode} $serverMsg');
     }
+
+    AppLogger.api('[confirmEvent] ✅ Success');
   }
 
   /// Cancel an event by setting lifecycle_state = CANCELED
@@ -604,7 +630,16 @@ class EventsRemoteDataSource {
     required String imagePath,
     String? notes,
     Map<String, dynamic>? contextData,
+    String? userId,
   }) async {
+    // Get userId if not provided
+    String? finalUserId = userId;
+    if (finalUserId == null || finalUserId.isEmpty) {
+      try {
+        finalUserId = await AuthStorage.getUserId();
+      } catch (_) {}
+    }
+
     final fields = {
       "camera_id": cameraId,
       "event_type": "emergency",
@@ -614,6 +649,11 @@ class EventsRemoteDataSource {
         contextData ?? {"source": "manual_button"},
       ),
     };
+
+    // Add user_id if available
+    if (finalUserId != null && finalUserId.isNotEmpty) {
+      fields["user_id"] = finalUserId;
+    }
 
     final file = await http.MultipartFile.fromPath("image_files", imagePath);
 

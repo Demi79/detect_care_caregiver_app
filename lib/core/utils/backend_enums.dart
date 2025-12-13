@@ -8,7 +8,7 @@ class BackendEnums {
         return 'Cảnh báo';
       case 'normal':
         return 'Bình thường';
-      case 'unknown':
+      case 'unknowns':
         return 'Không xác định';
       case 'suspect':
         return 'Đáng ngờ';

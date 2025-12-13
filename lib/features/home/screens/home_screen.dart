@@ -1,11 +1,12 @@
 import 'dart:async';
 import 'dart:developer' as dev;
 
+import 'package:detect_care_caregiver_app/core/events/app_events.dart';
 import 'package:detect_care_caregiver_app/core/network/api_client.dart';
 import 'package:detect_care_caregiver_app/core/theme/app_theme.dart';
 import 'package:detect_care_caregiver_app/core/widgets/custom_bottom_nav_bar.dart';
+import 'package:detect_care_caregiver_app/features/home/screens/low_confidence_events_screen.dart';
 import 'package:detect_care_caregiver_app/features/assignments/screens/assignments_screen.dart';
-import 'package:detect_care_caregiver_app/features/home/screens/pending_assignment_screen.dart';
 import 'package:detect_care_caregiver_app/features/auth/data/auth_storage.dart';
 import 'package:detect_care_caregiver_app/features/auth/providers/auth_provider.dart';
 import 'package:detect_care_caregiver_app/features/camera/screens/live_camera_home_screen.dart';
@@ -16,24 +17,23 @@ import 'package:detect_care_caregiver_app/features/home/models/event_log.dart';
 import 'package:detect_care_caregiver_app/features/home/models/log_entry.dart';
 import 'package:detect_care_caregiver_app/features/home/repository/event_repository.dart';
 import 'package:detect_care_caregiver_app/features/home/screens/high_confidence_events_screen.dart';
-import 'package:detect_care_caregiver_app/features/home/screens/low_confidence_events_screen.dart';
 import 'package:detect_care_caregiver_app/features/home/service/event_service.dart';
 import 'package:detect_care_caregiver_app/features/notification/screens/notification_screen.dart';
-import 'package:detect_care_caregiver_app/features/notification/screens/send_notification_screen.dart';
-import 'package:detect_care_caregiver_app/features/profile/screens/profile_screen.dart';
 import 'package:detect_care_caregiver_app/features/patient/screens/patient_profile_screen.dart';
-import 'package:detect_care_caregiver_app/features/shared_permissions/screens/caregiver_settings_screen.dart';
+import 'package:detect_care_caregiver_app/features/profile/screens/profile_screen.dart';
 import 'package:detect_care_caregiver_app/features/search/screens/search_screen.dart';
 import 'package:detect_care_caregiver_app/features/setting/screens/settings_screen.dart';
-
+import 'package:detect_care_caregiver_app/features/shared_permissions/screens/caregiver_settings_screen.dart';
+import 'package:detect_care_caregiver_app/features/subscription/data/payment_api.dart';
 import 'package:detect_care_caregiver_app/services/notification_api_service.dart';
 import 'package:detect_care_caregiver_app/services/supabase_service.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:provider/provider.dart';
 
 import '../widgets/tab_selector.dart';
-import 'package:detect_care_caregiver_app/core/events/app_events.dart';
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
@@ -44,7 +44,7 @@ class HomeScreen extends StatefulWidget {
 class _HomeScreenState extends State<HomeScreen>
     with SingleTickerProviderStateMixin, WidgetsBindingObserver {
   int _selectedIndex = 4; // Home screen index
-  String _selectedTab = 'warning';
+  String _selectedTab = 'highConfidence';
   String _selectedStatus = HomeFilters.defaultStatus;
   String _selectedPeriod = HomeFilters.defaultPeriod;
 
@@ -53,17 +53,20 @@ class _HomeScreenState extends State<HomeScreen>
 
   late final EventRepository _eventRepository;
   late final SupabaseService _supa;
+  late final PaymentApi _paymentApi;
 
   List<LogEntry> _logs = [];
   bool _isLoading = false;
   String? _error;
+  int _invoiceCount = 0;
   int _notificationCount = 0;
 
   Timer? _searchDebounce;
   Timer? _notificationRefreshTimer;
   StreamSubscription<void>? _eventsChangedSub;
-  StreamSubscription<void>? _appEventsSub;
-  VoidCallback? _authListener;
+  StreamSubscription<Map<String, dynamic>>? _eventUpdatedSub;
+  bool _skipMergeOnNextRefresh = false;
+
   @override
   void initState() {
     super.initState();
@@ -71,11 +74,15 @@ class _HomeScreenState extends State<HomeScreen>
     _eventRepository = EventRepository(
       EventService(ApiClient(tokenProvider: AuthStorage.getAccessToken)),
     );
+
     EventService(
       ApiClient(tokenProvider: AuthStorage.getAccessToken),
     ).debugProbe();
     _supa = SupabaseService();
-
+    _paymentApi = PaymentApi(
+      baseUrl: dotenv.env['API_BASE_URL'] ?? '',
+      apiProvider: ApiClient(tokenProvider: AuthStorage.getAccessToken),
+    );
     _initSupabaseConnection();
     _searchController.addListener(() {
       _searchDebounce?.cancel();
@@ -87,44 +94,61 @@ class _HomeScreenState extends State<HomeScreen>
     _loadNotificationCount();
 
     _eventsChangedSub = AppEvents.instance.eventsChanged.listen((_) {
-      if (mounted) _refreshLogs();
-    });
-
-    // Listen for auth changes and global app events to redirect to pending
-    // assignments when the current user no longer has an active assignment.
-    try {
-      final auth = context.read<AuthProvider>();
-      _authListener = () => _maybeRedirectToPending();
-      auth.addListener(_authListener!);
-    } catch (_) {}
-
-    _appEventsSub = AppEvents.instance.eventsChanged.listen((_) {
       if (!mounted) return;
-      _maybeRedirectToPending();
+      _skipMergeOnNextRefresh = true;
+      _refreshLogs();
     });
 
-    // Run one-time check on startup
-    WidgetsBinding.instance.addPostFrameCallback(
-      (_) => _maybeRedirectToPending(),
-    );
+    _eventUpdatedSub = AppEvents.instance.eventUpdated.listen((map) {
+      if (!mounted) return;
+      try {
+        final e = EventLog.fromJson(map);
+        setState(() {
+          if (_logs.any((event) => event.eventId == e.eventId)) {
+            final index = _logs.indexWhere(
+              (event) => event.eventId == e.eventId,
+            );
+            _logs[index] = e;
+          } else {
+            _logs.insert(0, e);
+            _notificationCount++;
+            HapticFeedback.selectionClick();
+          }
+        });
+        dev.log('eventUpdated applied for=${e.eventId}');
+      } catch (err, st) {
+        dev.log(
+          'Error applying eventUpdated: $err',
+          error: err,
+          stackTrace: st,
+        );
+      }
+    });
 
+    // Refresh notification count every 5 minutes
     _notificationRefreshTimer = Timer.periodic(
       const Duration(minutes: 5),
       (_) => _loadNotificationCount(),
     );
-    Timer.periodic(const Duration(seconds: 15), (_) async {
-      if (!mounted) return;
-      await context.read<AuthProvider>().reloadUser();
-    });
   }
 
   void _loadNotifications() async {
     try {
       final token = await AuthStorage.getAccessToken();
-      if (token == null) return;
+      if (token == null) {
+        setState(() => _invoiceCount = 0);
+        return;
+      }
+
+      final count = await _paymentApi.getInvoiceCount(token);
+      if (mounted) {
+        setState(() => _invoiceCount = count);
+      }
     } catch (e) {
       debugPrint('Error loading invoice count: $e');
-      return;
+      if (mounted) {
+        setState(() => _invoiceCount = 0);
+      }
     }
   }
 
@@ -156,29 +180,8 @@ class _HomeScreenState extends State<HomeScreen>
     _searchController.dispose();
     _supa.dispose();
     _eventsChangedSub?.cancel();
-    try {
-      final auth = context.read<AuthProvider>();
-      if (_authListener != null) auth.removeListener(_authListener!);
-    } catch (_) {}
-    _appEventsSub?.cancel();
+    _eventUpdatedSub?.cancel();
     super.dispose();
-  }
-
-  void _maybeRedirectToPending() {
-    try {
-      final auth = context.read<AuthProvider>();
-      // If user is logged in but does not have an active assignment,
-      // redirect to PendingAssignmentsScreen so they complete assignment flow.
-      if (auth.status == AuthStatus.assignVerified) {
-        if (!mounted) return;
-        Navigator.of(context).pushAndRemoveUntil(
-          MaterialPageRoute(builder: (_) => const PendingAssignmentsScreen()),
-          (route) => false,
-        );
-      }
-    } catch (e) {
-      debugPrint('[Home] _maybeRedirectToPending error: $e');
-    }
   }
 
   Future<void> _refreshLogs() async {
@@ -204,10 +207,7 @@ class _HomeScreenState extends State<HomeScreen>
         });
         return;
       }
-
-      // Increase page size when the user requested a multi-day range so
-      // the backend doesn't truncate results across days due to paging.
-      int effectiveLimit = 200;
+      int effectiveLimit = 50;
       try {
         if (_selectedDayRange != null) {
           final days =
@@ -220,7 +220,6 @@ class _HomeScreenState extends State<HomeScreen>
           }
         }
       } catch (_) {}
-
       final events = await _eventRepository.getEvents(
         page: 1,
         limit: effectiveLimit,
@@ -232,18 +231,49 @@ class _HomeScreenState extends State<HomeScreen>
             : null,
       );
 
-      dev.log(
-        'UI got events=${events.length}, firstIds=${events.take(3).map((e) => e.eventId).toList()}',
-        name: 'HomeScreen',
-      );
-      print(
-        'UI got events=${events.length}, '
-        'firstIds=${events.take(3).map((e) => e.eventId).toList()}',
-      );
-
       if (!mounted) return;
+
+      final snapshotMap = <String, LogEntry>{
+        for (final e in events) e.eventId: e,
+      };
+
+      if (_skipMergeOnNextRefresh) {
+        _skipMergeOnNextRefresh = false;
+        debugPrint('[Home] Skipping local-merge on refresh (eventsChanged)');
+      } else {
+        for (final e in _logs) {
+          final matchesStatus =
+              _selectedStatus == null ||
+              _selectedStatus!.isEmpty ||
+              _selectedStatus!.toLowerCase() == 'all' ||
+              e.status.toLowerCase() == _selectedStatus!.toLowerCase() ||
+              (_selectedStatus!.toLowerCase() == 'abnormal' &&
+                  (e.status.toLowerCase() == 'danger' ||
+                      e.status.toLowerCase() == 'warning'));
+
+          if (!matchesStatus) continue;
+
+          if (!snapshotMap.containsKey(e.eventId)) {
+            snapshotMap[e.eventId] = e;
+          }
+        }
+      }
+
+      final merged = snapshotMap.values.toList()
+        ..sort((a, b) {
+          final aDt =
+              a.detectedAt ??
+              a.createdAt ??
+              DateTime.fromMillisecondsSinceEpoch(0);
+          final bDt =
+              b.detectedAt ??
+              b.createdAt ??
+              DateTime.fromMillisecondsSinceEpoch(0);
+          return bDt.compareTo(aDt);
+        });
+
       setState(() {
-        _logs = events;
+        _logs = merged;
         _error = null;
         _isLoading = false;
       });
@@ -267,21 +297,6 @@ class _HomeScreenState extends State<HomeScreen>
           try {
             final e = EventLog.fromJson(map);
             setState(() {
-              final lifecycle = (e.lifecycleState ?? '').toLowerCase();
-              final status = (e.status ?? '').toLowerCase();
-              final shouldRemove =
-                  lifecycle.contains('cancel') ||
-                  lifecycle.contains('deact') ||
-                  status == 'cancelled' ||
-                  status == 'canceled' ||
-                  status == 'deleted' ||
-                  status == 'removed';
-
-              if (shouldRemove) {
-                _logs.removeWhere((ev) => ev.eventId == e.eventId);
-                return;
-              }
-
               if (_logs.any((event) => event.eventId == e.eventId)) {
                 final index = _logs.indexWhere(
                   (event) => event.eventId == e.eventId,
@@ -293,10 +308,10 @@ class _HomeScreenState extends State<HomeScreen>
                 HapticFeedback.selectionClick();
               }
             });
-            // dev.log(
-            //   'realtime new=${e.eventId} type=${e.eventType}, notificationCount=$_notificationCount',
-            //   name: 'HomeScreen',
-            // );
+            dev.log(
+              'realtime new=${e.eventId} type=${e.eventType}, notificationCount=$_notificationCount',
+              name: 'HomeScreen',
+            );
           } catch (e) {
             dev.log('Error processing event: $e', name: 'HomeScreen', error: e);
           }
@@ -322,212 +337,248 @@ class _HomeScreenState extends State<HomeScreen>
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: AppTheme.scaffoldBackground,
-      appBar: _selectedIndex == 1
-          ? null
-          : AppBar(
-              backgroundColor: AppTheme.caregiverPrimary,
-              // title: Text(
-              //   _appBarTitle(),
-              //   style: const TextStyle(color: AppTheme.text),
-              // ),
-              centerTitle: false,
-              leading: IconButton(
-                onPressed: () => Navigator.of(context).push(
-                  MaterialPageRoute(builder: (_) => const SettingsScreen()),
-                ),
+      appBar: AppBar(
+        backgroundColor: Colors.white,
+        // title: Text(
+        //   _appBarTitle(),
+        //   style: const TextStyle(color: AppTheme.text),
+        // ),
+        centerTitle: false,
+        leading: IconButton(
+          onPressed: () => Navigator.of(
+            context,
+          ).push(MaterialPageRoute(builder: (_) => const SettingsScreen())),
+          icon: const Icon(
+            Icons.settings,
+            color: AppTheme.primaryBlue,
+            size: 24,
+          ),
+          splashRadius: 20,
+        ),
+        actions: [
+          // Search now opens Search Screen
+          Semantics(
+            button: true,
+            label: 'Tìm kiếm',
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 8.0),
+              child: IconButton(
+                tooltip: 'Tìm kiếm',
+                onPressed: () {
+                  Navigator.of(context).push(
+                    MaterialPageRoute(builder: (_) => const SearchScreen()),
+                  );
+                },
                 icon: const Icon(
-                  Icons.settings,
-                  color: AppTheme.caregiverTextOnPrimary,
+                  Icons.search,
+                  color: AppTheme.primaryBlue,
                   size: 24,
                 ),
                 splashRadius: 20,
               ),
-              actions: [
-                Semantics(
-                  button: true,
-                  label: 'Tìm kiếm',
-                  child: Padding(
-                    padding: const EdgeInsets.symmetric(horizontal: 8.0),
-                    child: IconButton(
-                      tooltip: 'Tìm kiếm',
-                      onPressed: () {
-                        Navigator.of(context).push(
-                          MaterialPageRoute(
-                            builder: (_) => const SearchScreen(),
-                          ),
-                        );
-                      },
-                      icon: const Icon(
-                        Icons.search,
-                        color: AppTheme.background,
-                        size: 24,
-                      ),
-                      splashRadius: 20,
-                    ),
-                  ),
-                ),
-                // Invoice icon with badge
-                // Stack(
-                //   alignment: Alignment.center,
-                //   children: [
-                //     Semantics(
-                //       button: true,
-                //       label: 'Hóa đơn',
-                //       child: Padding(
-                //         padding: const EdgeInsets.symmetric(horizontal: 6.0),
-                //         child: IconButton(
-                //           tooltip: 'Hóa đơn',
-                //           onPressed: () {
-                //             Navigator.of(context).push(
-                //               MaterialPageRoute(
-                //                 builder: (_) => const InvoicesScreen(),
-                //               ),
-                //             );
-                //           },
-                //           icon: const Icon(
-                //             Icons.receipt_long,
-                //             color: AppTheme.primaryBlue,
-                //           ),
-                //           splashRadius: 24,
-                //         ),
-                //       ),
-                //     ),
-                //     if (_invoiceCount > 0)
-                //       Positioned(
-                //         right: 6,
-                //         top: 8,
-                //         child: Semantics(
-                //           label: '$_invoiceCount hóa đơn',
-                //           child: Container(
-                //             padding: const EdgeInsets.symmetric(
-                //               horizontal: 4,
-                //               vertical: 2,
-                //             ),
-                //             decoration: BoxDecoration(
-                //               color: const Color(0xFFE53935),
-                //               borderRadius: BorderRadius.circular(8),
-                //               border: Border.all(color: Colors.white, width: 1),
-                //             ),
-                //             constraints: const BoxConstraints(
-                //               minWidth: 12,
-                //               minHeight: 12,
-                //             ),
-                //             child: Text(
-                //               _invoiceCount > 99 ? '99+' : _invoiceCount.toString(),
-                //               style: const TextStyle(
-                //                 color: Colors.white,
-                //                 fontSize: 10,
-                //                 fontWeight: FontWeight.bold,
-                //               ),
-                //               textAlign: TextAlign.center,
-                //             ),
-                //           ),
-                //         ),
-                //       ),
-                //   ],
-                // ),
-                // Notification icon with badge
-                Stack(
-                  alignment: Alignment.center,
-                  children: [
-                    Semantics(
-                      button: true,
-                      label: 'Thông báo',
-                      child: Padding(
-                        padding: const EdgeInsets.symmetric(horizontal: 6.0),
-                        child: IconButton(
-                          tooltip: 'Thông báo',
-                          onPressed: () async {
-                            final navigator = Navigator.of(context);
-
-                            try {
-                              final service = NotificationApiService();
-                              final success = await service.markAllAsRead();
-                              if (success) {
-                                _resetNotificationCount();
-                              }
-                            } catch (e) {
-                              debugPrint(
-                                'Error marking notifications as read: $e',
-                              );
-                            }
-
-                            navigator.push(
-                              MaterialPageRoute(
-                                builder: (_) => const NotificationScreen(),
-                              ),
-                            );
-                          },
-                          icon: const Icon(
-                            Icons.notifications,
-                            color: AppTheme.selectedTextColor,
-                          ),
-                          splashRadius: 24,
-                        ),
-                      ),
-                    ),
-                    if (_notificationCount > 0)
-                      Positioned(
-                        right: 6,
-                        top: 8,
-                        child: Semantics(
-                          label: '$_notificationCount thông báo',
-                          child: Container(
-                            padding: const EdgeInsets.symmetric(
-                              horizontal: 4,
-                              vertical: 2,
-                            ),
-                            decoration: BoxDecoration(
-                              color: const Color(0xFFE53935),
-                              borderRadius: BorderRadius.circular(8),
-                              border: Border.all(color: Colors.white, width: 1),
-                            ),
-                            constraints: const BoxConstraints(
-                              minWidth: 12,
-                              minHeight: 12,
-                            ),
-                            child: Text(
-                              _notificationCount > 99
-                                  ? '99+'
-                                  : _notificationCount.toString(),
-                              style: const TextStyle(
-                                color: Colors.white,
-                                fontSize: 10,
-                                fontWeight: FontWeight.bold,
-                              ),
-                              textAlign: TextAlign.center,
-                            ),
-                          ),
-                        ),
-                      ),
-                  ],
-                ),
-                // Send notification icon
-                Semantics(
-                  button: true,
-                  label: 'Gửi thông báo',
-                  child: Padding(
-                    padding: const EdgeInsets.symmetric(horizontal: 8.0),
-                    child: IconButton(
-                      tooltip: 'Gửi thông báo',
-                      onPressed: () {
-                        Navigator.of(context).push(
-                          MaterialPageRoute(
-                            builder: (_) => const SendNotificationScreen(),
-                          ),
-                        );
-                      },
-                      icon: const Icon(
-                        Icons.send,
-                        color: AppTheme.background,
-                        size: 24,
-                      ),
-                      splashRadius: 20,
-                    ),
-                  ),
-                ),
-              ],
             ),
+          ),
+          // Invoice icon with badge
+          // Stack(
+          //   alignment: Alignment.center,
+          //   children: [
+          //     Semantics(
+          //       button: true,
+          //       label: 'Hóa đơn',
+          //       child: Padding(
+          //         padding: const EdgeInsets.symmetric(horizontal: 6.0),
+          //         child: IconButton(
+          //           tooltip: 'Hóa đơn',
+          //           onPressed: () {
+          //             Navigator.of(context).push(
+          //               MaterialPageRoute(
+          //                 builder: (_) => const InvoicesScreen(),
+          //               ),
+          //             );
+          //           },
+          //           icon: const Icon(
+          //             Icons.receipt_long,
+          //             color: AppTheme.primaryBlue,
+          //           ),
+          //           splashRadius: 24,
+          //         ),
+          //       ),
+          //     ),
+          //     if (_invoiceCount > 0)
+          //       Positioned(
+          //         right: 6,
+          //         top: 8,
+          //         child: Semantics(
+          //           label: '$_invoiceCount hóa đơn',
+          //           child: Container(
+          //             padding: const EdgeInsets.symmetric(
+          //               horizontal: 4,
+          //               vertical: 2,
+          //             ),
+          //             decoration: BoxDecoration(
+          //               color: const Color(0xFFE53935),
+          //               borderRadius: BorderRadius.circular(8),
+          //               border: Border.all(color: Colors.white, width: 1),
+          //             ),
+          //             constraints: const BoxConstraints(
+          //               minWidth: 12,
+          //               minHeight: 12,
+          //             ),
+          //             child: Text(
+          //               _invoiceCount > 99 ? '99+' : _invoiceCount.toString(),
+          //               style: const TextStyle(
+          //                 color: Colors.white,
+          //                 fontSize: 10,
+          //                 fontWeight: FontWeight.bold,
+          //               ),
+          //               textAlign: TextAlign.center,
+          //             ),
+          //           ),
+          //         ),
+          //       ),
+          //   ],
+          // ),
+          // Notification icon with badge
+          Stack(
+            alignment: Alignment.center,
+            children: [
+              Semantics(
+                button: true,
+                label: 'Thông báo',
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 6.0),
+                  child: IconButton(
+                    tooltip: 'Thông báo',
+                    onPressed: () async {
+                      final navigator = Navigator.of(context);
+
+                      try {
+                        final service = NotificationApiService();
+                        final success = await service.markAllAsRead();
+                        if (success) {
+                          _resetNotificationCount();
+                        }
+                      } catch (e) {
+                        debugPrint('Error marking notifications as read: $e');
+                      }
+
+                      WidgetsBinding.instance.addPostFrameCallback((_) {
+                        try {
+                          navigator.push(
+                            MaterialPageRoute(
+                              builder: (_) => const NotificationScreen(),
+                            ),
+                          );
+                        } catch (e) {
+                          debugPrint('Navigation error (notification): $e');
+                        }
+                      });
+                    },
+                    icon: const Icon(
+                      Icons.notifications,
+                      color: AppTheme.primaryBlue,
+                    ),
+                    splashRadius: 24,
+                  ),
+                ),
+              ),
+              if (_notificationCount > 0)
+                Positioned(
+                  right: 6,
+                  top: 8,
+                  child: Semantics(
+                    label: '$_notificationCount thông báo',
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 4,
+                        vertical: 2,
+                      ),
+                      decoration: BoxDecoration(
+                        color: const Color(0xFFE53935),
+                        borderRadius: BorderRadius.circular(8),
+                        border: Border.all(color: Colors.white, width: 1),
+                      ),
+                      constraints: const BoxConstraints(
+                        minWidth: 12,
+                        minHeight: 12,
+                      ),
+                      child: Text(
+                        _notificationCount > 99
+                            ? '99+'
+                            : _notificationCount.toString(),
+                        style: const TextStyle(
+                          color: Colors.white,
+                          fontSize: 10,
+                          fontWeight: FontWeight.bold,
+                        ),
+                        textAlign: TextAlign.center,
+                      ),
+                    ),
+                  ),
+                ),
+            ],
+          ),
+          // // Send notification icon
+          // Semantics(
+          //   button: true,
+          //   label: 'Gửi thông báo',
+          //   child: Padding(
+          //     padding: const EdgeInsets.symmetric(horizontal: 8.0),
+          //     child: IconButton(
+          //       tooltip: 'Gửi thông báo',
+          //       onPressed: () {
+          //         Navigator.of(context).push(
+          //           MaterialPageRoute(
+          //             builder: (_) => const SendNotificationScreen(),
+          //           ),
+          //         );
+          //       },
+          //       icon: const Icon(
+          //         Icons.send,
+          //         color: AppTheme.primaryBlue,
+          //         size: 24,
+          //       ),
+          //       splashRadius: 20,
+          //     ),
+          //   ),
+          // ),
+          // AI Suggestion
+          // Send notification icon
+          // Semantics(
+          //   button: true,
+          //   label: 'Gợi Ý AI',
+          //   child: Padding(
+          //     padding: const EdgeInsets.symmetric(horizontal: 8.0),
+          //     child: IconButton(
+          //       tooltip: 'Gợi Ý AI',
+          //       onPressed: () {
+          //         Navigator.of(context).push(
+          //           MaterialPageRoute(
+          //             builder: (_) => const AISuggestionsDemoScreen(),
+          //           ),
+          //         );
+          //       },
+          //       icon: Container(
+          //         decoration: BoxDecoration(
+          //           color: AppTheme.primaryBlue.withOpacity(0.1),
+          //           shape: BoxShape.circle,
+          //         ),
+          //         padding: const EdgeInsets.all(6),
+          //         child: const Icon(
+          //           // Icons.smart_toy_outlined,
+          //           Icons.lightbulb,
+          //           color: AppTheme.primaryBlue,
+          //           size: 26,
+          //         ),
+          //       ),
+
+          //       splashRadius: 22,
+          //     ),
+          //   ),
+          // ),
+        ],
+      ),
+
       body: _buildContentByIndex(),
       floatingActionButton: Semantics(
         button: true,
@@ -541,7 +592,7 @@ class _HomeScreenState extends State<HomeScreen>
             }
           },
           shape: const CircleBorder(),
-          backgroundColor: AppTheme.caregiverPrimary,
+          backgroundColor: AppTheme.primaryBlue,
           elevation: 6,
           child: const Icon(Icons.home, color: Colors.white, size: 32),
         ),
@@ -550,6 +601,7 @@ class _HomeScreenState extends State<HomeScreen>
       bottomNavigationBar: CustomBottomNavBar(
         currentIndex: _selectedIndex,
         onTap: onTap,
+        badgeCounts: {2: _invoiceCount},
         borderRadius: 30,
         bottomMargin: 15,
         horizontalMargin: 10,
@@ -583,12 +635,9 @@ class _HomeScreenState extends State<HomeScreen>
               selectedTab: _selectedTab,
               onTabChanged: (t) => setState(() {
                 _selectedTab = t;
-                // Ensure the status filter default depends on the tab:
-                // - HighConfidence ('warning') uses the global default ('abnormal')
-                // - LowConfidence ('activity') uses 'all' (shows unknown + suspect)
-                if (t == 'activity') {
+                if (t == 'lowConfidence') {
                   _selectedStatus = 'all';
-                } else if (t == 'warning') {
+                } else if (t == 'highConfidence') {
                   _selectedStatus = HomeFilters.defaultStatus;
                 }
               }),
@@ -608,7 +657,7 @@ class _HomeScreenState extends State<HomeScreen>
 
   Widget _buildContentByTab() {
     switch (_selectedTab) {
-      case 'warning':
+      case 'highConfidence':
         if (_isLoading) {
           return const Center(child: CircularProgressIndicator());
         }
@@ -632,6 +681,7 @@ class _HomeScreenState extends State<HomeScreen>
           selectedStatus: _selectedStatus,
           selectedDayRange: _selectedDayRange,
           selectedPeriod: _selectedPeriod,
+          onRefresh: _refreshLogs,
           onStatusChanged: (v) {
             setState(() => _selectedStatus = v ?? HomeFilters.defaultStatus);
             _refreshLogs();
@@ -646,72 +696,33 @@ class _HomeScreenState extends State<HomeScreen>
             setState(() => _selectedPeriod = v ?? HomeFilters.defaultPeriod);
             _refreshLogs();
           },
-          onEventUpdated: (eventId, {bool? confirmed}) {
-            try {
-              if (confirmed == true) {
-                final idx = _logs.indexWhere((e) => e.eventId == eventId);
-                if (idx != -1) {
-                  final old = _logs[idx];
-                  if (old is EventLog) {
-                    final updated = old.copyWith(confirmStatus: true);
-                    setState(() => _logs[idx] = updated);
-                  } else {
-                    _refreshLogs();
-                  }
-                } else {
-                  _refreshLogs();
-                }
-              } else {
-                _refreshLogs();
-              }
-            } catch (_) {
-              _refreshLogs();
-            }
-          },
         );
-      case 'activity':
+      case 'lowConfidence':
         return LowConfidenceEventsScreen(
           logs: _logs,
           selectedDayRange: _selectedDayRange,
           selectedStatus: _selectedStatus,
           selectedPeriod: _selectedPeriod,
-          onStatusChanged: (v) {
-            setState(() => _selectedStatus = v ?? HomeFilters.defaultStatus);
-            _refreshLogs();
-          },
           onDayRangeChanged: (v) {
             setState(
               () => _selectedDayRange = v ?? HomeFilters.defaultDayRange,
             );
             _refreshLogs();
           },
+          onStatusChanged: (v) {
+            setState(() => _selectedStatus = v ?? HomeFilters.defaultStatus);
+            _refreshLogs();
+          },
           onPeriodChanged: (v) {
             setState(() => _selectedPeriod = v ?? HomeFilters.defaultPeriod);
             _refreshLogs();
           },
+          onRefresh: _refreshLogs,
           onEventUpdated: (eventId, {bool? confirmed}) {
             try {
-              if (confirmed == true) {
-                final idx = _logs.indexWhere((e) => e.eventId == eventId);
-                if (idx != -1) {
-                  final old = _logs[idx];
-                  if (old is EventLog) {
-                    final updated = old.copyWith(confirmStatus: true);
-                    setState(() => _logs[idx] = updated);
-                  } else {
-                    _refreshLogs();
-                  }
-                } else {
-                  _refreshLogs();
-                }
-              } else {
-                _refreshLogs();
-              }
-            } catch (_) {
               _refreshLogs();
-            }
+            } catch (_) {}
           },
-          onRefresh: _refreshLogs,
         );
       case 'report':
         return const HealthOverviewScreen();

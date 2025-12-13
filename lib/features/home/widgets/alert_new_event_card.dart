@@ -2,14 +2,19 @@ import 'dart:async';
 
 import 'package:detect_care_caregiver_app/core/events/app_events.dart';
 import 'package:detect_care_caregiver_app/core/network/api_client.dart';
+import 'package:detect_care_caregiver_app/core/theme/app_theme.dart';
 import 'package:detect_care_caregiver_app/core/utils/logger.dart';
 import 'package:detect_care_caregiver_app/features/assignments/data/assignments_remote_data_source.dart';
 import 'package:detect_care_caregiver_app/features/auth/data/auth_storage.dart';
 import 'package:detect_care_caregiver_app/features/camera/data/camera_api.dart';
 import 'package:detect_care_caregiver_app/features/camera/models/camera_entry.dart';
 import 'package:detect_care_caregiver_app/features/camera/screens/live_camera_screen.dart';
+import 'package:detect_care_caregiver_app/features/events/screens/propose_screen.dart';
 import 'package:detect_care_caregiver_app/features/home/models/event_log.dart';
+import 'package:detect_care_caregiver_app/features/home/repository/event_repository.dart';
 import 'package:detect_care_caregiver_app/features/home/service/event_images_loader.dart';
+import 'package:detect_care_caregiver_app/features/home/service/event_service.dart';
+import 'package:detect_care_caregiver_app/features/home/widgets/action_log_card_image_viewer_helper.dart';
 import 'package:detect_care_caregiver_app/l10n/vi.dart';
 import 'package:detect_care_caregiver_app/services/audio_service.dart';
 import 'package:flutter/material.dart';
@@ -86,6 +91,7 @@ class _AlertEventCardState extends State<AlertEventCard>
   Timer? _snoozeTicker;
   int? _snoozeRemaining;
   bool _isCancelling = false;
+  bool _isEmergencyCalling = false;
 
   @override
   void initState() {
@@ -219,28 +225,55 @@ class _AlertEventCardState extends State<AlertEventCard>
     return '${s}s';
   }
 
-  void _handleEmergencyCall() {
-    HapticFeedback.heavyImpact();
+  Future<void> _handleEmergencyCall() async {
+    if (_isEmergencyCalling) return;
+    _isEmergencyCalling = true;
+
     try {
-      widget.onEmergencyCall?.call();
-    } catch (_) {}
-    EmergencyCallHelper.initiateEmergencyCall(context);
+      HapticFeedback.heavyImpact();
+      try {
+        widget.onEmergencyCall?.call();
+      } catch (_) {}
+      try {
+        await EmergencyCallHelper.initiateEmergencyCall(context);
+      } catch (e, st) {
+        AppLogger.e('Emergency call failed: $e', e, st);
+        try {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text('Không thể thực hiện cuộc gọi khẩn cấp: $e'),
+            ),
+          );
+        } catch (_) {}
+      }
+    } finally {
+      _isEmergencyCalling = false;
+    }
   }
 
   Future<void> _initiateEmergencyCall(BuildContext ctx) async {
-    HapticFeedback.heavyImpact();
+    if (_isEmergencyCalling) return;
+    _isEmergencyCalling = true;
+
     try {
-      widget.onEmergencyCall?.call();
-    } catch (_) {}
-    try {
-      await EmergencyCallHelper.initiateEmergencyCall(ctx);
-    } catch (e, st) {
-      AppLogger.e('Emergency call failed: $e', e, st);
+      HapticFeedback.heavyImpact();
       try {
-        ScaffoldMessenger.of(ctx).showSnackBar(
-          SnackBar(content: Text('Không thể thực hiện cuộc gọi khẩn cấp: $e')),
-        );
+        widget.onEmergencyCall?.call();
       } catch (_) {}
+      try {
+        await EmergencyCallHelper.initiateEmergencyCall(ctx);
+      } catch (e, st) {
+        AppLogger.e('Emergency call failed: $e', e, st);
+        try {
+          ScaffoldMessenger.of(ctx).showSnackBar(
+            SnackBar(
+              content: Text('Không thể thực hiện cuộc gọi khẩn cấp: $e'),
+            ),
+          );
+        } catch (_) {}
+      }
+    } finally {
+      _isEmergencyCalling = false;
     }
   }
 
@@ -859,139 +892,6 @@ class _AlertEventCardState extends State<AlertEventCard>
     );
   }
 
-  // Widget _buildActionButtons() {
-  //   if (widget.isHandled) {
-  //     return Container(
-  //       padding: const EdgeInsets.all(16),
-  //       decoration: BoxDecoration(
-  //         color: Colors.grey[50],
-  //         border: Border(top: BorderSide(color: Colors.grey[200]!, width: 1)),
-  //       ),
-  //       child: Row(
-  //         children: [
-  //           const Icon(Icons.check_circle, color: Color(0xFF48BB78), size: 20),
-  //           const SizedBox(width: 8),
-  //           const Text(
-  //             'Sự kiện đã được xử lý',
-  //             style: TextStyle(
-  //               fontSize: 14,
-  //               color: Color(0xFF48BB78),
-  //               fontWeight: FontWeight.w500,
-  //             ),
-  //           ),
-  //           const Spacer(),
-  //           TextButton(
-  //             onPressed: widget.onViewDetails,
-  //             child: const Text('Chi tiết'),
-  //           ),
-  //         ],
-  //       ),
-  //     );
-  //   }
-
-  //   return Container(
-  //     padding: const EdgeInsets.all(16),
-  //     decoration: BoxDecoration(
-  //       color: _getSeverityColor().withValues(alpha: 0.05),
-  //       border: Border(
-  //         top: BorderSide(
-  //           color: _getSeverityColor().withValues(alpha: 0.2),
-  //           width: 1,
-  //         ),
-  //       ),
-  //     ),
-  //     child: Column(
-  //       children: [
-  //         SizedBox(
-  //           width: double.infinity,
-  //           child: ElevatedButton.icon(
-  //             onPressed: _handleEmergencyCall,
-  //             icon: const Icon(Icons.phone, color: Colors.white),
-  //             label: Text(
-  //               'GỌI KHẨN CẤP',
-  //               style: const TextStyle(
-  //                 fontWeight: FontWeight.bold,
-  //                 color: Colors.white,
-  //               ).copyWith(fontSize: 13),
-  //             ),
-  //             style: ElevatedButton.styleFrom(
-  //               backgroundColor: const Color(0xFFE53E3E),
-  //               foregroundColor: Colors.white,
-  //               padding: const EdgeInsets.symmetric(vertical: 12),
-  //               shape: RoundedRectangleBorder(
-  //                 borderRadius: BorderRadius.circular(8),
-  //               ),
-  //               elevation: 2,
-  //             ),
-  //           ),
-  //         ),
-
-  //         const SizedBox(height: 8),
-
-  //         SizedBox(
-  //           width: double.infinity,
-  //           child: OutlinedButton.icon(
-  //             onPressed: () {
-  //               final caregiver = context.read<AuthProvider>().user;
-  //               if (caregiver == null) return;
-  //               showModalBottomSheet(
-  //                 context: context,
-  //                 isScrollControlled: true,
-  //                 backgroundColor: Colors.white,
-  //                 shape: const RoundedRectangleBorder(
-  //                   borderRadius: BorderRadius.vertical(
-  //                     top: Radius.circular(16),
-  //                   ),
-  //                 ),
-  //                 builder: (_) => const FcmQuickSendSheet(),
-  //               );
-  //             },
-  //             icon: const Icon(Icons.notifications_outlined),
-  //             label: const Text('Gửi thông báo cho người chăm sóc'),
-  //             style: OutlinedButton.styleFrom(
-  //               padding: const EdgeInsets.symmetric(vertical: 12),
-  //             ),
-  //           ),
-  //         ),
-
-  //         const SizedBox(height: 8),
-
-  //         // Hàng nút phụ: Chi tiết / Đã xử lý
-  //         Row(
-  //           children: [
-  //             Expanded(
-  //               child: TextButton.icon(
-  //                 onPressed: () => _showImagesModal(context),
-  //                 icon: const Icon(Icons.info_outline),
-  //                 label: const Text('Xem ảnh'),
-  //                 style: TextButton.styleFrom(
-  //                   foregroundColor: _getSeverityColor(),
-  //                 ),
-  //               ),
-  //             ),
-  //             Expanded(
-  //               child: TextButton.icon(
-  //                 onPressed: (_isConfirming || _isConfirmed)
-  //                     ? null
-  //                     : _handleMarkAsHandled,
-  //                 icon: const Icon(Icons.check),
-  //                 label: _isConfirming
-  //                     ? const Text('ĐANG XỬ LÝ...')
-  //                     : (_isConfirmed
-  //                           ? const Text('ĐÃ XỬ LÝ')
-  //                           : const Text('ĐÃ XỬ LÝ')),
-  //                 style: TextButton.styleFrom(
-  //                   foregroundColor: const Color(0xFF48BB78),
-  //                 ),
-  //               ),
-  //             ),
-  //           ],
-  //         ),
-  //       ],
-  //     ),
-  //   );
-  // }
-
   Widget _buildActionButtons() {
     if (widget.isHandled) {
       return Container(
@@ -1215,287 +1115,427 @@ class _AlertEventCardState extends State<AlertEventCard>
     );
   }
 
-  void _showImagesModal(BuildContext context) {
-    EventLog buildEventFromWidget() {
-      final det = Map<String, dynamic>.from(widget.detectionData);
-      final ctx = Map<String, dynamic>.from(widget.contextData);
-      if ((det['camera_id'] ??
-                  det['camera'] ??
-                  ctx['camera_id'] ??
-                  ctx['camera']) ==
-              null &&
-          widget.cameraId != null &&
-          widget.cameraId!.isNotEmpty) {
-        det['camera_id'] = widget.cameraId;
-        ctx['camera_id'] = widget.cameraId;
-      }
-
-      return EventLog(
-        eventId: widget.eventId,
-        status: widget.severity,
-        eventType: widget.eventType,
-        eventDescription: widget.description,
-        confidenceScore: widget.confidence ?? 0.0,
-        detectedAt: widget.timestamp,
-        createdAt: widget.createdAt ?? widget.timestamp,
-        detectionData: det,
-        aiAnalysisResult: {},
-        contextData: ctx,
-        boundingBoxes: {},
-        confirmStatus: widget.isHandled,
-        cameraId: widget.cameraId,
-        imageUrls: (() {
-          final list = <String>[];
-          list.addAll(widget.imageUrls);
-          if (widget.imageUrl != null && widget.imageUrl!.isNotEmpty) {
-            list.add(widget.imageUrl!);
-          }
-          return list;
-        })(),
-      );
+  EventLog _buildEventLogForImages() {
+    final detection = Map<String, dynamic>.from(widget.detectionData);
+    final context = Map<String, dynamic>.from(widget.contextData);
+    final cameraId = widget.cameraId;
+    final existingCamera =
+        detection['camera_id'] ??
+        detection['camera'] ??
+        context['camera_id'] ??
+        context['camera'];
+    if ((existingCamera == null || existingCamera.toString().isEmpty) &&
+        cameraId != null &&
+        cameraId.isNotEmpty) {
+      detection['camera_id'] = cameraId;
+      context['camera_id'] = cameraId;
     }
 
-    final event = buildEventFromWidget();
-    final future = loadEventImageUrls(event).then((urls) => urls);
+    return EventLog(
+      eventId: widget.eventId,
+      eventType: widget.eventType,
+      eventDescription: widget.description,
+      confidenceScore: widget.confidence ?? 0,
+      detectedAt: widget.timestamp,
+      createdAt: widget.createdAt,
+      detectionData: detection,
+      aiAnalysisResult: const {},
+      contextData: context,
+      boundingBoxes: const {},
+      confirmStatus: widget.isHandled,
+      status: widget.isHandled ? 'handled' : 'new',
+      imageUrls: widget.imageUrls,
+      cameraId: cameraId,
+    );
+  }
 
-    final bool isUpdateWindowExpired = (() {
-      final created = widget.createdAt ?? widget.timestamp;
-      try {
-        final expiry = created.add(const Duration(days: 2));
-        return DateTime.now().isAfter(expiry);
-      } catch (_) {
-        return false;
-      }
-    })();
+  Future<void> _showImagesModal(BuildContext pageContext) {
+    final event = _buildEventLogForImages();
+    AppLogger.d('[AlertEventCard] Loading images for ${event.eventId}');
 
-    showDialog(
-      context: context,
-      builder: (ctx) => Dialog(
-        backgroundColor: Colors.white,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-        child: Container(
-          width: MediaQuery.of(ctx).size.width * 0.9,
-          height: MediaQuery.of(ctx).size.height * 0.7,
-          padding: const EdgeInsets.all(20),
-          child: Column(
-            children: [
-              Row(
+    final future = loadEventImageUrls(event).then((urls) {
+      AppLogger.d('[AlertEventCard] found ${urls.length} image(s)');
+      return urls;
+    });
+
+    return showDialog(
+      context: pageContext,
+      builder: (dialogCtx) {
+        int? selectedIndex;
+
+        return StatefulBuilder(
+          builder: (context, setDialogState) => Dialog(
+            backgroundColor: Colors.white,
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(16),
+            ),
+            child: Container(
+              width: MediaQuery.of(pageContext).size.width * 0.9,
+              height: MediaQuery.of(pageContext).size.height * 0.7,
+              padding: const EdgeInsets.all(20),
+              child: Column(
                 children: [
-                  const Expanded(
-                    child: Text(
-                      'Ảnh sự kiện',
-                      style: TextStyle(
-                        fontWeight: FontWeight.w700,
-                        fontSize: 18,
+                  // Header
+                  Row(
+                    children: [
+                      Container(
+                        padding: const EdgeInsets.all(8),
+                        decoration: BoxDecoration(
+                          color: Colors.blue.shade50,
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                        child: Icon(
+                          Icons.image_outlined,
+                          color: Colors.blue.shade600,
+                          size: 24,
+                        ),
                       ),
-                    ),
-                  ),
-                  IconButton(
-                    onPressed: () => Navigator.of(ctx).pop(),
-                    icon: const Icon(Icons.close),
-                  ),
-                  IconButton(
-                    onPressed: () async {
-                      final event = buildEventFromWidget();
-                      await _openCameraForEvent(ctx, event);
-                    },
-                    icon: const Icon(Icons.videocam_outlined),
-                    tooltip: 'Xem camera',
-                  ),
-                ],
-              ),
-              const SizedBox(height: 12),
-              Expanded(
-                child: FutureBuilder<List<String>>(
-                  future: future,
-                  builder: (context, snap) {
-                    if (snap.connectionState != ConnectionState.done) {
-                      return const Center(child: CircularProgressIndicator());
-                    }
-                    if (snap.hasError) {
-                      return Padding(
-                        padding: const EdgeInsets.only(top: 12.0),
+                      const SizedBox(width: 12),
+                      const Expanded(
                         child: Text(
-                          'Lỗi tải ảnh: ${snap.error}',
-                          style: TextStyle(color: Colors.red.shade600),
-                        ),
-                      );
-                    }
-
-                    final urls = snap.data ?? const [];
-                    if (urls.isEmpty) {
-                      return Center(
-                        child: Text(
-                          'Ảnh sự kiện tạm thời chưa khả dụng.\nVui lòng chờ ít giây để hệ thống đồng bộ.',
-                          style: TextStyle(color: Colors.grey.shade600),
-                        ),
-                      );
-                    }
-
-                    if (urls.length == 1) {
-                      return ClipRRect(
-                        borderRadius: BorderRadius.circular(12),
-                        child: Image.network(
-                          urls.first,
-                          fit: BoxFit.contain,
-                          errorBuilder: (c, e, s) => Center(
-                            child: Icon(
-                              Icons.broken_image_outlined,
-                              color: Colors.grey.shade400,
-                            ),
+                          'Hình ảnh',
+                          style: TextStyle(
+                            fontWeight: FontWeight.w700,
+                            fontSize: 20,
                           ),
                         ),
-                      );
-                    }
+                      ),
+                      // Camera button
+                      IconButton(
+                        onPressed: () {
+                          Navigator.of(dialogCtx, rootNavigator: true).pop();
+                          Future.delayed(const Duration(milliseconds: 250), () {
+                            _openCameraForEvent(pageContext, event);
+                          });
+                        },
+                        icon: const Icon(Icons.videocam_outlined),
+                        tooltip: 'Xem camera',
+                      ),
+                      // Edit button — disable if there's an active pending proposal
+                      FutureBuilder<EventLog>(
+                        future: EventRepository(
+                          EventService.withDefaultClient(),
+                        ).getEventDetails(event.eventId),
+                        builder: (ctx, snap) {
+                          return IconButton(
+                            icon: const Icon(Icons.edit_outlined),
+                            tooltip: 'Cập nhật sự kiện',
+                            onPressed: () async {
+                              try {
+                                final current =
+                                    snap.data ??
+                                    await EventRepository(
+                                      EventService.withDefaultClient(),
+                                    ).getEventDetails(event.eventId);
 
-                    return SizedBox(
-                      height: 220,
-                      child: GridView.builder(
-                        physics: const BouncingScrollPhysics(),
-                        gridDelegate:
-                            const SliverGridDelegateWithFixedCrossAxisCount(
-                              crossAxisCount: 2,
-                              crossAxisSpacing: 12,
-                              mainAxisSpacing: 12,
-                              childAspectRatio: 1.3,
-                            ),
-                        itemCount: urls.length,
-                        itemBuilder: (context, index) {
-                          final url = urls[index];
-                          return GestureDetector(
-                            onTap: () {
-                              showDialog(
-                                context: context,
-                                builder: (_) => Dialog(
-                                  backgroundColor: Colors.black,
-                                  insetPadding: const EdgeInsets.all(20),
-                                  child: Stack(
-                                    children: [
-                                      Center(
-                                        child: Image.network(
-                                          url,
-                                          fit: BoxFit.contain,
-                                          errorBuilder: (c, e, s) => Center(
-                                            child: Icon(
-                                              Icons.broken_image_outlined,
-                                              color: Colors.grey.shade400,
-                                            ),
-                                          ),
-                                        ),
+                                final hasPending =
+                                    current.proposedStatus != null &&
+                                    current.pendingUntil != null &&
+                                    current.pendingUntil!.isAfter(
+                                      DateTime.now(),
+                                    );
+
+                                if (hasPending) {
+                                  await showDialog<void>(
+                                    context: context,
+                                    builder: (ctx) => AlertDialog(
+                                      title: const Text('Đã có đề xuất'),
+                                      content: const Text(
+                                        'Sự kiện đang có đề xuất chờ duyệt.',
                                       ),
-                                      Positioned(
-                                        top: 8,
-                                        right: 8,
-                                        child: IconButton(
+                                      actions: [
+                                        TextButton(
                                           onPressed: () =>
-                                              Navigator.of(context).pop(),
-                                          icon: const Icon(
-                                            Icons.close,
-                                            color: Colors.white,
-                                          ),
+                                              Navigator.of(ctx).pop(),
+                                          child: const Text('Đóng'),
                                         ),
-                                      ),
-                                      Positioned(
-                                        bottom: 8,
-                                        right: 8,
-                                        child: Container(
-                                          decoration: BoxDecoration(
-                                            color: const Color.fromRGBO(
-                                              255,
-                                              255,
-                                              255,
-                                              0.9,
-                                            ),
-                                            borderRadius: BorderRadius.circular(
-                                              20,
-                                            ),
-                                          ),
-                                          child: IconButton(
-                                            onPressed: () async {
-                                              final event =
-                                                  buildEventFromWidget();
-                                              Navigator.of(context).pop();
-                                              await _openCameraForEvent(
-                                                context,
-                                                event,
-                                              );
-                                            },
-                                            icon: const Icon(
-                                              Icons.videocam,
-                                              color: Colors.black,
-                                            ),
-                                          ),
-                                        ),
-                                      ),
-                                    ],
-                                  ),
+                                      ],
+                                    ),
+                                  );
+                                  return;
+                                }
+                              } catch (e) {
+                                debugPrint(
+                                  '[ActionLogCard] pre-check getEventDetails failed: $e',
+                                );
+                              }
+
+                              try {
+                                Navigator.of(context).pop();
+                              } catch (_) {}
+
+                              Navigator.push(
+                                context,
+                                MaterialPageRoute(
+                                  builder: (_) =>
+                                      ProposeScreen(logEntry: event),
                                 ),
                               );
                             },
-                            child: Container(
-                              decoration: BoxDecoration(
-                                borderRadius: BorderRadius.circular(12),
-                                border: Border.all(color: Colors.grey.shade200),
-                              ),
-                              child: ClipRRect(
-                                borderRadius: BorderRadius.circular(12),
-                                child: Image.network(
-                                  url,
-                                  fit: BoxFit.cover,
-                                  loadingBuilder: (c, w, progress) =>
-                                      progress == null
-                                      ? w
-                                      : const Center(
-                                          child: CircularProgressIndicator(),
-                                        ),
-                                  errorBuilder: (c, err, st) => Container(
-                                    color: Colors.grey.shade100,
-                                    alignment: Alignment.center,
-                                    child: Icon(
-                                      Icons.broken_image_outlined,
-                                      size: 32,
-                                      color: Colors.grey.shade400,
-                                    ),
-                                  ),
-                                ),
-                              ),
-                            ),
                           );
                         },
                       ),
-                    );
-                  },
-                ),
-              ),
 
-              const SizedBox(height: 12),
-              Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 4),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.stretch,
-                  children: [
-                    if (!isUpdateWindowExpired)
-                      ElevatedButton.icon(
-                        onPressed: () => _initiateEmergencyCall(ctx),
-                        icon: const Icon(Icons.call),
-                        label: const Text('Gọi khẩn cấp'),
-                        style: ElevatedButton.styleFrom(
-                          padding: const EdgeInsets.symmetric(vertical: 12),
-                          backgroundColor: Colors.white,
-                          foregroundColor: Colors.grey.shade800,
-                          elevation: 0,
-                          side: BorderSide(color: Colors.grey.shade300),
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(16),
-                          ),
+                      // Close button
+                      IconButton(
+                        onPressed: () => Navigator.of(dialogCtx).pop(),
+                        icon: const Icon(Icons.close),
+                        style: IconButton.styleFrom(
+                          backgroundColor: Colors.grey.shade100,
                         ),
                       ),
-                  ],
-                ),
+                    ],
+                  ),
+
+                  const SizedBox(height: 20),
+
+                  // Main content
+                  Expanded(
+                    child: FutureBuilder<List<String>>(
+                      future: future,
+                      builder: (context, snap) {
+                        if (snap.connectionState != ConnectionState.done) {
+                          return const Center(
+                            child: CircularProgressIndicator(),
+                          );
+                        }
+                        if (snap.hasError) {
+                          return Center(
+                            child: Text(
+                              'Lỗi tải ảnh: ${snap.error}',
+                              style: TextStyle(color: Colors.red.shade600),
+                            ),
+                          );
+                        }
+
+                        final urls = snap.data ?? const [];
+                        if (urls.isEmpty) {
+                          return _emptyImages();
+                        }
+
+                        selectedIndex ??= 0;
+                        final selectedUrl = urls[selectedIndex!];
+
+                        return Column(
+                          children: [
+                            Expanded(
+                              child: GridView.builder(
+                                gridDelegate:
+                                    const SliverGridDelegateWithFixedCrossAxisCount(
+                                      crossAxisCount: 2,
+                                      crossAxisSpacing: 12,
+                                      mainAxisSpacing: 12,
+                                      childAspectRatio: 1.3,
+                                    ),
+                                itemCount: urls.length,
+                                itemBuilder: (context, index) {
+                                  final url = urls[index];
+                                  final isSelected = selectedIndex == index;
+                                  return GestureDetector(
+                                    onTap: () {
+                                      if (!dialogCtx.mounted) return;
+                                      setDialogState(
+                                        () => selectedIndex = index,
+                                      );
+                                    },
+                                    child: Material(
+                                      clipBehavior: Clip.antiAlias,
+                                      elevation: 4,
+                                      shadowColor: Colors.black.withOpacity(
+                                        0.12,
+                                      ),
+                                      color: Colors.white,
+                                      shape: RoundedRectangleBorder(
+                                        borderRadius: BorderRadius.circular(12),
+                                        side: BorderSide(
+                                          color: isSelected
+                                              ? AppTheme.primaryBlue
+                                              : Colors.grey.shade200,
+                                          width: isSelected ? 3 : 1,
+                                        ),
+                                      ),
+                                      child: Stack(
+                                        children: [
+                                          Positioned.fill(
+                                            child: Image.network(
+                                              url,
+                                              fit: BoxFit.cover,
+                                              loadingBuilder: (c, w, progress) {
+                                                return progress == null
+                                                    ? w
+                                                    : const Center(
+                                                        child:
+                                                            CircularProgressIndicator(),
+                                                      );
+                                              },
+                                              errorBuilder: (c, err, st) =>
+                                                  Container(
+                                                    color: Colors.grey.shade100,
+                                                    alignment: Alignment.center,
+                                                    child: Icon(
+                                                      Icons
+                                                          .broken_image_outlined,
+                                                      size: 32,
+                                                      color:
+                                                          Colors.grey.shade400,
+                                                    ),
+                                                  ),
+                                            ),
+                                          ),
+                                          Positioned(
+                                            bottom: 0,
+                                            left: 0,
+                                            right: 0,
+                                            child: Container(
+                                              padding: const EdgeInsets.all(8),
+                                              decoration: const BoxDecoration(
+                                                gradient: LinearGradient(
+                                                  begin: Alignment.bottomCenter,
+                                                  end: Alignment.topCenter,
+                                                  colors: [
+                                                    Color.fromRGBO(
+                                                      0,
+                                                      0,
+                                                      0,
+                                                      0.7,
+                                                    ),
+                                                    Colors.transparent,
+                                                  ],
+                                                ),
+                                              ),
+                                              child: Text(
+                                                'Ảnh ${index + 1}',
+                                                style: const TextStyle(
+                                                  color: Colors.white,
+                                                  fontSize: 12,
+                                                  fontWeight: FontWeight.w600,
+                                                ),
+                                              ),
+                                            ),
+                                          ),
+                                          Positioned(
+                                            top: 8,
+                                            right: 8,
+                                            child: GestureDetector(
+                                              onTap: () {
+                                                if (!dialogCtx.mounted) return;
+                                                setDialogState(
+                                                  () => selectedIndex = index,
+                                                );
+                                                showActionLogCardImageViewer(
+                                                  dialogCtx,
+                                                  urls,
+                                                  index,
+                                                );
+                                              },
+                                              child: Container(
+                                                padding: const EdgeInsets.all(
+                                                  4,
+                                                ),
+                                                decoration: BoxDecoration(
+                                                  color: const Color.fromRGBO(
+                                                    255,
+                                                    255,
+                                                    255,
+                                                    0.9,
+                                                  ),
+                                                  borderRadius:
+                                                      BorderRadius.circular(8),
+                                                ),
+                                                child: Icon(
+                                                  Icons.zoom_in,
+                                                  size: 16,
+                                                  color: Colors.grey.shade600,
+                                                ),
+                                              ),
+                                            ),
+                                          ),
+                                        ],
+                                      ),
+                                    ),
+                                  );
+                                },
+                              ),
+                            ),
+                            const SizedBox(height: 12),
+                            Padding(
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 4,
+                              ),
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.stretch,
+                                children: [
+                                  // Nút gọi khẩn cấp
+                                  ElevatedButton.icon(
+                                    onPressed: () =>
+                                        _initiateEmergencyCall(dialogCtx),
+                                    icon: const Icon(Icons.call),
+                                    label: const Text('Gọi khẩn cấp'),
+                                    style: ElevatedButton.styleFrom(
+                                      padding: const EdgeInsets.symmetric(
+                                        vertical: 12,
+                                      ),
+                                      backgroundColor: Colors.white,
+                                      foregroundColor: Colors.grey.shade800,
+                                      elevation: 0,
+                                      side: BorderSide(
+                                        color: Colors.grey.shade300,
+                                      ),
+                                      shape: RoundedRectangleBorder(
+                                        borderRadius: BorderRadius.circular(16),
+                                      ),
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ],
+                        );
+                      },
+                    ),
+                  ),
+                ],
               ),
-            ],
+            ),
           ),
-        ),
+        );
+      },
+    );
+  }
+
+  Widget _emptyImages() {
+    return Center(
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          Container(
+            padding: const EdgeInsets.all(24),
+            decoration: BoxDecoration(
+              color: Colors.grey.shade100,
+              borderRadius: BorderRadius.circular(20),
+            ),
+            child: Icon(
+              Icons.image_not_supported_outlined,
+              size: 48,
+              color: Colors.grey.shade400,
+            ),
+          ),
+          const SizedBox(height: 16),
+          Text(
+            'Không có ảnh',
+            style: TextStyle(
+              fontSize: 18,
+              fontWeight: FontWeight.w600,
+              color: Colors.grey.shade600,
+            ),
+          ),
+          const SizedBox(height: 8),
+          Text(
+            'Chưa có ảnh được ghi lại cho sự kiện này.',
+            style: TextStyle(fontSize: 14, color: Colors.grey.shade500),
+            textAlign: TextAlign.center,
+          ),
+        ],
       ),
     );
   }

@@ -473,10 +473,20 @@ class ActionLogCard extends StatelessWidget {
                             snap.data != null) {
                           final detail = snap.data!;
                           final hasPending = detail.pendingUntil != null;
+                          AppLogger.d(
+                            '[ActionLogCard] Footer: pendingUntil=${detail.pendingUntil}, hasPending=$hasPending, disabled=$disabled',
+                          );
                           if (hasPending) {
                             disabled = true;
                             tooltip = 'Sự kiện đang có đề xuất chờ duyệt';
                           }
+                        } else if (snap.connectionState ==
+                            ConnectionState.waiting) {
+                          AppLogger.d('[ActionLogCard] Footer: Loading...');
+                        } else if (snap.hasError) {
+                          AppLogger.w(
+                            '[ActionLogCard] Footer: Error - ${snap.error}',
+                          );
                         }
 
                         // Removed inline "Đề xuất xóa" button; that flow
@@ -1616,6 +1626,7 @@ class ActionLogCard extends StatelessWidget {
                               ).getEventDetails(data.eventId),
                               builder: (context, snap) {
                                 bool disabled = !_canEditEvent;
+                                String confirmationState = '';
                                 String tooltip = '';
                                 if (snap.connectionState ==
                                         ConnectionState.done &&
@@ -1624,11 +1635,42 @@ class ActionLogCard extends StatelessWidget {
                                   final detail = snap.data!;
                                   final hasPending =
                                       detail.pendingUntil != null;
+                                  AppLogger.d(
+                                    '[ActionLogCard] Dialog: pendingUntil=${detail.pendingUntil}, hasPending=$hasPending, disabled=$disabled',
+                                  );
                                   if (hasPending) {
                                     disabled = true;
                                     tooltip =
                                         'Sự kiện đang có đề xuất chờ duyệt';
                                   }
+                                  try {
+                                    confirmationState =
+                                        (detail.confirmationState ?? '')
+                                            .toString()
+                                            .toUpperCase()
+                                            .trim();
+                                  } catch (_) {
+                                    confirmationState = '';
+                                  }
+                                  // If confirmationState indicates caregiver or customer already confirmed,
+                                  // disable proposing changes. Allow proposing only when state is DETECTED or REJECTED_BY_CUSTOMER.
+                                  if (confirmationState ==
+                                          'CAREGIVER_UPDATED' ||
+                                      confirmationState ==
+                                          'CONFIRMED_BY_CUSTOMER') {
+                                    disabled = true;
+                                    tooltip =
+                                        'Sự kiện đã được cập nhật/khách hàng xác nhận';
+                                  }
+                                } else if (snap.connectionState ==
+                                    ConnectionState.waiting) {
+                                  AppLogger.d(
+                                    '[ActionLogCard] Dialog: Loading...',
+                                  );
+                                } else if (snap.hasError) {
+                                  AppLogger.w(
+                                    '[ActionLogCard] Dialog: Error - ${snap.error}',
+                                  );
                                 }
 
                                 return ElevatedButton.icon(

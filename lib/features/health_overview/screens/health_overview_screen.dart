@@ -9,6 +9,7 @@ import 'package:detect_care_caregiver_app/features/auth/data/auth_storage.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../core/widgets/error_widget.dart';
 import '../../../core/widgets/loading_widget.dart';
+import '../../../core/utils/error_handler.dart';
 import '../widgets/overview_widgets.dart';
 import 'analyst_data_screen.dart';
 
@@ -30,6 +31,12 @@ class _HealthOverviewScreenState extends State<HealthOverviewScreen> {
   bool _loading = false;
   String? _error;
   HealthReportOverviewDto? _data;
+  int _kpiTotalEvents = 0;
+  int _kpiTotalAbnormal = 0;
+  int _kpiTotalFall = 0;
+  int _kpiTotalAbnormalBehavior = 0;
+  HighRiskTimeDto? _computedHighRiskTime;
+  List<dynamic> _filteredLogs = [];
   bool _analystLoading = false;
   String? _analystError;
   List<dynamic>? _analystEntries;
@@ -65,12 +72,19 @@ class _HealthOverviewScreenState extends State<HealthOverviewScreen> {
       final dto = await _remote.overview(startDay: r.start, endDay: r.end);
       setState(() {
         _data = dto;
+        _kpiTotalAbnormal = dto.kpis.abnormalTotal;
+        // Total events = abnormal + normal
+        final normal = dto.statusBreakdown?.normal ?? 0;
+        _kpiTotalEvents = _kpiTotalAbnormal + normal;
+        // Event types from high risk time (morning+afternoon+evening+night)
+        _kpiTotalFall = 0;
+        _kpiTotalAbnormalBehavior = 0;
       });
       await _fetchAnalystSummaries(r);
     } catch (e) {
       debugPrint('[HEALTH_OVERVIEW] fetch error: $e');
       setState(() {
-        _error = e.toString();
+        _error = formatErrorMessage(e);
       });
     } finally {
       setState(() {
@@ -310,12 +324,11 @@ class _HealthOverviewScreenState extends State<HealthOverviewScreen> {
           showPeriod: false,
         ),
         const SizedBox(height: AppTheme.spacingL),
-
         KPITiles(
-          abnormalToday: abnormalRange,
-          resolvedRate: resolvedRate,
-          avgResponse: avgResp,
-          openAlerts: overSlaCritical,
+          totalEvents: _kpiTotalEvents,
+          totalAbnormal: _kpiTotalAbnormal,
+          totalFall: _kpiTotalFall,
+          totalAbnormalBehavior: _kpiTotalAbnormalBehavior,
         ),
         const SizedBox(height: AppTheme.spacingL),
 

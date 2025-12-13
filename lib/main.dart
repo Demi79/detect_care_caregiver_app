@@ -48,6 +48,9 @@ import 'package:detect_care_caregiver_app/widgets/auth_gate.dart';
 
 @pragma('vm:entry-point')
 Future<void> firebaseBackgroundHandler(RemoteMessage message) async {
+  final startTime = DateTime.now();
+  debugPrint('🔔 [FCM-BG] Handler started at $startTime');
+
   await Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform);
 
   final flnp = FlutterLocalNotificationsPlugin();
@@ -60,7 +63,12 @@ Future<void> firebaseBackgroundHandler(RemoteMessage message) async {
   );
 
   try {
+    final initStart = DateTime.now();
     await flnp.initialize(initSettings);
+    final initDuration = DateTime.now().difference(initStart);
+    debugPrint(
+      '⏱️ [FCM-BG] FlutterLocalNotifications init: ${initDuration.inMilliseconds}ms',
+    );
 
     const channelId = 'healthcare_alerts';
     const channelName = 'Cảnh báo Y tế';
@@ -84,11 +92,16 @@ Future<void> firebaseBackgroundHandler(RemoteMessage message) async {
           : null,
     );
 
+    final channelStart = DateTime.now();
     await flnp
         .resolvePlatformSpecificImplementation<
           AndroidFlutterLocalNotificationsPlugin
         >()
         ?.createNotificationChannel(androidChannel);
+    final channelDuration = DateTime.now().difference(channelStart);
+    debugPrint(
+      '⏱️ [FCM-BG] Channel creation: ${channelDuration.inMilliseconds}ms',
+    );
 
     final androidDetails = AndroidNotificationDetails(
       channelId,
@@ -109,15 +122,25 @@ Future<void> firebaseBackgroundHandler(RemoteMessage message) async {
       presentBadge: true,
     );
 
+    final showStart = DateTime.now();
     await flnp.show(
       DateTime.now().millisecondsSinceEpoch.remainder(100000),
       message.notification?.title ?? 'New Alert',
       message.notification?.body ?? 'New healthcare event detected',
       NotificationDetails(android: androidDetails, iOS: iosDetails),
     );
+    final showDuration = DateTime.now().difference(showStart);
+    debugPrint(
+      '⏱️ [FCM-BG] Notification show: ${showDuration.inMilliseconds}ms',
+    );
   } catch (e) {
     debugPrint('❌ Background notification failed: $e');
   }
+
+  final totalDuration = DateTime.now().difference(startTime);
+  debugPrint(
+    '✅ [FCM-BG] Handler completed in ${totalDuration.inMilliseconds}ms',
+  );
 }
 
 /// ----------------------------- BOOTSTRAP APP ------------------------------ ///
@@ -156,18 +179,26 @@ Future<void> _initSupabase() async {
 
   await Supabase.initialize(url: supabaseUrl, anonKey: AppConfig.supabaseKey);
 
-  final auth = Supabase.instance.client.auth;
+  // Defer auto-signin to microtask để không block boot
+  Future.microtask(() async {
+    final auth = Supabase.instance.client.auth;
 
-  if (auth.currentSession == null) {
-    final email = dotenv.env['SUPABASE_DEV_EMAIL'] ?? '';
-    final password = dotenv.env['SUPABASE_DEV_PASSWORD'] ?? '';
+    if (auth.currentSession == null) {
+      final email = dotenv.env['SUPABASE_DEV_EMAIL'] ?? '';
+      final password = dotenv.env['SUPABASE_DEV_PASSWORD'] ?? '';
 
-    try {
-      await auth.signInWithPassword(email: email, password: password);
-    } catch (e) {
-      debugPrint('[Supabase] signIn error: $e');
+      try {
+        final signInStart = DateTime.now();
+        await auth.signInWithPassword(email: email, password: password);
+        final signInDuration = DateTime.now().difference(signInStart);
+        debugPrint(
+          '⏱️ [Supabase] Auto-signin: ${signInDuration.inMilliseconds}ms',
+        );
+      } catch (e) {
+        debugPrint('[Supabase] signIn error: $e');
+      }
     }
-  }
+  });
 }
 
 Future<void> _initNotifications() async {
@@ -185,15 +216,39 @@ Future<void> _initNotifications() async {
 }
 
 Future<void> _bootstrapCore() async {
+  final bootStart = DateTime.now();
+  debugPrint('🚀 [BOOTSTRAP] Starting app initialization...');
+
   AppLifecycle.init();
 
+  final envStart = DateTime.now();
   await _initEnv();
+  debugPrint(
+    '⏱️ [BOOTSTRAP] Env loaded: ${DateTime.now().difference(envStart).inMilliseconds}ms',
+  );
+
+  final firebaseStart = DateTime.now();
   await _initFirebase();
+  debugPrint(
+    '⏱️ [BOOTSTRAP] Firebase init: ${DateTime.now().difference(firebaseStart).inMilliseconds}ms',
+  );
+
+  final supabaseStart = DateTime.now();
   await _initSupabase();
+  debugPrint(
+    '⏱️ [BOOTSTRAP] Supabase init: ${DateTime.now().difference(supabaseStart).inMilliseconds}ms',
+  );
+
   await _initNotifications();
+  debugPrint('⏱️ [BOOTSTRAP] Notifications scheduled (deferred)');
 
   final deviceHealthService = DeviceHealthService();
   deviceHealthService.startHealthMonitoring();
+
+  final totalDuration = DateTime.now().difference(bootStart);
+  debugPrint(
+    '✅ [BOOTSTRAP] Total boot time: ${totalDuration.inMilliseconds}ms',
+  );
 }
 
 /// ------------------------------- MAIN ENTRY ------------------------------- ///
