@@ -3,12 +3,18 @@ import 'package:detect_care_caregiver_app/features/shared_permissions/data/share
 import 'package:detect_care_caregiver_app/features/shared_permissions/models/shared_permissions.dart';
 import 'package:detect_care_caregiver_app/features/assignments/data/assignments_remote_data_source.dart';
 import 'package:detect_care_caregiver_app/core/utils/error_handler.dart';
+import 'package:detect_care_caregiver_app/core/utils/logger.dart';
+import 'package:detect_care_caregiver_app/core/utils/input_validators.dart';
+import 'package:detect_care_caregiver_app/core/utils/input_formatters.dart';
 import 'dart:async';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 class CaregiverSettingsScreen extends StatefulWidget {
-  const CaregiverSettingsScreen({super.key});
+  final bool embedInParent;
+
+  const CaregiverSettingsScreen({super.key, this.embedInParent = false});
 
   @override
   State<CaregiverSettingsScreen> createState() =>
@@ -27,9 +33,26 @@ class _CaregiverSettingsScreenState extends State<CaregiverSettingsScreen> {
   static const bgColor = Color(0xFFF8FAFC);
   static const cardColor = Colors.white;
 
+  /// Validates days input for permission requests
+  String? _validateDaysInput(String value, int maxValue) {
+    if (value.isEmpty) return null;
+    final days = int.tryParse(value);
+    if (days == null) {
+      return 'Chỉ được nhập số';
+    }
+    if (days <= 0) {
+      return 'Số ngày phải lớn hơn 0';
+    }
+    if (days > maxValue) {
+      return 'Tối đa $maxValue ngày';
+    }
+    return null;
+  }
+
   @override
   void initState() {
     super.initState();
+    AppLogger.i('[CaregiverSettings] ✅ Screen initialized');
     _loadPermissions();
     _setupRealtimeSubscriptions();
   }
@@ -50,13 +73,21 @@ class _CaregiverSettingsScreenState extends State<CaregiverSettingsScreen> {
     try {
       final caregiverId = await AuthStorage.getUserId();
       if (caregiverId == null) throw Exception('Missing caregiver_id');
+      AppLogger.d(
+        '[CaregiverSettings] Loading permissions for caregiverId=$caregiverId',
+      );
       final perms = await _repo.getByCaregiverId(caregiverId);
+      AppLogger.d('[CaregiverSettings] Loaded ${perms.length} permissions');
       setState(() {
         _permissions = perms;
         _loading = false;
       });
     } catch (e) {
-      print('❌ Load permissions error: $e');
+      AppLogger.e(
+        '[CaregiverSettings] Load permissions error: $e',
+        e,
+        StackTrace.current,
+      );
       setState(() => _loading = false);
     }
   }
@@ -73,36 +104,89 @@ class _CaregiverSettingsScreenState extends State<CaregiverSettingsScreen> {
   Future<void> _setupRealtimeSubscriptions() async {
     try {
       final caregiverId = await AuthStorage.getUserId();
-      if (caregiverId == null) return;
+      if (caregiverId == null) {
+        AppLogger.w(
+          '[CaregiverSettings] Cannot setup realtime: caregiverId is null',
+        );
+        return;
+      }
 
-      final client = Supabase.instance.client as dynamic;
+      AppLogger.d(
+        '[CaregiverSettings] Setting up realtime subscriptions for caregiverId=$caregiverId',
+      );
+
+      final client = Supabase.instance.client;
 
       try {
+        AppLogger.d('[CaregiverSettings] Subscribing to permissions table');
         _permSub = client
             .from('permissions')
-            .on('INSERT', (payload) => _onRealtimePayload(payload, caregiverId))
-            .on('UPDATE', (payload) => _onRealtimePayload(payload, caregiverId))
-            .on('DELETE', (payload) => _onRealtimePayload(payload, caregiverId))
-            .subscribe();
-      } catch (_) {
-        // older/newer supabase client variants may have different APIs; ignore
+            .stream(primaryKey: ['id'])
+            .listen(
+              (data) {
+                AppLogger.d(
+                  '[CaregiverSettings] Permissions stream update: ${data.length} rows',
+                );
+                _onRealtimePayload(data, caregiverId);
+              },
+              onError: (e) {
+                AppLogger.w('[CaregiverSettings] Permission stream error: $e');
+              },
+            );
+        AppLogger.d('[CaregiverSettings] ✅ Permissions subscription active');
+      } catch (e) {
+        AppLogger.w('[CaregiverSettings] Permission subscription failed: $e');
       }
 
       try {
+        AppLogger.d(
+          '[CaregiverSettings] Subscribing to caregiver_invitations table',
+        );
         _inviteSub = client
             .from('caregiver_invitations')
-            .on('INSERT', (payload) => _onRealtimePayload(payload, caregiverId))
-            .on('UPDATE', (payload) => _onRealtimePayload(payload, caregiverId))
-            .on('DELETE', (payload) => _onRealtimePayload(payload, caregiverId))
-            .subscribe();
-      } catch (_) {}
+            .stream(primaryKey: ['id'])
+            .listen(
+              (data) {
+                AppLogger.d(
+                  '[CaregiverSettings] Invitations stream update: ${data.length} rows',
+                );
+                _onRealtimePayload(data, caregiverId);
+              },
+              onError: (e) {
+                AppLogger.w('[CaregiverSettings] Invitations stream error: $e');
+              },
+            );
+        AppLogger.d('[CaregiverSettings] ✅ Invitations subscription active');
+      } catch (e) {
+        AppLogger.w('[CaregiverSettings] Invitations subscription failed: $e');
+      }
     } catch (e) {
-      debugPrint('Realtime subscription setup failed: $e');
+      AppLogger.e(
+        '[CaregiverSettings] Realtime subscription setup failed: $e',
+        e,
+        StackTrace.current,
+      );
     }
   }
 
   void _onRealtimePayload(dynamic payload, String caregiverId) {
     try {
+      AppLogger.d(
+        '[CaregiverSettings] Realtime payload received: ${payload.runtimeType}',
+      );
+
+      // payload từ stream() là List<Map<String, dynamic>>
+      // payload từ .on() cũ là RealtimeMessage với .newRecord
+      if (payload is List) {
+        // stream() API - chỉ reload là đủ
+        AppLogger.i(
+          '[CaregiverSettings] 🔄 Reloading permissions due to stream update',
+        );
+        _scheduleReload();
+        return;
+      }
+
+      // Fallback cho cách cũ (nếu vẫn còn dùng)
       dynamic data;
       if (payload is Map) {
         data =
@@ -114,7 +198,6 @@ class _CaregiverSettingsScreenState extends State<CaregiverSettingsScreen> {
             payload['record'] ??
             payload['payload'];
       } else {
-        // payload shape unknown, try accessing common fields
         try {
           data = payload.newRecord ?? payload.record;
         } catch (_) {
@@ -127,18 +210,33 @@ class _CaregiverSettingsScreenState extends State<CaregiverSettingsScreen> {
                 data['caregiverId']?.toString())
           : null;
 
+      AppLogger.d(
+        '[CaregiverSettings] Realtime event - eventCaregiverId=$eventCaregiverId, currentCaregiverId=$caregiverId',
+      );
+
       if (eventCaregiverId == null || eventCaregiverId == caregiverId) {
+        AppLogger.i(
+          '[CaregiverSettings] 🔄 Reloading permissions due to realtime event',
+        );
         _scheduleReload();
       }
-    } catch (_) {
-      _scheduleReload();
+    } catch (e) {
+      AppLogger.e(
+        '[CaregiverSettings] Realtime payload processing error: $e',
+        e,
+        StackTrace.current,
+      );
     }
   }
 
   void _scheduleReload() {
     _debounceReloadTimer?.cancel();
+    AppLogger.d('[CaregiverSettings] Scheduling reload in 600ms');
     _debounceReloadTimer = Timer(const Duration(milliseconds: 600), () {
-      if (mounted) _loadPermissions();
+      if (mounted) {
+        AppLogger.i('[CaregiverSettings] 📥 Executing debounced reload');
+        _loadPermissions();
+      }
     });
   }
 
@@ -204,12 +302,21 @@ class _CaregiverSettingsScreenState extends State<CaregiverSettingsScreen> {
                   controller: daysController,
                   textAlign: TextAlign.center,
                   keyboardType: TextInputType.number,
+                  inputFormatters: [
+                    FilteringTextInputFormatter.digitsOnly,
+                    LengthLimitingTextInputFormatter(3),
+                  ],
                   decoration: InputDecoration(
                     labelText: 'Số ngày muốn yêu cầu',
+                    hintText: 'Nhập chỉ số (không chữ cái)',
                     filled: true,
                     fillColor: Colors.white,
                     border: OutlineInputBorder(
                       borderRadius: BorderRadius.circular(10),
+                    ),
+                    errorText: _validateDaysInput(
+                      daysController.text,
+                      maxValue,
                     ),
                   ),
                 ),
@@ -217,15 +324,19 @@ class _CaregiverSettingsScreenState extends State<CaregiverSettingsScreen> {
               TextField(
                 controller: reasonController,
                 textAlign: TextAlign.center,
+                maxLines: 2,
+                maxLength: 200,
+                inputFormatters: [LengthLimitingTextInputFormatter(200)],
                 decoration: InputDecoration(
                   labelText: 'Lý do yêu cầu',
+                  hintText: 'Nhập lý do (tối đa 200 ký tự)',
                   filled: true,
                   fillColor: Colors.white,
                   border: OutlineInputBorder(
                     borderRadius: BorderRadius.circular(10),
                   ),
+                  counterText: '',
                 ),
-                maxLines: 2,
               ),
             ],
           ),
@@ -284,6 +395,7 @@ class _CaregiverSettingsScreenState extends State<CaregiverSettingsScreen> {
       if (caregiverId == null) throw Exception('Missing caregiverId');
       final customerId = await _getLinkedCustomerId(caregiverId);
       if (customerId == null || customerId.isEmpty) {
+        AppLogger.w('[CaregiverSettings] Linked customer not found');
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
             content: Text('Không tìm thấy khách hàng được liên kết.'),
@@ -293,6 +405,9 @@ class _CaregiverSettingsScreenState extends State<CaregiverSettingsScreen> {
         return;
       }
 
+      AppLogger.i(
+        '[CaregiverSettings] Requesting permission: type=$type, reason=$reason',
+      );
       final res = await _repo.createPermissionRequest(
         customerId: customerId,
         caregiverId: caregiverId,
@@ -302,16 +417,20 @@ class _CaregiverSettingsScreenState extends State<CaregiverSettingsScreen> {
         reason: reason,
       );
 
+      AppLogger.d('[CaregiverSettings] ✅ Permission request response: $res');
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text('✅ Đã gửi yêu cầu quyền $type'),
           backgroundColor: Colors.green,
         ),
       );
-      debugPrint('✅ Response: $res');
       _loadPermissions();
     } catch (e) {
-      debugPrint('❌ Request permission failed: $e');
+      AppLogger.e(
+        '[CaregiverSettings] Request permission failed: $e',
+        e,
+        StackTrace.current,
+      );
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text('Gửi yêu cầu thất bại: $e'),
@@ -327,6 +446,9 @@ class _CaregiverSettingsScreenState extends State<CaregiverSettingsScreen> {
       if (caregiverId == null) throw Exception('Missing caregiverId');
       final customerId = await _getLinkedCustomerId(caregiverId);
       if (customerId == null || customerId.isEmpty) {
+        AppLogger.w(
+          '[CaregiverSettings] Linked customer not found for days request',
+        );
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
             content: Text('Không tìm thấy khách hàng được liên kết.'),
@@ -336,6 +458,9 @@ class _CaregiverSettingsScreenState extends State<CaregiverSettingsScreen> {
         return;
       }
 
+      AppLogger.i(
+        '[CaregiverSettings] Requesting days permission: type=$type, days=$days, reason=$reason',
+      );
       final res = await _repo.requestDaysPermission(
         customerId: customerId,
         caregiverId: caregiverId,
@@ -344,16 +469,22 @@ class _CaregiverSettingsScreenState extends State<CaregiverSettingsScreen> {
         reason: reason,
       );
 
+      AppLogger.d(
+        '[CaregiverSettings] ✅ Days permission request response: $res',
+      );
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text('✅ Đã gửi yêu cầu $type ($days ngày)'),
           backgroundColor: Colors.green,
         ),
       );
-      debugPrint('✅ Response: $res');
       _loadPermissions();
     } catch (e) {
-      debugPrint('❌ Request days permission failed: $e');
+      AppLogger.e(
+        '[CaregiverSettings] Request days permission failed: $e',
+        e,
+        StackTrace.current,
+      );
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text('Gửi yêu cầu thất bại: $e'),
@@ -365,6 +496,24 @@ class _CaregiverSettingsScreenState extends State<CaregiverSettingsScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final bodyWidget = _loading
+        ? const Center(child: CircularProgressIndicator(color: primaryBlue))
+        : _buildContent();
+
+    if (widget.embedInParent) {
+      return Container(
+        color: bgColor,
+        child: SafeArea(
+          child: Column(
+            children: [
+              _buildEmbeddedHeader('Quyền được chia sẻ'),
+              Expanded(child: bodyWidget),
+            ],
+          ),
+        ),
+      );
+    }
+
     return Scaffold(
       appBar: AppBar(
         centerTitle: true,
@@ -416,23 +565,46 @@ class _CaregiverSettingsScreenState extends State<CaregiverSettingsScreen> {
         ],
       ),
       backgroundColor: bgColor,
-      body: _loading
-          ? const Center(
-              child: CircularProgressIndicator(
-                valueColor: AlwaysStoppedAnimation<Color>(primaryBlue),
-              ),
-            )
-          : _permissions.isEmpty
-          ? _buildEmptyState()
-          : ListView.builder(
-              padding: const EdgeInsets.all(16),
-              itemCount: _permissions.length,
-              itemBuilder: (context, index) {
-                final p = _permissions[index];
-                return _buildPermissionCard(p);
-              },
-            ),
+      body: bodyWidget,
     );
+  }
+
+  Widget _buildEmbeddedHeader(String title) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        border: Border(
+          bottom: BorderSide(
+            color: const Color(0xFFE2E8F0).withValues(alpha: 0.5),
+            width: 0.5,
+          ),
+        ),
+      ),
+      child: Center(
+        child: Text(
+          title,
+          style: const TextStyle(
+            fontSize: 20,
+            fontWeight: FontWeight.w600,
+            color: Color(0xFF007AFF),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildContent() {
+    return _permissions.isEmpty
+        ? _buildEmptyState()
+        : ListView.builder(
+            padding: const EdgeInsets.all(16),
+            itemCount: _permissions.length,
+            itemBuilder: (context, index) {
+              final p = _permissions[index];
+              return _buildPermissionCard(p);
+            },
+          );
   }
 
   Widget _buildEmptyState() => Center(

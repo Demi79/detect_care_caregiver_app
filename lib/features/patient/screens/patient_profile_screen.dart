@@ -1,13 +1,17 @@
+import 'dart:async';
 import 'package:detect_care_caregiver_app/features/patient/screens/update_patient_info_screen.dart';
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
+import 'package:provider/provider.dart';
 
 import 'package:detect_care_caregiver_app/features/patient/models/medical_info.dart';
 import 'package:detect_care_caregiver_app/core/utils/backend_enums.dart';
 import 'package:detect_care_caregiver_app/core/utils/error_handler.dart';
+import 'package:detect_care_caregiver_app/core/utils/logger.dart';
 import 'package:detect_care_caregiver_app/features/patient/data/medical_info_remote_data_source.dart';
 import 'package:detect_care_caregiver_app/features/assignments/data/assignments_remote_data_source.dart';
 import 'package:detect_care_caregiver_app/features/auth/data/auth_storage.dart';
+import 'package:detect_care_caregiver_app/core/providers/permissions_provider.dart';
 
 class PatientProfileScreen extends StatefulWidget {
   final bool embedInParent;
@@ -24,29 +28,181 @@ class _PatientProfileScreenState extends State<PatientProfileScreen> {
   bool _loading = true;
   String? _error;
   String? _customerId;
+  bool _hasPermission = true;
+  Timer? _permissionCheckTimer;
 
   @override
   void initState() {
     super.initState();
     _load();
+    _startPermissionCheck();
+  }
+
+  @override
+  void dispose() {
+    _permissionCheckTimer?.cancel();
+    super.dispose();
+  }
+
+  void _startPermissionCheck() {
+    // Check permission every 2 seconds for faster response
+    _permissionCheckTimer = Timer.periodic(
+      const Duration(seconds: 2),
+      (_) => _checkPermissionAndKick(),
+    );
+  }
+
+  Future<void> _checkPermissionAndKick() async {
+    if (!mounted) return;
+
+    try {
+      final assignDs = AssignmentsRemoteDataSource();
+      final list = await assignDs.listPending(status: 'accepted');
+
+      AppLogger.d(
+        '[PatientProfile] Permission check: found ${list.length} accepted assignments',
+      );
+
+      if (list.isEmpty) {
+        // No assignment - kick user out
+        AppLogger.w('[PatientProfile] ⚠️ No assignment - kicking user out...');
+        if (mounted) {
+          _permissionCheckTimer?.cancel();
+          Navigator.of(context).popUntil((route) => route.isFirst);
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Row(
+                children: [
+                  Icon(Icons.lock_outline, color: Colors.white),
+                  SizedBox(width: 12),
+                  Expanded(
+                    child: Text(
+                      'Quyền truy cập đã bị thu hồi',
+                      style: TextStyle(fontWeight: FontWeight.w600),
+                    ),
+                  ),
+                ],
+              ),
+              backgroundColor: Color(0xFFF59E0B),
+              behavior: SnackBarBehavior.floating,
+              duration: Duration(seconds: 4),
+            ),
+          );
+        }
+        return;
+      }
+
+      // Check profileView permission for current customer
+      final customerId = list.first.customerId;
+      final permProvider = Provider.of<PermissionsProvider>(
+        context,
+        listen: false,
+      );
+      final hasProfileView = permProvider.hasPermission(
+        customerId,
+        'profile_view',
+      );
+
+      AppLogger.d(
+        '[PatientProfile] profileView permission for $customerId: $hasProfileView',
+      );
+
+      if (!hasProfileView) {
+        // Profile view permission revoked - kick user out
+        AppLogger.w(
+          '[PatientProfile] ⚠️ profileView=false - kicking user out...',
+        );
+        if (mounted) {
+          _permissionCheckTimer?.cancel();
+          Navigator.of(context).popUntil((route) => route.isFirst);
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Row(
+                children: [
+                  Icon(Icons.lock_outline, color: Colors.white),
+                  SizedBox(width: 12),
+                  Expanded(
+                    child: Text(
+                      'Quyền xem hồ sơ bệnh nhân đã bị thu hồi',
+                      style: TextStyle(fontWeight: FontWeight.w600),
+                    ),
+                  ),
+                ],
+              ),
+              backgroundColor: Color(0xFFF59E0B),
+              behavior: SnackBarBehavior.floating,
+              duration: Duration(seconds: 4),
+            ),
+          );
+        }
+      }
+    } catch (e) {
+      AppLogger.e(
+        '[PatientProfile] Permission check error: $e',
+        e,
+        StackTrace.current,
+      );
+      // Ignore errors during background check
+    }
   }
 
   Future<void> _load() async {
     setState(() {
       _loading = true;
       _error = null;
+      _hasPermission = true;
     });
     try {
       // Resolve linked customer (patient) id from assignments if present
       String? customerId;
+      bool hasAcceptedAssignment = false;
+
       try {
         final assignDs = AssignmentsRemoteDataSource();
         final list = await assignDs.listPending(status: 'accepted');
-        if (list.isNotEmpty) customerId = list.first.customerId;
+        if (list.isNotEmpty) {
+          customerId = list.first.customerId;
+          hasAcceptedAssignment = true;
+        }
       } catch (_) {}
+
+      // If no accepted assignment but embedInParent is false (standalone mode),
+      // user accessed from settings and needs permission
+      if (!hasAcceptedAssignment && !widget.embedInParent) {
+        setState(() {
+          _hasPermission = false;
+          _error =
+              'Bạn không có quyền xem thông tin bệnh nhân. Hãy nhờ bệnh nhân cấp quyền truy cập trong "Quyền được chia sẻ".';
+        });
+        return;
+      }
+
       customerId ??= await AuthStorage.getUserId();
       if (customerId == null || customerId.isEmpty) {
         throw Exception('No customer id available');
+      }
+
+      // Check profileView permission
+      final permProvider = Provider.of<PermissionsProvider>(
+        context,
+        listen: false,
+      );
+      final hasProfileView = permProvider.hasPermission(
+        customerId,
+        'profile_view',
+      );
+
+      AppLogger.d(
+        '[PatientProfile] _load: profileView=$hasProfileView for customerId=$customerId',
+      );
+
+      if (!hasProfileView) {
+        setState(() {
+          _hasPermission = false;
+          _error =
+              'Bạn không có quyền xem hồ sơ bệnh nhân. Quyền "Xem hồ sơ bệnh nhân" đã bị thu hồi.';
+        });
+        return;
       }
 
       _customerId = customerId;
@@ -121,14 +277,20 @@ class _PatientProfileScreenState extends State<PatientProfileScreen> {
               child: Column(
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
-                  const Icon(
-                    Icons.error_outline,
+                  Icon(
+                    _hasPermission
+                        ? Icons.cloud_off_outlined
+                        : Icons.lock_outline,
                     size: 64,
-                    color: Color(0xFFEF4444),
+                    color: _hasPermission
+                        ? const Color(0xFF94A3B8)
+                        : const Color(0xFFF59E0B),
                   ),
                   const SizedBox(height: 16),
                   Text(
-                    'Lỗi tải dữ liệu',
+                    _hasPermission
+                        ? 'Không thể tải dữ liệu'
+                        : 'Không có quyền truy cập',
                     style: TextStyle(
                       fontSize: 18,
                       fontWeight: FontWeight.w600,
@@ -147,7 +309,9 @@ class _PatientProfileScreenState extends State<PatientProfileScreen> {
                     icon: const Icon(Icons.refresh),
                     label: const Text('Thử lại'),
                     style: ElevatedButton.styleFrom(
-                      backgroundColor: const Color(0xFF3B82F6),
+                      backgroundColor: _hasPermission
+                          ? const Color(0xFF3B82F6)
+                          : const Color(0xFFF59E0B),
                       foregroundColor: Colors.white,
                       padding: const EdgeInsets.symmetric(
                         horizontal: 24,
@@ -164,7 +328,14 @@ class _PatientProfileScreenState extends State<PatientProfileScreen> {
     if (widget.embedInParent) {
       return Container(
         color: const Color(0xFFF8FAFC),
-        child: SafeArea(child: bodyWidget),
+        child: SafeArea(
+          child: Column(
+            children: [
+              _buildEmbeddedHeader('Thông tin bệnh nhân'),
+              Expanded(child: bodyWidget),
+            ],
+          ),
+        ),
       );
     }
 
@@ -202,7 +373,8 @@ class _PatientProfileScreenState extends State<PatientProfileScreen> {
         ),
       ),
       body: bodyWidget,
-      floatingActionButton: (!_loading && _data != null)
+      floatingActionButton:
+          (!_loading && _data != null && !widget.embedInParent)
           ? FloatingActionButton.extended(
               onPressed: _goToEdit,
               backgroundColor: const Color(0xFF3B82F6),
@@ -210,6 +382,31 @@ class _PatientProfileScreenState extends State<PatientProfileScreen> {
               label: const Text('Chỉnh sửa'),
             )
           : null,
+    );
+  }
+
+  Widget _buildEmbeddedHeader(String title) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        border: Border(
+          bottom: BorderSide(
+            color: const Color(0xFFE2E8F0).withValues(alpha: 0.5),
+            width: 0.5,
+          ),
+        ),
+      ),
+      child: Center(
+        child: Text(
+          title,
+          style: const TextStyle(
+            fontSize: 20,
+            fontWeight: FontWeight.w600,
+            color: Color(0xFF007AFF),
+          ),
+        ),
+      ),
     );
   }
 
@@ -232,6 +429,28 @@ class _PatientProfileScreenState extends State<PatientProfileScreen> {
 
             // Thói quen sinh hoạt Card
             _buildHabitsCard(habits),
+            const SizedBox(height: 16),
+
+            // Edit button when embedded in parent
+            if (widget.embedInParent && !_loading && _data != null)
+              Align(
+                alignment: Alignment.center,
+                child: ElevatedButton.icon(
+                  onPressed: _goToEdit,
+                  icon: const Icon(Icons.edit),
+                  label: const Text('Chỉnh sửa'),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: const Color(0xFF3B82F6),
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 32,
+                      vertical: 12,
+                    ),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                  ),
+                ),
+              ),
             const SizedBox(height: 100),
           ],
         ),

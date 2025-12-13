@@ -1,6 +1,8 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:detect_care_caregiver_app/features/patient/models/medical_info.dart';
 import 'package:detect_care_caregiver_app/features/patient/data/medical_info_upsert_service.dart';
+import 'package:detect_care_caregiver_app/features/assignments/data/assignments_remote_data_source.dart';
 import 'package:detect_care_caregiver_app/core/utils/backend_enums.dart';
 
 class UpdatePatientInfoScreen extends StatefulWidget {
@@ -23,6 +25,7 @@ class UpdatePatientInfoScreen extends StatefulWidget {
 class _UpdatePatientInfoScreenState extends State<UpdatePatientInfoScreen> {
   List<HabitFormData> _habits = [];
   bool _saving = false;
+  Timer? _permissionCheckTimer;
 
   @override
   void initState() {
@@ -31,6 +34,68 @@ class _UpdatePatientInfoScreenState extends State<UpdatePatientInfoScreen> {
     _habits = (widget.initialHabits ?? [])
         .map((h) => HabitFormData.fromHabit(h))
         .toList();
+    _startPermissionCheck();
+  }
+
+  @override
+  void dispose() {
+    _permissionCheckTimer?.cancel();
+    for (final h in _habits) {
+      h.dispose();
+    }
+    super.dispose();
+  }
+
+  void _startPermissionCheck() {
+    // Check permission every 2 seconds for faster response
+    _permissionCheckTimer = Timer.periodic(
+      const Duration(seconds: 2),
+      (_) => _checkPermissionAndKick(),
+    );
+  }
+
+  Future<void> _checkPermissionAndKick() async {
+    if (!mounted) return;
+
+    try {
+      final assignDs = AssignmentsRemoteDataSource();
+      final list = await assignDs.listPending(status: 'accepted');
+
+      print(
+        '[UpdatePatient] Permission check: found ${list.length} accepted assignments',
+      );
+
+      if (list.isEmpty) {
+        // Permission revoked - kick user out
+        print('[UpdatePatient] ⚠️ Permission revoked! Kicking user out...');
+        if (mounted) {
+          _permissionCheckTimer?.cancel();
+          Navigator.of(context).popUntil((route) => route.isFirst);
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Row(
+                children: [
+                  Icon(Icons.lock_outline, color: Colors.white),
+                  SizedBox(width: 12),
+                  Expanded(
+                    child: Text(
+                      'Quyền truy cập đã bị thu hồi',
+                      style: TextStyle(fontWeight: FontWeight.w600),
+                    ),
+                  ),
+                ],
+              ),
+              backgroundColor: Color(0xFFF59E0B),
+              behavior: SnackBarBehavior.floating,
+              duration: Duration(seconds: 4),
+            ),
+          );
+        }
+      }
+    } catch (e) {
+      print('[UpdatePatient] Permission check error: $e');
+      // Ignore errors during background check
+    }
   }
 
   void _addHabit() => setState(() => _habits.add(HabitFormData()));

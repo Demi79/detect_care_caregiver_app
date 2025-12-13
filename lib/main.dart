@@ -40,6 +40,7 @@ import 'package:detect_care_caregiver_app/features/setting/data/settings_reposit
 import 'package:detect_care_caregiver_app/features/setting/providers/settings_provider.dart';
 import 'package:detect_care_caregiver_app/features/setting/screens/settings_screen.dart';
 
+import 'package:detect_care_caregiver_app/core/providers/permissions_provider.dart';
 import 'package:detect_care_caregiver_app/firebase_options.dart';
 import 'package:detect_care_caregiver_app/services/notification_manager.dart';
 import 'package:detect_care_caregiver_app/widgets/auth_gate.dart';
@@ -296,6 +297,7 @@ Future<void> main() async {
       providers: [
         ChangeNotifierProvider(create: (_) => ThemeProvider()),
         ChangeNotifierProvider(create: (_) => AuthProvider(authRepo)),
+        ChangeNotifierProvider(create: (_) => PermissionsProvider()),
         ChangeNotifierProvider(
           create: (_) => HealthOverviewProvider(healthOverviewRepo),
         ),

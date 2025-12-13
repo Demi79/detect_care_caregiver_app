@@ -170,7 +170,14 @@ class _ProfileScreenState extends State<ProfileScreen> {
     if (widget.embedInParent) {
       return Container(
         color: backgroundColor,
-        child: SafeArea(child: bodyWidget),
+        child: SafeArea(
+          child: Column(
+            children: [
+              _buildEmbeddedHeader('Hồ sơ cá nhân'),
+              Expanded(child: bodyWidget),
+            ],
+          ),
+        ),
       );
     }
 
@@ -208,6 +215,31 @@ class _ProfileScreenState extends State<ProfileScreen> {
         ),
       ),
       body: bodyWidget,
+    );
+  }
+
+  Widget _buildEmbeddedHeader(String title) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        border: Border(
+          bottom: BorderSide(
+            color: const Color(0xFFE2E8F0).withValues(alpha: 0.5),
+            width: 0.5,
+          ),
+        ),
+      ),
+      child: Center(
+        child: Text(
+          title,
+          style: const TextStyle(
+            fontSize: 20,
+            fontWeight: FontWeight.w600,
+            color: Color(0xFF007AFF),
+          ),
+        ),
+      ),
     );
   }
 

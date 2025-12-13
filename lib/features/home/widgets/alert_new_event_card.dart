@@ -200,7 +200,13 @@ class _AlertEventCardState extends State<AlertEventCard>
 
   String _getTimeAgo() {
     final now = DateTime.now();
+    final raw = widget.createdAt ?? widget.timestamp;
+
     final source = (widget.createdAt ?? widget.timestamp).toLocal();
+    AppLogger.d(
+      '[TimeAgo] createdAt=${widget.createdAt} timestamp=${widget.timestamp} now=$now raw=$raw source(local)=$source diff=${now.difference(source)}',
+    );
+
     final difference = now.difference(source);
 
     if (difference.inMinutes < 1) {
@@ -641,77 +647,78 @@ class _AlertEventCardState extends State<AlertEventCard>
                       shadowColor: Colors.black26,
                     ),
                   ),
+
                   // Snooze with duration selection and countdown badge
-                  SizedBox(
-                    width: 48,
-                    height: 48,
-                    child: Stack(
-                      clipBehavior: Clip.none,
-                      children: [
-                        Positioned.fill(
-                          child: Center(
-                            child: PopupMenuButton<int>(
-                              icon: Icon(
-                                Icons.snooze,
-                                size: 20,
-                                color: _isSnoozed
-                                    ? Colors.deepOrange
-                                    : Colors.black54,
-                              ),
-                              onSelected: (secs) => _snoozeNow(secs),
-                              itemBuilder: (ctx) => [
-                                const PopupMenuItem<int>(
-                                  value: 30,
-                                  child: Text(L10nVi.snooze30s),
-                                ),
-                                const PopupMenuItem<int>(
-                                  value: 60,
-                                  child: Text(L10nVi.snooze1m),
-                                ),
-                                const PopupMenuItem<int>(
-                                  value: 300,
-                                  child: Text(L10nVi.snooze5m),
-                                ),
-                              ],
-                            ),
-                          ),
-                        ),
-                        if (_isSnoozed && _snoozeRemaining != null)
-                          Positioned(
-                            top: -8,
-                            right: -8,
-                            child: ScaleTransition(
-                              scale: _badgeScaleAnimation,
-                              child: Container(
-                                padding: const EdgeInsets.symmetric(
-                                  horizontal: 8,
-                                  vertical: 4,
-                                ),
-                                decoration: BoxDecoration(
-                                  color: Colors.deepOrange,
-                                  borderRadius: BorderRadius.circular(14),
-                                  boxShadow: const [
-                                    BoxShadow(
-                                      color: Colors.black26,
-                                      blurRadius: 4,
-                                      offset: Offset(0, 2),
-                                    ),
-                                  ],
-                                ),
-                                child: Text(
-                                  _formatRemaining(_snoozeRemaining!),
-                                  style: const TextStyle(
-                                    color: Colors.white,
-                                    fontSize: 11,
-                                    fontWeight: FontWeight.w700,
-                                  ),
-                                ),
-                              ),
-                            ),
-                          ),
-                      ],
-                    ),
-                  ),
+                  // SizedBox(
+                  //   width: 48,
+                  //   height: 48,
+                  //   child: Stack(
+                  //     clipBehavior: Clip.none,
+                  //     children: [
+                  //       Positioned.fill(
+                  //         child: Center(
+                  //           child: PopupMenuButton<int>(
+                  //             icon: Icon(
+                  //               Icons.snooze,
+                  //               size: 20,
+                  //               color: _isSnoozed
+                  //                   ? Colors.deepOrange
+                  //                   : Colors.black54,
+                  //             ),
+                  //             onSelected: (secs) => _snoozeNow(secs),
+                  //             itemBuilder: (ctx) => [
+                  //               const PopupMenuItem<int>(
+                  //                 value: 30,
+                  //                 child: Text(L10nVi.snooze30s),
+                  //               ),
+                  //               const PopupMenuItem<int>(
+                  //                 value: 60,
+                  //                 child: Text(L10nVi.snooze1m),
+                  //               ),
+                  //               const PopupMenuItem<int>(
+                  //                 value: 300,
+                  //                 child: Text(L10nVi.snooze5m),
+                  //               ),
+                  //             ],
+                  //           ),
+                  //         ),
+                  //       ),
+                  //       if (_isSnoozed && _snoozeRemaining != null)
+                  //         Positioned(
+                  //           top: -8,
+                  //           right: -8,
+                  //           child: ScaleTransition(
+                  //             scale: _badgeScaleAnimation,
+                  //             child: Container(
+                  //               padding: const EdgeInsets.symmetric(
+                  //                 horizontal: 8,
+                  //                 vertical: 4,
+                  //               ),
+                  //               decoration: BoxDecoration(
+                  //                 color: Colors.deepOrange,
+                  //                 borderRadius: BorderRadius.circular(14),
+                  //                 boxShadow: const [
+                  //                   BoxShadow(
+                  //                     color: Colors.black26,
+                  //                     blurRadius: 4,
+                  //                     offset: Offset(0, 2),
+                  //                   ),
+                  //                 ],
+                  //               ),
+                  //               child: Text(
+                  //                 _formatRemaining(_snoozeRemaining!),
+                  //                 style: const TextStyle(
+                  //                   color: Colors.white,
+                  //                   fontSize: 11,
+                  //                   fontWeight: FontWeight.w700,
+                  //                 ),
+                  //               ),
+                  //             ),
+                  //           ),
+                  //         ),
+                  //     ],
+                  //   ),
+                  // ),
                 ],
               ),
             ),

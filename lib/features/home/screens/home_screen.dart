@@ -3,8 +3,10 @@ import 'dart:developer' as dev;
 
 import 'package:detect_care_caregiver_app/core/events/app_events.dart';
 import 'package:detect_care_caregiver_app/core/network/api_client.dart';
+import 'package:detect_care_caregiver_app/core/providers/permissions_provider.dart';
 import 'package:detect_care_caregiver_app/core/theme/app_theme.dart';
 import 'package:detect_care_caregiver_app/core/widgets/custom_bottom_nav_bar.dart';
+import 'package:detect_care_caregiver_app/core/services/permissions_service.dart';
 import 'package:detect_care_caregiver_app/features/home/screens/low_confidence_events_screen.dart';
 import 'package:detect_care_caregiver_app/features/assignments/screens/assignments_screen.dart';
 import 'package:detect_care_caregiver_app/features/auth/data/auth_storage.dart';
@@ -20,6 +22,7 @@ import 'package:detect_care_caregiver_app/features/home/screens/high_confidence_
 import 'package:detect_care_caregiver_app/features/home/service/event_service.dart';
 import 'package:detect_care_caregiver_app/features/notification/screens/notification_screen.dart';
 import 'package:detect_care_caregiver_app/features/patient/screens/patient_profile_screen.dart';
+import 'package:detect_care_caregiver_app/features/patient/screens/sleep_checkin_screen.dart';
 import 'package:detect_care_caregiver_app/features/profile/screens/profile_screen.dart';
 import 'package:detect_care_caregiver_app/features/search/screens/search_screen.dart';
 import 'package:detect_care_caregiver_app/features/setting/screens/settings_screen.dart';
@@ -71,6 +74,11 @@ class _HomeScreenState extends State<HomeScreen>
   void initState() {
     super.initState();
 
+    // Initialize PermissionsProvider for realtime permission updates
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      context.read<PermissionsProvider>().initialize();
+    });
+
     _eventRepository = EventRepository(
       EventService(ApiClient(tokenProvider: AuthStorage.getAccessToken)),
     );
@@ -92,6 +100,9 @@ class _HomeScreenState extends State<HomeScreen>
     _refreshLogs();
     _loadNotifications();
     _loadNotificationCount();
+
+    // Initialize PermissionsService for realtime permission updates
+    PermissionsService().initialize();
 
     _eventsChangedSub = AppEvents.instance.eventsChanged.listen((_) {
       if (!mounted) return;
@@ -378,6 +389,30 @@ class _HomeScreenState extends State<HomeScreen>
               ),
             ),
           ),
+          // Sleep checkin icon
+          Semantics(
+            button: true,
+            label: 'Giờ ngủ',
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 6.0),
+              child: IconButton(
+                tooltip: 'Giờ ngủ',
+                onPressed: () {
+                  Navigator.of(context).push(
+                    MaterialPageRoute(
+                      builder: (_) => const SleepCheckinScreen(),
+                    ),
+                  );
+                },
+                icon: const Icon(
+                  Icons.bedtime_outlined,
+                  color: AppTheme.primaryBlue,
+                  size: 24,
+                ),
+                splashRadius: 20,
+              ),
+            ),
+          ),
           // Invoice icon with badge
           // Stack(
           //   alignment: Alignment.center,
@@ -620,7 +655,7 @@ class _HomeScreenState extends State<HomeScreen>
           if (user != null &&
               (user.role.toLowerCase() == 'caregiver' ||
                   user.role.toLowerCase() == 'carer')) {
-            return const CaregiverSettingsScreen();
+            return const CaregiverSettingsScreen(embedInParent: true);
           }
         } catch (_) {}
         return const AssignmentsScreen();

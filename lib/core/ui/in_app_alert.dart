@@ -188,7 +188,8 @@ class InAppAlert {
                       eventId: e.eventId,
                       eventType: e.eventType,
                       // patientName: "Bệnh nhân XYZ",
-                      timestamp: e.detectedAt ?? e.createdAt ?? DateTime.now(),
+                      timestamp: e.createdAt ?? e.detectedAt ?? DateTime.now(),
+                      createdAt: e.createdAt,
                       // location: "Phòng ngủ",
                       severity: _mapSeverityFrom(e),
                       description: (e.eventDescription?.isNotEmpty ?? false)

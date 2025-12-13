@@ -89,6 +89,8 @@ class _EditPermissionsSheetState extends State<EditPermissionsSheet> {
                 child: ElevatedButton(
                   onPressed: () {
                     final sp = SharedPermissions(
+                      caregiverId: widget.assignment.caregiverId,
+                      customerId: widget.assignment.customerId,
                       streamView: _streamView,
                       alertRead: _alertRead,
                       alertAck: _alertAck,

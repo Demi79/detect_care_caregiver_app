@@ -236,9 +236,10 @@ class FilterBar extends StatelessWidget {
     DateTimeRange fallback,
   ) async {
     final DateTime today = DateTime.now();
+    final DateTime threeAgo = today.subtract(const Duration(days: 2));
     final DateTimeRange? picked = await showDateRangePicker(
       context: context,
-      firstDate: DateTime(2023, 1, 1),
+      firstDate: DateTime(threeAgo.year, threeAgo.month, threeAgo.day),
       lastDate: DateTime(today.year, today.month, today.day),
       initialDateRange: initial,
       locale: const Locale('vi', 'VN'),
@@ -276,11 +277,12 @@ class FilterBar extends StatelessWidget {
     DateTimeRange fallback,
   ) async {
     final today = DateTime.now();
+    final DateTime threeAgo = today.subtract(const Duration(days: 2));
 
     final DateTime? picked = await showDatePicker(
       context: context,
       initialDate: initial.start,
-      firstDate: DateTime(2023, 1, 1),
+      firstDate: DateTime(threeAgo.year, threeAgo.month, threeAgo.day),
       lastDate: DateTime(today.year, today.month, today.day),
       locale: const Locale('vi', 'VN'),
       builder: (context, child) {
