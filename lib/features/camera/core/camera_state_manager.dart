@@ -11,9 +11,7 @@ import 'camera_helpers.dart';
 import 'camera_models.dart';
 import 'camera_service.dart';
 
-/// State management for camera functionality
 class CameraStateManager {
-  // ... existing code ...
   bool _isDisposed = false;
   bool get isDisposed => _isDisposed;
   final TextEditingController urlController = TextEditingController();
@@ -224,11 +222,10 @@ class CameraStateManager {
     // tồn tại nhưng playback bị tạm dừng do thay đổi UI/orientation.
     if (newFullscreen && _controller != null) {
       try {
-        _controller!.play();
-        // Log playback state shortly after trying to resume (async)
-        // Avoid unhandled exceptions from isPlaying() if the controller
-        // is not yet initialized by the native side. Attach a catchError
-        // so any failure is swallowed and doesn't crash the UI.
+        if (_controller!.value.isInitialized == true) {
+          _controller!.play();
+        }
+
         cameraService
             .safeIsPlaying(_controller)
             .then((playing) {
