@@ -9,20 +9,42 @@ enum StreamProtocol { rtsp, hls, mp4, webrtc, unknown }
 
 /// Factory for creating appropriate camera player based on URL
 class CameraPlayerFactory {
-  /// Detect protocol from URL
+  /// Detect protocol from URL with more robust parsing
   static StreamProtocol detectProtocol(String url) {
-    if (url.startsWith('rtsp://') || url.startsWith('rtsps://')) {
+    final raw = url.trim();
+    final lower = raw.toLowerCase();
+
+    // RTSP explicit
+    if (lower.startsWith('rtsp://') || lower.startsWith('rtsps://')) {
       return StreamProtocol.rtsp;
     }
-    if (url.contains('.m3u8')) {
-      return StreamProtocol.hls;
-    }
-    if (url.contains('.mp4')) {
-      return StreamProtocol.mp4;
-    }
-    if (url.startsWith('webrtc://') || url.startsWith('wss://')) {
+
+    // strong WebRTC scheme
+    if (lower.startsWith('webrtc://')) return StreamProtocol.webrtc;
+
+    final uri = Uri.tryParse(raw);
+    final path = (uri?.path ?? raw).toLowerCase();
+
+    // HLS/MP4 by path extension (handle querystrings since we check path)
+    if (path.endsWith('.m3u8')) return StreamProtocol.hls;
+    if (path.endsWith('.mp4')) return StreamProtocol.mp4;
+
+    // WebRTC detection by path (avoid treating every wss:// as webrtc)
+    final looksLikeWebrtcPath =
+        path.contains('/webrtc') || path.contains('webrtc/');
+    final looksLikeWebrtcPage =
+        lower.contains('/pages/player/webrtc') ||
+        lower.contains('/player/webrtc/');
+    if (looksLikeWebrtcPath || looksLikeWebrtcPage) {
       return StreamProtocol.webrtc;
     }
+
+    // If scheme is wss and path contains hints, mark webrtc; otherwise unknown
+    if (lower.startsWith('wss://') &&
+        (looksLikeWebrtcPath || lower.contains('webrtc'))) {
+      return StreamProtocol.webrtc;
+    }
+
     return StreamProtocol.unknown;
   }
 
@@ -30,9 +52,7 @@ class CameraPlayerFactory {
   static ICameraPlayer createPlayer(String url) {
     final protocol = detectProtocol(url);
 
-    AppLogger.i(
-      '[CameraPlayerFactory] Creating player - protocol: $protocol, url: $url',
-    );
+    AppLogger.i('[CameraPlayerFactory] Creating player - $protocol, url=$url');
 
     switch (protocol) {
       case StreamProtocol.rtsp:
@@ -43,14 +63,20 @@ class CameraPlayerFactory {
         return HlsVideoPlayer(url);
 
       case StreamProtocol.webrtc:
-        // Parse WebRTC URL format: webrtc://roomId or wss://signalUrl/roomId
         final roomId = _extractWebrtcRoomId(url);
         return WebrtcPlayer(roomId: roomId, signalUrl: url);
 
       case StreamProtocol.unknown:
-        // Default to HLS player for unknown protocols
+        final u = Uri.tryParse(url);
+        final scheme = (u?.scheme ?? '').toLowerCase();
+        if (scheme == 'http' || scheme == 'https') {
+          AppLogger.w(
+            '[CameraPlayerFactory] Unknown HTTP stream; trying HlsVideoPlayer as fallback',
+          );
+          return HlsVideoPlayer(url);
+        }
         AppLogger.w(
-          '[CameraPlayerFactory] Unknown protocol, defaulting to HLS player',
+          '[CameraPlayerFactory] Unsupported/unknown stream scheme; fallback to HlsVideoPlayer may fail',
         );
         return HlsVideoPlayer(url);
     }
@@ -58,60 +84,82 @@ class CameraPlayerFactory {
 
   /// Create WebRTC player from camera entry
   static WebrtcPlayer? createWebrtcPlayer(CameraEntry camera) {
-    if (camera.webrtcUrl == null || camera.webrtcUrl!.isEmpty) {
-      return null;
-    }
+    final s = camera.webrtcUrl?.trim();
+    if (s == null || s.isEmpty) return null;
 
-    final roomId = _extractWebrtcRoomId(camera.webrtcUrl!);
+    final roomId = _extractWebrtcRoomId(s);
     AppLogger.i(
-      '[CameraPlayerFactory] Creating WebRTC player for room: $roomId',
+      '[CameraPlayerFactory] Creating WebRTC player for room=$roomId',
     );
-
-    return WebrtcPlayer(roomId: roomId, signalUrl: camera.webrtcUrl!);
+    return WebrtcPlayer(roomId: roomId, signalUrl: s);
   }
 
   /// Extract room ID from WebRTC URL
   static String _extractWebrtcRoomId(String url) {
-    // Handle formats like:
-    // - webrtc://room-123
-    // - wss://signal.example.com/room-123
-    // - wss://signal.example.com:443/room-123
-
     try {
-      if (url.startsWith('webrtc://')) {
-        return url.replaceFirst('webrtc://', '').split('?').first;
+      final raw = url.trim();
+
+      if (raw.toLowerCase().startsWith('webrtc://')) {
+        return raw.substring('webrtc://'.length).split('?').first;
       }
 
-      final uri = Uri.tryParse(url);
-      if (uri != null && uri.pathSegments.isNotEmpty) {
-        return uri.pathSegments.last;
+      final uri = Uri.tryParse(raw);
+      if (uri == null) return 'unknown-room';
+
+      // Prefer query params commonly used by signaling servers
+      const keys = ['room', 'roomId', 'stream', 'streamId', 'id'];
+      for (final k in keys) {
+        final v = uri.queryParameters[k];
+        if (v != null && v.trim().isNotEmpty) return v.trim();
+      }
+
+      final segments = uri.pathSegments;
+      if (segments.isNotEmpty) {
+        final idx = segments.indexWhere((s) => s.toLowerCase() == 'webrtc');
+        if (idx >= 0 && idx < segments.length - 1) {
+          return segments.sublist(idx + 1).join('/');
+        }
+        return segments.last;
       }
     } catch (e) {
       AppLogger.w('[CameraPlayerFactory] Cannot extract room ID: $e');
     }
-
     return 'unknown-room';
   }
 
   /// Get best available stream URL from camera entry
-  /// Priority: HLS > MP4 > RTSP > generic URL
-  static String? getBestStreamUrl(CameraEntry camera) {
-    // HLS is stable for streaming over internet
-    if (camera.hlsUrl != null && camera.hlsUrl!.isNotEmpty) {
+  /// Priority: HLS > MP4 > RTSP > generic (camera.url)
+  /// If preferWebrtc==true, attempt WebRTC URL first.
+  static String? getBestStreamUrl(
+    CameraEntry camera, {
+    bool preferWebrtc = false,
+  }) {
+    if (preferWebrtc) {
+      final webrtc = camera.webrtcUrl?.trim();
+      if (webrtc != null && webrtc.isNotEmpty) {
+        AppLogger.i('[CameraPlayerFactory] Using WebRTC stream');
+        return webrtc;
+      }
+    }
+
+    final hls = camera.hlsUrl?.trim();
+    if (hls != null && hls.isNotEmpty) {
       AppLogger.i('[CameraPlayerFactory] Using HLS stream');
-      return camera.hlsUrl;
+      return hls;
     }
 
-    // RTSP for local/internal streams
-    if (camera.rtspUrl != null && camera.rtspUrl!.isNotEmpty) {
+    // camera.url may itself be an mp4/hls/rtsp style; detect it
+    final generic = camera.url.trim();
+    if (generic.isNotEmpty) {
+      final p = detectProtocol(generic);
+      AppLogger.i('[CameraPlayerFactory] Using generic stream (detected=$p)');
+      return generic;
+    }
+
+    final rtsp = camera.rtspUrl?.trim();
+    if (rtsp != null && rtsp.isNotEmpty) {
       AppLogger.i('[CameraPlayerFactory] Using RTSP stream');
-      return camera.rtspUrl;
-    }
-
-    // Generic URL as fallback
-    if (camera.url.isNotEmpty) {
-      AppLogger.i('[CameraPlayerFactory] Using generic URL');
-      return camera.url;
+      return rtsp;
     }
 
     AppLogger.w('[CameraPlayerFactory] No stream URL available');
@@ -119,21 +167,22 @@ class CameraPlayerFactory {
   }
 
   /// Get all available stream URLs from camera entry for fallback
-  static List<String> getAllStreamUrls(CameraEntry camera) {
+  static List<String> getAllStreamUrls(
+    CameraEntry camera, {
+    bool includeWebrtc = false,
+  }) {
     final urls = <String>[];
 
-    // Add in priority order: HLS > RTSP > generic
-    if (camera.hlsUrl != null && camera.hlsUrl!.isNotEmpty) {
-      urls.add(camera.hlsUrl!);
+    void add(String? u) {
+      final v = u?.trim();
+      if (v == null || v.isEmpty) return;
+      if (!urls.contains(v)) urls.add(v);
     }
 
-    if (camera.rtspUrl != null && camera.rtspUrl!.isNotEmpty) {
-      urls.add(camera.rtspUrl!);
-    }
-
-    if (camera.url.isNotEmpty && !urls.contains(camera.url)) {
-      urls.add(camera.url);
-    }
+    if (includeWebrtc) add(camera.webrtcUrl);
+    add(camera.hlsUrl);
+    add(camera.url);
+    add(camera.rtspUrl);
 
     return urls;
   }

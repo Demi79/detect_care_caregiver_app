@@ -1,11 +1,8 @@
 import 'dart:async';
 
-import 'package:flutter/foundation.dart';
-import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
-
 import 'package:detect_care_caregiver_app/core/utils/logger.dart';
 import 'package:detect_care_caregiver_app/features/auth/data/auth_storage.dart';
+import 'package:detect_care_caregiver_app/features/camera/core/camera_stream_helper.dart';
 import 'package:detect_care_caregiver_app/features/camera/models/camera_entry.dart';
 import 'package:detect_care_caregiver_app/features/camera/screens/camera_timeline_screen.dart';
 import 'package:detect_care_caregiver_app/features/camera/screens/live_camera_screen.dart';
@@ -17,6 +14,9 @@ import 'package:detect_care_caregiver_app/features/camera/widgets/components/cam
 import 'package:detect_care_caregiver_app/features/camera/widgets/components/camera_views.dart';
 import 'package:detect_care_caregiver_app/features/camera/widgets/components/controls_bar.dart';
 import 'package:detect_care_caregiver_app/features/subscription/data/service_package_api.dart';
+import 'package:flutter/foundation.dart';
+import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 
 enum _CameraHomeMenuOption {
   toggleView,
@@ -84,11 +84,7 @@ class _LiveCameraHomeScreenState extends State<LiveCameraHomeScreen>
   Future<void> _playCamera(CameraEntry camera) async {
     if (!mounted) return;
 
-    final playUrl = camera.rtspUrl?.isNotEmpty == true
-        ? camera.rtspUrl!
-        : camera.hlsUrl?.isNotEmpty == true
-        ? camera.hlsUrl!
-        : camera.url;
+    final playUrl = CameraStreamHelper.getBestUrl(camera) ?? '';
 
     AppLogger.api(
       '▶️ Mở LiveCameraScreen với cameraId=${camera.id}, playUrl=$playUrl',
@@ -117,7 +113,7 @@ class _LiveCameraHomeScreenState extends State<LiveCameraHomeScreen>
   Future<void> _openCameraTimeline(CameraEntry camera) async {
     if (!mounted) return;
     await _state.refreshCameraThumb(camera);
-    await Navigator.of(context, rootNavigator: true).push(
+    await Navigator.of(context).push(
       MaterialPageRoute(
         builder: (_) => CameraTimelineScreen(camera: camera),
         settings: const RouteSettings(name: 'camera_timeline_screen'),

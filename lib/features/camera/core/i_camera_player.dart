@@ -23,6 +23,4 @@ abstract class ICameraPlayer {
 
   /// Get protocol type (rtsp, hls, mp4, webrtc)
   String get protocol;
-
-  Future<String?> takeSnapshot();
 }
