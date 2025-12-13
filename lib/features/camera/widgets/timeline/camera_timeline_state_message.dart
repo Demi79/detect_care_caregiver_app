@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-
 import 'camera_timeline_components.dart';
 
 class CameraTimelineStateMessage extends StatelessWidget {

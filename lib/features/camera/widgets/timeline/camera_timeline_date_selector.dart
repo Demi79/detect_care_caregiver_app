@@ -1,12 +1,11 @@
 import 'package:flutter/material.dart';
-
 import 'camera_timeline_components.dart';
 import 'camera_timeline_zoom_control.dart';
 
 class CameraTimelineDateSelector extends StatelessWidget {
   final String formattedDay;
-  final VoidCallback onPrev;
-  final VoidCallback onNext;
+  final VoidCallback? onPrev;
+  final VoidCallback? onNext;
   final VoidCallback? onMenu;
   final bool compact;
   final bool showZoom;
@@ -16,8 +15,8 @@ class CameraTimelineDateSelector extends StatelessWidget {
   const CameraTimelineDateSelector({
     super.key,
     required this.formattedDay,
-    required this.onPrev,
-    required this.onNext,
+    this.onPrev,
+    this.onNext,
     this.onMenu,
     this.compact = false,
     this.showZoom = true,
@@ -35,7 +34,19 @@ class CameraTimelineDateSelector extends StatelessWidget {
       padding: padding,
       child: Row(
         children: [
-          CameraTimelineCircleButton(icon: Icons.chevron_left, onTap: onPrev),
+          CameraTimelineCircleButton(
+            icon: Icons.chevron_left,
+            onTap:
+                onPrev ??
+                () {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(
+                      content: Text('Chỉ xem được hôm nay và 2 ngày trước.'),
+                    ),
+                  );
+                },
+            enabled: onPrev != null,
+          ),
           Expanded(
             child: Container(
               margin: const EdgeInsets.symmetric(horizontal: 12),
@@ -63,7 +74,19 @@ class CameraTimelineDateSelector extends StatelessWidget {
               ),
             ),
           ),
-          CameraTimelineCircleButton(icon: Icons.chevron_right, onTap: onNext),
+          CameraTimelineCircleButton(
+            icon: Icons.chevron_right,
+            onTap:
+                onNext ??
+                () {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(
+                      content: Text('Chỉ xem được hôm nay và 2 ngày trước.'),
+                    ),
+                  );
+                },
+            enabled: onNext != null,
+          ),
           if (showZoom) ...[
             const SizedBox(width: 8),
             CameraTimelineZoomControl(

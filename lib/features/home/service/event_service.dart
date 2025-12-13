@@ -1,18 +1,14 @@
 import 'dart:convert' as convert;
 import 'dart:developer' as dev;
 
-import 'package:detect_care_caregiver_app/features/home/repository/event_repository.dart';
-import 'package:flutter/foundation.dart';
-import 'package:flutter/material.dart';
-import 'package:supabase_flutter/supabase_flutter.dart';
-import 'package:http/http.dart' as http;
-
 import 'package:detect_care_caregiver_app/core/network/api_client.dart';
 import 'package:detect_care_caregiver_app/core/utils/logger.dart';
 import 'package:detect_care_caregiver_app/features/auth/data/auth_storage.dart';
-import 'package:detect_care_caregiver_app/features/home/data/event_endpoints.dart';
 import 'package:detect_care_caregiver_app/features/events/data/events_remote_data_source.dart';
-import 'package:detect_care_caregiver_app/features/home/service/event_isolate_worker.dart';
+import 'package:detect_care_caregiver_app/features/home/data/event_endpoints.dart';
+import 'package:flutter/material.dart';
+import 'package:http/http.dart' as http;
+import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../models/event_log.dart';
 

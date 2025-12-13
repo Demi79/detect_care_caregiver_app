@@ -1,4 +1,5 @@
 import 'dart:convert' as convert;
+import 'dart:io';
 import 'package:detect_care_caregiver_app/core/events/app_events.dart';
 import 'package:detect_care_caregiver_app/core/network/api_client.dart';
 import 'package:detect_care_caregiver_app/core/utils/logger.dart';
@@ -1938,7 +1939,7 @@ class ActionLogCard extends StatelessWidget {
                                 cameraId: data.cameraId,
                               );
 
-                              return FutureBuilder<List<String>>(
+                              return FutureBuilder<List<dynamic>>(
                                 future: loadEventImageUrls(eventForImages),
                                 builder: (context, snap) {
                                   if (snap.connectionState !=
@@ -1956,7 +1957,15 @@ class ActionLogCard extends StatelessWidget {
                                       ),
                                     );
                                   }
-                                  final urls = snap.data ?? const [];
+                                  final raw = snap.data ?? const [];
+                                  final urls = raw.map<String>((u) {
+                                    if (u is String) return u;
+                                    try {
+                                      final p = (u as dynamic).path;
+                                      if (p is String) return p;
+                                    } catch (_) {}
+                                    return u.toString();
+                                  }).toList();
                                   if (urls.isEmpty) {
                                     return const SizedBox();
                                   }

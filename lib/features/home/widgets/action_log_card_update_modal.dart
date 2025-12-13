@@ -331,7 +331,7 @@ extension _ActionLogCardUpdateModal on ActionLogCard {
                             ],
                           ),
                         ),
-                      FutureBuilder<List<String>>(
+                      FutureBuilder<List<dynamic>>(
                         future: imagesFuture,
                         builder: (context, snapshot) {
                           Widget preview;
@@ -365,7 +365,15 @@ extension _ActionLogCardUpdateModal on ActionLogCard {
                               ),
                             );
                           } else {
-                            final urls = snapshot.data ?? const [];
+                            final raw = snapshot.data ?? const [];
+                            final urls = raw.map<String>((u) {
+                              if (u is String) return u;
+                              try {
+                                final p = (u as dynamic).path;
+                                if (p is String) return p;
+                              } catch (_) {}
+                              return u.toString();
+                            }).toList();
                             if (urls.isEmpty) {
                               preview = Container(
                                 height: 120,

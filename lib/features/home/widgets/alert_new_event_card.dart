@@ -1298,7 +1298,7 @@ class _AlertEventCardState extends State<AlertEventCard>
 
                   // Main content
                   Expanded(
-                    child: FutureBuilder<List<String>>(
+                    child: FutureBuilder<List<dynamic>>(
                       future: future,
                       builder: (context, snap) {
                         if (snap.connectionState != ConnectionState.done) {
@@ -1315,7 +1315,15 @@ class _AlertEventCardState extends State<AlertEventCard>
                           );
                         }
 
-                        final urls = snap.data ?? const [];
+                        final raw = snap.data ?? const [];
+                        final urls = raw.map<String>((u) {
+                          if (u is String) return u;
+                          try {
+                            final p = (u as dynamic).path;
+                            if (p is String) return p;
+                          } catch (_) {}
+                          return u.toString();
+                        }).toList();
                         if (urls.isEmpty) {
                           return _emptyImages();
                         }

@@ -1,6 +1,6 @@
 import 'dart:io';
 import 'package:flutter/material.dart';
-import 'package:image_picker/image_picker.dart';
+import 'package:image_picker/image_picker.dart' as ip;
 import 'package:detect_care_caregiver_app/core/theme/app_theme.dart';
 import 'package:detect_care_caregiver_app/features/home/repository/event_repository.dart';
 import 'package:detect_care_caregiver_app/features/home/service/event_service.dart';
@@ -22,7 +22,7 @@ class ProposeScreen extends StatefulWidget {
 
 class _ProposeScreenState extends State<ProposeScreen> {
   final _noteCtrl = TextEditingController();
-  final ImagePicker _picker = ImagePicker();
+  final ip.ImagePicker _picker = ip.ImagePicker();
   File? _pickedImage;
   bool _loading = false;
 
@@ -34,7 +34,7 @@ class _ProposeScreenState extends State<ProposeScreen> {
   late final EventRepository _repo;
   static const Duration _kEventUpdateWindow = Duration(days: 2);
   late final EventLog eventForImages;
-  late final Future<List<String>> imagesFuture;
+  late final Future<List<dynamic>> imagesFuture;
   int highlightedImageIndex = 0;
 
   @override
@@ -99,7 +99,7 @@ class _ProposeScreenState extends State<ProposeScreen> {
   Future<void> _pickImage() async {
     try {
       final picked = await _picker.pickImage(
-        source: ImageSource.gallery,
+        source: ip.ImageSource.gallery,
         imageQuality: 85,
       );
       if (picked != null) setState(() => _pickedImage = File(picked.path));
@@ -371,7 +371,7 @@ class _ProposeScreenState extends State<ProposeScreen> {
             ),
           ),
           const SizedBox(height: 12),
-          FutureBuilder<List<String>>(
+          FutureBuilder<List<dynamic>>(
             future: imagesFuture,
             builder: (context, snapshot) {
               Widget preview;
@@ -400,7 +400,15 @@ class _ProposeScreenState extends State<ProposeScreen> {
                   ),
                 );
               } else {
-                final urls = snapshot.data ?? const [];
+                final raw = snapshot.data ?? const [];
+                final urls = raw.map<String>((u) {
+                  if (u is String) return u;
+                  try {
+                    final p = (u as dynamic).path;
+                    if (p is String) return p;
+                  } catch (_) {}
+                  return u.toString();
+                }).toList();
                 if (urls.isEmpty) {
                   preview = Container(
                     height: 120,

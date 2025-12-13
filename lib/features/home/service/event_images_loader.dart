@@ -1,31 +1,59 @@
 import 'package:detect_care_caregiver_app/core/utils/logger.dart';
-import 'package:detect_care_caregiver_app/features/events/data/events_remote_data_source.dart';
 import 'package:detect_care_caregiver_app/features/home/models/event_log.dart';
+import 'package:detect_care_caregiver_app/features/events/data/events_remote_data_source.dart';
 import 'package:detect_care_caregiver_app/services/supabase_service.dart';
+import 'package:detect_care_caregiver_app/services/event_image_cache_service.dart';
+
+/// Wrapper for image sources (local file or network URL)
+class ImageSource {
+  final String path;
+
+  ImageSource(this.path);
+
+  /// Check if this is a local file path
+  bool get isLocal => !path.startsWith('http');
+}
 
 final _snapshotUrlCache = <String, String>{};
 
-Future<List<String>> loadEventImageUrls(EventLog log) async {
+Future<List<ImageSource>> loadEventImageUrls(EventLog log) async {
   final urls = <String>[];
+  final cacheService = EventImageCacheService();
 
-  void take(dynamic v) {
-    if (v is String && v.isNotEmpty) {
-      urls.add(v);
+  final cachedPaths = await cacheService.getEventImages(log.eventId);
+  if (cachedPaths.isNotEmpty) {
+    AppLogger.d(
+      '[EventImageLoader] Using ${cachedPaths.length} cached images for ${log.eventId}',
+    );
+    return cachedPaths.map((path) => ImageSource(path)).toList();
+  }
+
+  bool looksLikeUrl(String value) {
+    final trimmed = value.trim();
+    return trimmed.startsWith('http://') || trimmed.startsWith('https://');
+  }
+
+  void collect(dynamic node) {
+    if (node is String && node.isNotEmpty && looksLikeUrl(node)) {
+      urls.add(node.trim());
+      return;
     }
-    if (v is List) {
-      for (final e in v) {
-        if (e is String && e.isNotEmpty) {
-          urls.add(e);
-        }
+    if (node is List) {
+      for (final item in node) {
+        collect(item);
+      }
+      return;
+    }
+    if (node is Map) {
+      for (final value in node.values) {
+        collect(value);
       }
     }
   }
 
-  take(log.detectionData['cloud_url']);
-  take(log.detectionData['cloud_urls']);
-  take(log.contextData['cloud_url']);
-  take(log.contextData['cloud_urls']);
-  take(log.imageUrls);
+  collect(log.detectionData);
+  collect(log.contextData);
+  collect(log.imageUrls);
 
   final ids = <String>[];
   final cands = [
@@ -54,13 +82,7 @@ Future<List<String>> loadEventImageUrls(EventLog log) async {
     );
   } catch (_) {}
 
-  // If we found snapshot ids, or we didn't find any direct URLs on the
-  // EventLog (urls.isEmpty), fetch the full event detail and try to extract
-  // image URLs from snapshots/files and snapshot_url. This covers cases
-  // where the feed item doesn't include the files but the detail does.
   if (ids.isNotEmpty || urls.isEmpty) {
-    // The snapshots API was removed; fetch the full event detail and
-    // extract snapshot.files[].cloud_url or snapshot_url from the detail
     try {
       AppLogger.api(
         '[loadEventImageUrls] fetching event detail for ${log.eventId} to extract images (ids=${ids.length} urls_before=${urls.length})',
@@ -153,5 +175,19 @@ Future<List<String>> loadEventImageUrls(EventLog log) async {
       '[loadEventImageUrls] event=${log.eventId} found imageCount=${uniq.length}',
     );
   } catch (_) {}
-  return uniq;
+
+  // Cache all images for future use (async, don't block return)
+  if (uniq.isNotEmpty) {
+    Future.wait(
+      uniq.map(
+        (url) =>
+            cacheService.cacheEventImage(eventId: log.eventId, imageUrl: url),
+      ),
+    ).catchError((e) {
+      AppLogger.e('[EventImageLoader] Background cache failed: $e');
+      return <String?>[];
+    });
+  }
+
+  return uniq.map((url) => ImageSource(url)).toList();
 }

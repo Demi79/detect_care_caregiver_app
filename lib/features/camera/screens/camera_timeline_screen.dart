@@ -217,6 +217,7 @@ class _CameraTimelineScreenState extends State<CameraTimelineScreen> {
                           // (responsive multiplier and higher clamps)
                           height: (timelineHeight * 1.35).clamp(380.0, 720.0),
                           child: CameraTimelineList(
+                            camera: widget.camera,
                             entries: ctl.entries,
                             selectedClipId: ctl.selectedClipId,
                             isLoading: ctl.isLoading,
@@ -299,6 +300,7 @@ class _CameraTimelineScreenState extends State<CameraTimelineScreen> {
         const SizedBox(height: 12),
         Expanded(
           child: CameraTimelineList(
+            camera: widget.camera,
             entries: ctl.entries,
             selectedClipId: ctl.selectedClipId,
             isLoading: ctl.isLoading,
