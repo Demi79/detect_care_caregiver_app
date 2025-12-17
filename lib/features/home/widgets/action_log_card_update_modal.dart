@@ -151,7 +151,7 @@ extension _ActionLogCardUpdateModal on ActionLogCard {
 
     final eventId = data.eventId;
     final draft = _getEventUpdateDraft(eventId);
-    final bool canEditEvent = _canEditEvent;
+    final bool canEditEvent = _canEditWithContext(pageContext);
     final currentLower = data.status.toLowerCase();
     final statusOptions = allStatusOptions
         .where((s) => s != currentLower)

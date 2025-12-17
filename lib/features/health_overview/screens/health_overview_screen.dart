@@ -6,12 +6,15 @@ import 'package:detect_care_caregiver_app/features/health_overview/widgets/high_
 import 'package:intl/intl.dart';
 import 'package:detect_care_caregiver_app/features/auth/data/auth_storage.dart';
 import 'package:detect_care_caregiver_app/features/home/service/event_service.dart';
+import 'package:provider/provider.dart';
+import '../../../core/providers/permissions_provider.dart';
 
 import '../../../core/theme/app_theme.dart';
 import '../../../core/widgets/error_widget.dart';
 import '../../../core/widgets/loading_widget.dart';
 import '../widgets/overview_widgets.dart';
 import 'analyst_data_screen.dart';
+import 'package:detect_care_caregiver_app/features/shared_permissions/screens/caregiver_settings_screen.dart';
 
 class HealthOverviewScreen extends StatefulWidget {
   final String? patientId;
@@ -255,6 +258,16 @@ class _HealthOverviewScreenState extends State<HealthOverviewScreen> {
 
   @override
   Widget build(BuildContext context) {
+    // Watch permissions provider for realtime updates
+    int? reportDays;
+    try {
+      final prov = context.watch<PermissionsProvider>();
+      final customerId = widget.patientId;
+      if (customerId != null) {
+        reportDays = prov.getReportAccessDays(customerId);
+      }
+    } catch (_) {}
+
     return Scaffold(
       backgroundColor: AppTheme.scaffoldBackground,
       // appBar: AppBar(
@@ -281,12 +294,83 @@ class _HealthOverviewScreenState extends State<HealthOverviewScreen> {
               vertical: AppTheme.spacingL,
             ),
             children: [
-              if (_loading) const LoadingWidget(),
-              if (!_loading && _error != null)
-                ErrorDisplay(error: _error!, onRetry: _fetch),
-              if (!_loading && _error == null && _data == null)
-                const Center(child: Text('Không có dữ liệu')),
-              if (!_loading && _data != null) _buildContent(context, _data!),
+              if ((reportDays ?? 0) == 0) ...[
+                Center(
+                  child: Padding(
+                    padding: const EdgeInsets.all(24),
+                    child: Column(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        const Icon(
+                          Icons.lock_outline,
+                          size: 64,
+                          color: Color(0xFFF59E0B),
+                        ),
+                        const SizedBox(height: 16),
+                        Text(
+                          'Không có quyền truy cập',
+                          style: TextStyle(
+                            fontSize: 18,
+                            fontWeight: FontWeight.w600,
+                            color: Colors.grey[800],
+                          ),
+                        ),
+                        const SizedBox(height: 8),
+                        Text(
+                          'Bạn chưa được chia sẻ quyền xem báo cáo cho bệnh nhân này. Hãy nhờ bệnh nhân cấp quyền truy cập trong "Quyền được chia sẻ".',
+                          textAlign: TextAlign.center,
+                          style: TextStyle(color: Colors.grey[600]),
+                        ),
+                        const SizedBox(height: 24),
+                        Row(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            OutlinedButton.icon(
+                              onPressed: _fetch,
+                              icon: const Icon(Icons.refresh),
+                              label: const Text('Thử lại'),
+                              style: OutlinedButton.styleFrom(
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 20,
+                                  vertical: 12,
+                                ),
+                              ),
+                            ),
+                            const SizedBox(width: 12),
+                            ElevatedButton.icon(
+                              onPressed: () {
+                                Navigator.of(context).push(
+                                  MaterialPageRoute(
+                                    builder: (_) =>
+                                        const CaregiverSettingsScreen(),
+                                  ),
+                                );
+                              },
+                              icon: const Icon(Icons.key),
+                              label: const Text('Yêu cầu quyền'),
+                              style: ElevatedButton.styleFrom(
+                                backgroundColor: const Color(0xFFF59E0B),
+                                foregroundColor: Colors.white,
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 20,
+                                  vertical: 12,
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              ] else ...[
+                if (_loading) const LoadingWidget(),
+                if (!_loading && _error != null)
+                  ErrorDisplay(error: _error!, onRetry: _fetch),
+                if (!_loading && _error == null && _data == null)
+                  const Center(child: Text('Không có dữ liệu')),
+                if (!_loading && _data != null) _buildContent(context, _data!),
+              ],
             ],
           ),
         ),
@@ -437,6 +521,17 @@ class _HealthOverviewScreenState extends State<HealthOverviewScreen> {
           selectedStatus: _selectedStatus,
           selectedPeriod: _selectedPeriod,
           enforceTwoDayRange: true,
+          maxPastDays: () {
+            try {
+              final prov = context.read<PermissionsProvider>();
+              final customerId = widget.patientId;
+              if (customerId != null) {
+                final days = prov.getReportAccessDays(customerId);
+                return days > 0 ? days : null;
+              }
+            } catch (_) {}
+            return null;
+          }(),
           onStatusChanged: (v) =>
               setState(() => _selectedStatus = v ?? HomeFilters.defaultStatus),
           onDayRangeChanged: (r) => setState(() {

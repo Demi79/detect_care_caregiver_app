@@ -5,6 +5,7 @@ import 'package:detect_care_caregiver_app/features/auth/data/auth_storage.dart';
 import 'package:detect_care_caregiver_app/features/shared_permissions/data/shared_permissions_remote_data_source.dart';
 import 'package:detect_care_caregiver_app/features/shared_permissions/models/shared_permissions.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
+import 'package:detect_care_caregiver_app/core/utils/app_lifecycle.dart';
 
 /// Provider để quản lý permissions và notify tất cả listeners
 class PermissionsProvider extends ChangeNotifier {
@@ -15,6 +16,8 @@ class PermissionsProvider extends ChangeNotifier {
   dynamic _inviteSub;
   String? _currentCaregiverId;
   bool _isInitialized = false;
+  Timer? _pollTimer;
+  Duration _pollInterval = const Duration(seconds: 10);
 
   List<SharedPermissions> get permissions => _permissions;
   bool get isInitialized => _isInitialized;
@@ -39,6 +42,7 @@ class PermissionsProvider extends ChangeNotifier {
 
       await _loadPermissions();
       await _setupRealtimeSubscriptions();
+      _startPolling();
       _isInitialized = true;
       notifyListeners();
     } catch (e) {
@@ -53,6 +57,19 @@ class PermissionsProvider extends ChangeNotifier {
   /// Load permissions from API
   Future<void> _loadPermissions() async {
     try {
+      final token = await AuthStorage.getAccessToken();
+      if (token == null || token.isEmpty) {
+        AppLogger.w(
+          '[PermissionsProvider] ⚠️ No access token, stopping polling and clearing state',
+        );
+        stopPolling();
+        _permissions = [];
+        _isInitialized = false;
+        _currentCaregiverId = null;
+        notifyListeners();
+        return;
+      }
+
       if (_currentCaregiverId == null) return;
 
       AppLogger.i(
@@ -147,6 +164,31 @@ class PermissionsProvider extends ChangeNotifier {
     }
   }
 
+  void _startPolling() {
+    try {
+      _pollTimer?.cancel();
+      _pollTimer = Timer.periodic(_pollInterval, (_) async {
+        try {
+          if (!AppLifecycle.isForeground) return;
+          await _loadPermissions();
+        } catch (_) {}
+      });
+      AppLogger.i(
+        '[PermissionsProvider] ⏱️ Polling started every ${_pollInterval.inSeconds}s',
+      );
+    } catch (e) {
+      AppLogger.w('[PermissionsProvider] Failed to start polling: $e');
+    }
+  }
+
+  void stopPolling() {
+    try {
+      _pollTimer?.cancel();
+      _pollTimer = null;
+      AppLogger.i('[PermissionsProvider] ⏹️ Polling stopped');
+    } catch (_) {}
+  }
+
   /// Check specific permission for customer
   bool hasPermission(String customerId, String permissionType) {
     final perm = _permissions.firstWhereOrNull(
@@ -198,10 +240,37 @@ class PermissionsProvider extends ChangeNotifier {
     return perm?.logAccessDays ?? 0;
   }
 
+  Future<void> reload() async {
+    AppLogger.i('[PermissionsProvider] 🔄 Manual reload triggered');
+    if (!_isInitialized) {
+      AppLogger.w(
+        '[PermissionsProvider] Not initialized yet, initializing now...',
+      );
+      await initialize();
+      return;
+    }
+    await _loadPermissions();
+  }
+
+  /// Reset provider state khi logout
+  void reset() {
+    AppLogger.i('[PermissionsProvider] 🔄 Resetting provider state');
+    stopPolling();
+    _permSub?.cancel();
+    _inviteSub?.cancel();
+    _permSub = null;
+    _inviteSub = null;
+    _permissions = [];
+    _isInitialized = false;
+    _currentCaregiverId = null;
+    notifyListeners();
+  }
+
   @override
   void dispose() {
     _permSub?.cancel();
     _inviteSub?.cancel();
+    stopPolling();
     super.dispose();
   }
 }

@@ -16,6 +16,7 @@ class FilterBar extends StatelessWidget {
   final bool showStatus;
   final bool showPeriod;
   final bool enforceTwoDayRange;
+  final int? maxPastDays;
 
   static const List<Map<String, String>> timeSlots = [
     {'label': '00:00-06:00', 'value': '00-06'},
@@ -37,6 +38,7 @@ class FilterBar extends StatelessWidget {
     this.showStatus = true,
     this.showPeriod = true,
     this.enforceTwoDayRange = false,
+    this.maxPastDays,
   });
 
   @override
@@ -236,7 +238,8 @@ class FilterBar extends StatelessWidget {
     DateTimeRange fallback,
   ) async {
     final DateTime today = DateTime.now();
-    final DateTime threeAgo = today.subtract(const Duration(days: 2));
+    final int days = 3;
+    final DateTime threeAgo = today.subtract(Duration(days: days - 1));
     final DateTimeRange? picked = await showDateRangePicker(
       context: context,
       firstDate: DateTime(threeAgo.year, threeAgo.month, threeAgo.day),
@@ -277,12 +280,19 @@ class FilterBar extends StatelessWidget {
     DateTimeRange fallback,
   ) async {
     final today = DateTime.now();
-    final DateTime threeAgo = today.subtract(const Duration(days: 2));
+    final int days = (maxPastDays != null && maxPastDays! > 0)
+        ? maxPastDays!
+        : 2;
+    final DateTime firstAllowed = today.subtract(Duration(days: days - 1));
 
     final DateTime? picked = await showDatePicker(
       context: context,
       initialDate: initial.start,
-      firstDate: DateTime(threeAgo.year, threeAgo.month, threeAgo.day),
+      firstDate: DateTime(
+        firstAllowed.year,
+        firstAllowed.month,
+        firstAllowed.day,
+      ),
       lastDate: DateTime(today.year, today.month, today.day),
       locale: const Locale('vi', 'VN'),
       builder: (context, child) {

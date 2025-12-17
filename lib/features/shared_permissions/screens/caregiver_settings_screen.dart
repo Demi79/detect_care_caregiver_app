@@ -1,12 +1,14 @@
 import 'dart:async';
 
 import 'package:detect_care_caregiver_app/core/utils/logger.dart';
+import 'package:detect_care_caregiver_app/core/providers/permissions_provider.dart';
 import 'package:detect_care_caregiver_app/features/assignments/data/assignments_remote_data_source.dart';
 import 'package:detect_care_caregiver_app/features/auth/data/auth_storage.dart';
 import 'package:detect_care_caregiver_app/features/shared_permissions/data/shared_permissions_remote_data_source.dart';
 import 'package:detect_care_caregiver_app/features/shared_permissions/models/shared_permissions.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:provider/provider.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 class CaregiverSettingsScreen extends StatefulWidget {
@@ -120,6 +122,7 @@ class _CaregiverSettingsScreenState extends State<CaregiverSettingsScreen> {
         _permSub = client
             .from('permissions')
             .stream(primaryKey: ['id'])
+            .eq('caregiver_id', caregiverId)
             .listen(
               (data) {
                 AppLogger.d(
@@ -143,6 +146,7 @@ class _CaregiverSettingsScreenState extends State<CaregiverSettingsScreen> {
         _inviteSub = client
             .from('caregiver_invitations')
             .stream(primaryKey: ['id'])
+            .eq('caregiver_id', caregiverId)
             .listen(
               (data) {
                 AppLogger.d(
@@ -229,8 +233,8 @@ class _CaregiverSettingsScreenState extends State<CaregiverSettingsScreen> {
 
   void _scheduleReload() {
     _debounceReloadTimer?.cancel();
-    AppLogger.d('[CaregiverSettings] Scheduling reload in 600ms');
-    _debounceReloadTimer = Timer(const Duration(milliseconds: 600), () {
+    AppLogger.d('[CaregiverSettings] Scheduling reload in 300ms');
+    _debounceReloadTimer = Timer(const Duration(milliseconds: 300), () {
       if (mounted) {
         AppLogger.i('[CaregiverSettings] 📥 Executing debounced reload');
         _loadPermissions();
@@ -422,7 +426,18 @@ class _CaregiverSettingsScreenState extends State<CaregiverSettingsScreen> {
           backgroundColor: Colors.green,
         ),
       );
+      // Reload local permissions and notify PermissionsProvider
       _loadPermissions();
+      if (mounted && context.mounted) {
+        try {
+          final permProvider = context.read<PermissionsProvider>();
+          AppLogger.i(
+            '[CaregiverSettings] Triggering PermissionsProvider reload',
+          );
+          await Future.delayed(const Duration(milliseconds: 200));
+          permProvider.reload();
+        } catch (_) {}
+      }
     } catch (e) {
       AppLogger.e(
         '[CaregiverSettings] Request permission failed: $e',
@@ -476,7 +491,19 @@ class _CaregiverSettingsScreenState extends State<CaregiverSettingsScreen> {
           backgroundColor: Colors.green,
         ),
       );
+      // Reload local permissions and notify PermissionsProvider
+      // Reload local permissions and notify PermissionsProvider
       _loadPermissions();
+      if (mounted && context.mounted) {
+        try {
+          final permProvider = context.read<PermissionsProvider>();
+          AppLogger.i(
+            '[CaregiverSettings] Triggering PermissionsProvider reload',
+          );
+          await Future.delayed(const Duration(milliseconds: 200));
+          permProvider.reload();
+        } catch (_) {}
+      }
     } catch (e) {
       AppLogger.e(
         '[CaregiverSettings] Request days permission failed: $e',
@@ -661,11 +688,11 @@ class _CaregiverSettingsScreenState extends State<CaregiverSettingsScreen> {
             const SizedBox(height: 12),
             _buildPermissionGrid([
               _PermissionItem('Xem camera', p.streamView, Icons.stream),
-              _PermissionItem(
-                'Đọc thông báo',
-                p.alertRead,
-                Icons.notifications_outlined,
-              ),
+              // _PermissionItem(
+              //   'Đọc thông báo',
+              //   p.alertRead,
+              //   Icons.notifications_outlined,
+              // ),
               _PermissionItem(
                 'Cập nhật thông báo',
                 p.alertAck,
@@ -678,15 +705,15 @@ class _CaregiverSettingsScreenState extends State<CaregiverSettingsScreen> {
               ),
             ]),
             const SizedBox(height: 20),
-            _buildInfoBox(
-              icon: Icons.history,
-              title: 'Log',
-              value: '${p.logAccessDays} ngày',
-              type: 'log_access_days',
-              currentValue: p.logAccessDays,
-              maxValue: 7,
-            ),
-            const SizedBox(height: 12),
+            // _buildInfoBox(
+            //   icon: Icons.history,
+            //   title: 'Log',
+            //   value: '${p.logAccessDays} ngày',
+            //   type: 'log_access_days',
+            //   currentValue: p.logAccessDays,
+            //   maxValue: 7,
+            // ),
+            // const SizedBox(height: 12),
             _buildInfoBox(
               icon: Icons.assessment_outlined,
               title: 'Báo cáo',
@@ -695,9 +722,85 @@ class _CaregiverSettingsScreenState extends State<CaregiverSettingsScreen> {
               currentValue: p.reportAccessDays,
               maxValue: 30,
             ),
+            const SizedBox(height: 20),
+            const Text(
+              'Kênh nhận thông báo',
+              style: TextStyle(
+                fontSize: 14,
+                fontWeight: FontWeight.w600,
+                color: Colors.black87,
+              ),
+            ),
+            const SizedBox(height: 12),
+            _buildNotificationChannels([
+              _NotificationChannel(
+                'Thông báo đẩy',
+                p.notificationChannel.contains('push'),
+                Icons.notifications_active_outlined,
+              ),
+              _NotificationChannel(
+                'Email',
+                p.notificationChannel.contains('email'),
+                Icons.email_outlined,
+              ),
+              _NotificationChannel(
+                'Cuộc gọi',
+                p.notificationChannel.contains('sms') ||
+                    p.notificationChannel.contains('call'),
+                Icons.phone_outlined,
+              ),
+            ]),
           ],
         ),
       ),
+    );
+  }
+
+  Widget _buildNotificationChannels(List<_NotificationChannel> channels) {
+    return Column(
+      children: channels.map((channel) {
+        final isEnabled = channel.isEnabled;
+        return Container(
+          margin: const EdgeInsets.only(bottom: 12),
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 14),
+          decoration: BoxDecoration(
+            color: isEnabled
+                ? primaryBlue.withValues(alpha: 0.08)
+                : Colors.grey.withValues(alpha: 0.05),
+            borderRadius: BorderRadius.circular(12),
+            border: Border.all(
+              color: isEnabled
+                  ? primaryBlue.withValues(alpha: 0.3)
+                  : Colors.grey.withValues(alpha: 0.2),
+            ),
+          ),
+          child: Row(
+            children: [
+              Icon(
+                channel.icon,
+                size: 22,
+                color: isEnabled ? primaryBlue : Colors.grey,
+              ),
+              const SizedBox(width: 10),
+              Expanded(
+                child: Text(
+                  channel.title,
+                  style: TextStyle(
+                    fontSize: 14,
+                    color: isEnabled ? Colors.black87 : Colors.grey[700],
+                    fontWeight: isEnabled ? FontWeight.w600 : FontWeight.normal,
+                  ),
+                ),
+              ),
+              Icon(
+                isEnabled ? Icons.check_circle : Icons.cancel,
+                size: 22,
+                color: isEnabled ? Colors.green : Colors.grey,
+              ),
+            ],
+          ),
+        );
+      }).toList(),
     );
   }
 
@@ -857,4 +960,11 @@ class _PermissionItem {
   final bool? value;
   final IconData icon;
   _PermissionItem(this.title, this.value, this.icon);
+}
+
+class _NotificationChannel {
+  final String title;
+  final bool isEnabled;
+  final IconData icon;
+  _NotificationChannel(this.title, this.isEnabled, this.icon);
 }

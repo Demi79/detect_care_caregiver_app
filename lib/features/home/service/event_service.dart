@@ -5,6 +5,7 @@ import 'package:detect_care_caregiver_app/core/network/api_client.dart';
 import 'package:detect_care_caregiver_app/core/utils/logger.dart';
 import 'package:detect_care_caregiver_app/features/auth/data/auth_storage.dart';
 import 'package:detect_care_caregiver_app/features/events/data/events_remote_data_source.dart';
+import 'package:detect_care_caregiver_app/features/assignments/data/assignments_remote_data_source.dart';
 import 'package:detect_care_caregiver_app/features/home/data/event_endpoints.dart';
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
@@ -816,11 +817,28 @@ class EventService {
       final rds = EventsRemoteDataSource(api: _api);
 
       AppLogger.api('[sendManualAlarm] 1️⃣ Creating manual alert...');
+
+      String? customerName;
+      try {
+        customerName = await _resolveCustomerName().timeout(
+          const Duration(milliseconds: 1200),
+          onTimeout: () => null,
+        );
+      } catch (e) {
+        AppLogger.d('[sendManualAlarm] resolve customer name failed: $e');
+      }
+      final camName = (cameraName != null && cameraName.trim().isNotEmpty)
+          ? cameraName.trim()
+          : 'camera';
+      final String composedNotes =
+          (customerName != null && customerName.isNotEmpty)
+          ? '$customerName phát hiện hành vi bất thường nên đã tạo sự kiện thủ công để kích hoạt quy trình cảnh báo tại $camName'
+          : (notes ?? 'Manual alarm triggered from LiveCameraScreen');
       // 1️⃣ Create manual alert
       final data = await rds.createManualAlert(
         cameraId: cameraId,
         imagePath: snapshotPath,
-        notes: notes ?? 'Manual alarm triggered from LiveCameraScreen',
+        notes: composedNotes,
         contextData: {
           'camera_name': cameraName,
           'stream_url': streamUrl,
@@ -836,9 +854,7 @@ class EventService {
       final eventId =
           eventData['event_id'] ?? eventData['eventId'] ?? eventData['id'];
 
-      AppLogger.api(
-        '[sendManualAlarm] ✅ Created alert - eventId=$eventId confirm_status=${eventData['confirm_status']}',
-      );
+      AppLogger.api('[sendManualAlarm] ✅ Created alert - eventId=$eventId');
 
       if (eventId == null || eventId.toString().isEmpty) {
         AppLogger.apiError(
@@ -847,28 +863,10 @@ class EventService {
         throw Exception('createManualAlert did not return eventId');
       }
 
-      // 2️⃣ Confirm event on server
-      AppLogger.api(
-        '[sendManualAlarm] 2️⃣ Calling confirmEvent API for eventId=$eventId...',
-      );
-      try {
-        await rds.confirmEvent(
-          eventId: eventId.toString(),
-          confirmStatusBool: true,
-        );
-        AppLogger.api(
-          '[sendManualAlarm] ✅ confirmEvent API call completed (no error)',
-        );
-      } catch (e) {
-        AppLogger.apiError(
-          '[sendManualAlarm] ❌ confirmEvent API failed - eventId=$eventId error=$e',
-        );
-      }
-
-      // 3️⃣ Try to fetch fresh event from REST API (SOURCE OF TRUTH)
+      // 2️⃣ Try to fetch fresh event from REST API (SOURCE OF TRUTH)
       // But if it fails, return a constructed EventLog from creation response
       AppLogger.api(
-        '[sendManualAlarm] 3️⃣ Fetching fresh event directly from REST API...',
+        '[sendManualAlarm] 2️⃣ Fetching fresh event directly from REST API...',
       );
       EventLog? freshEvent;
       try {
@@ -880,14 +878,7 @@ class EventService {
 
         AppLogger.api('[sendManualAlarm] ✅ Fetched fresh event from REST API:');
         AppLogger.api('  - eventId: ${freshEvent.eventId}');
-        AppLogger.api('  - confirm_status: ${freshEvent.confirmStatus}');
         AppLogger.api('  - status: ${freshEvent.status}');
-
-        if (freshEvent.confirmStatus != true) {
-          AppLogger.apiError(
-            '[sendManualAlarm] ⚠️ WARNING: confirm_status is still ${freshEvent.confirmStatus}, expected TRUE!',
-          );
-        }
       } catch (fetchErr) {
         AppLogger.apiError(
           '[sendManualAlarm] ⚠️ REST fetch failed (non-fatal): $fetchErr - falling back to created event',
@@ -905,15 +896,33 @@ class EventService {
         }
       }
 
-      AppLogger.api(
-        '[sendManualAlarm] ✅ Complete - confirm_status=${freshEvent.confirmStatus}',
-      );
+      AppLogger.api('[sendManualAlarm] ✅ Complete');
 
       return freshEvent;
     } catch (e, st) {
       AppLogger.apiError('[sendManualAlarm] ❌ Fatal error: $e');
       dev.log('sendManualAlarm stackTrace: $st', name: 'EventService');
       rethrow;
+    }
+  }
+
+  Future<String?> _resolveCustomerName() async {
+    try {
+      final ds = AssignmentsRemoteDataSource(api: _api);
+      final assignments = await ds.listPending(status: 'accepted');
+      if (assignments.isEmpty) return null;
+      // Pick the most recent accepted assignment
+      final a = assignments.first;
+      if (a.customerName != null && a.customerName!.trim().isNotEmpty) {
+        return a.customerName!.trim();
+      }
+      if (a.customerUsername != null && a.customerUsername!.trim().isNotEmpty) {
+        return a.customerUsername!.trim();
+      }
+      return null;
+    } catch (e) {
+      AppLogger.d('[_resolveCustomerName] failed: $e');
+      return null;
     }
   }
 

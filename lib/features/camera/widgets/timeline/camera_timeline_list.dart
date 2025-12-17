@@ -1,5 +1,6 @@
 import 'package:detect_care_caregiver_app/features/camera/models/camera_entry.dart';
 import 'package:flutter/material.dart';
+
 import 'camera_timeline_components.dart';
 import 'camera_timeline_state_message.dart';
 import 'camera_timeline_zoom_control.dart';
@@ -87,10 +88,10 @@ class CameraTimelineList extends StatelessWidget {
                   return CameraTimelineRow(
                     entry: entry,
                     isSelected: isSelected,
-                    camera: camera,
                     onClipTap: entry.clip != null
                         ? () => onSelectClip(entry.clip!.id)
                         : null,
+                    camera: camera,
                   );
                 },
                 separatorBuilder: (_, __) => const SizedBox(height: 8),

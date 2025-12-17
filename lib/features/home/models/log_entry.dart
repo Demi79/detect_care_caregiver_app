@@ -13,6 +13,7 @@ class LogEntry {
   final Map<String, dynamic> contextData;
   final Map<String, dynamic> boundingBoxes;
   final String? lifecycleState;
+  final String? createBy;
 
   final bool confirmStatus;
 
@@ -31,6 +32,7 @@ class LogEntry {
     this.contextData = const {},
     this.boundingBoxes = const {},
     this.lifecycleState,
+    this.createBy,
     required this.confirmStatus,
   });
 }

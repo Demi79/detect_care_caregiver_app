@@ -12,6 +12,7 @@ import 'package:detect_care_caregiver_app/features/patient/data/medical_info_rem
 import 'package:detect_care_caregiver_app/features/assignments/data/assignments_remote_data_source.dart';
 import 'package:detect_care_caregiver_app/features/auth/data/auth_storage.dart';
 import 'package:detect_care_caregiver_app/core/providers/permissions_provider.dart';
+import 'package:detect_care_caregiver_app/features/shared_permissions/screens/caregiver_settings_screen.dart';
 
 class PatientProfileScreen extends StatefulWidget {
   final bool embedInParent;
@@ -29,121 +30,67 @@ class _PatientProfileScreenState extends State<PatientProfileScreen> {
   String? _error;
   String? _customerId;
   bool _hasPermission = true;
-  Timer? _permissionCheckTimer;
+  VoidCallback? _permListener;
 
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) {
+        try {
+          final permProvider = context.read<PermissionsProvider>();
+          AppLogger.i(
+            '[PatientProfile] Force reloading PermissionsProvider on screen init',
+          );
+          permProvider.reload();
+        } catch (e) {
+          AppLogger.w(
+            '[PatientProfile] Failed to reload PermissionsProvider: $e',
+          );
+        }
+      }
+    });
     _load();
-    _startPermissionCheck();
   }
 
   @override
   void dispose() {
-    _permissionCheckTimer?.cancel();
+    // Remove permissions listener to avoid leaks
+    try {
+      final permProvider = context.read<PermissionsProvider>();
+      if (_permListener != null) {
+        permProvider.removeListener(_permListener!);
+      }
+    } catch (_) {}
     super.dispose();
   }
 
-  void _startPermissionCheck() {
-    // Check permission every 2 seconds for faster response
-    _permissionCheckTimer = Timer.periodic(
-      const Duration(seconds: 2),
-      (_) => _checkPermissionAndKick(),
-    );
-  }
-
-  Future<void> _checkPermissionAndKick() async {
-    if (!mounted) return;
-
-    try {
-      final assignDs = AssignmentsRemoteDataSource();
-      final list = await assignDs.listPending(status: 'accepted');
-
-      AppLogger.d(
-        '[PatientProfile] Permission check: found ${list.length} accepted assignments',
-      );
-
-      if (list.isEmpty) {
-        // No assignment - kick user out
-        AppLogger.w('[PatientProfile] ⚠️ No assignment - kicking user out...');
-        if (mounted) {
-          _permissionCheckTimer?.cancel();
-          Navigator.of(context).popUntil((route) => route.isFirst);
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(
-              content: Row(
-                children: [
-                  Icon(Icons.lock_outline, color: Colors.white),
-                  SizedBox(width: 12),
-                  Expanded(
-                    child: Text(
-                      'Quyền truy cập đã bị thu hồi',
-                      style: TextStyle(fontWeight: FontWeight.w600),
-                    ),
-                  ),
-                ],
-              ),
-              backgroundColor: Color(0xFFF59E0B),
-              behavior: SnackBarBehavior.floating,
-              duration: Duration(seconds: 4),
-            ),
-          );
-        }
-        return;
-      }
-
-      // Check profileView permission for current customer
-      final customerId = list.first.customerId;
-      final permProvider = Provider.of<PermissionsProvider>(
-        context,
-        listen: false,
-      );
-      final hasProfileView = permProvider.hasPermission(
-        customerId,
-        'profile_view',
-      );
-
-      AppLogger.d(
-        '[PatientProfile] profileView permission for $customerId: $hasProfileView',
-      );
-
-      if (!hasProfileView) {
-        // Profile view permission revoked - kick user out
-        AppLogger.w(
-          '[PatientProfile] ⚠️ profileView=false - kicking user out...',
-        );
-        if (mounted) {
-          _permissionCheckTimer?.cancel();
-          Navigator.of(context).popUntil((route) => route.isFirst);
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(
-              content: Row(
-                children: [
-                  Icon(Icons.lock_outline, color: Colors.white),
-                  SizedBox(width: 12),
-                  Expanded(
-                    child: Text(
-                      'Quyền xem hồ sơ bệnh nhân đã bị thu hồi',
-                      style: TextStyle(fontWeight: FontWeight.w600),
-                    ),
-                  ),
-                ],
-              ),
-              backgroundColor: Color(0xFFF59E0B),
-              behavior: SnackBarBehavior.floating,
-              duration: Duration(seconds: 4),
-            ),
-          );
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    final permProvider = context.read<PermissionsProvider>();
+    _permListener ??= () {
+      if (!mounted) return;
+      final cid = _customerId;
+      if (cid == null || cid.isEmpty) return;
+      final nowHas = permProvider.hasPermission(cid, 'profile_view');
+      if (nowHas != _hasPermission) {
+        setState(() {
+          _hasPermission = nowHas;
+          if (!nowHas) {
+            _error =
+                'Bạn không có quyền xem hồ sơ bệnh nhân. Quyền "Xem hồ sơ bệnh nhân" đã bị thu hồi.';
+            _data = null;
+          } else {
+            _error = null;
+          }
+        });
+        if (nowHas && _data == null && !_loading) {
+          _load();
         }
       }
-    } catch (e) {
-      AppLogger.e(
-        '[PatientProfile] Permission check error: $e',
-        e,
-        StackTrace.current,
-      );
-      // Ignore errors during background check
-    }
+    };
+    permProvider.addListener(_permListener!);
   }
 
   Future<void> _load() async {
@@ -182,18 +129,26 @@ class _PatientProfileScreenState extends State<PatientProfileScreen> {
         throw Exception('No customer id available');
       }
 
-      // Check profileView permission
       final permProvider = Provider.of<PermissionsProvider>(
         context,
         listen: false,
       );
+
+      AppLogger.i(
+        '[PatientProfile] Force reloading permissions from API before check',
+      );
+      await permProvider.reload();
+
       final hasProfileView = permProvider.hasPermission(
         customerId,
         'profile_view',
       );
 
       AppLogger.d(
-        '[PatientProfile] _load: profileView=$hasProfileView for customerId=$customerId',
+        '[PatientProfile] _load: customerId=$customerId, profileView=$hasProfileView',
+      );
+      AppLogger.d(
+        '[PatientProfile] Available permissions: ${permProvider.permissions.map((p) => 'customerId=${p.customerId}, profileView=${p.profileView}').toList()}',
       );
 
       if (!hasProfileView) {
@@ -266,6 +221,8 @@ class _PatientProfileScreenState extends State<PatientProfileScreen> {
 
   @override
   Widget build(BuildContext context) {
+    // No longer rely on realtime - permissions are force-reloaded in _load()
+
     final Widget bodyWidget = _loading
         ? const Center(
             child: CircularProgressIndicator(color: Color(0xFF3B82F6)),
@@ -304,20 +261,43 @@ class _PatientProfileScreenState extends State<PatientProfileScreen> {
                     style: TextStyle(color: Colors.grey[600]),
                   ),
                   const SizedBox(height: 24),
-                  ElevatedButton.icon(
-                    onPressed: _load,
-                    icon: const Icon(Icons.refresh),
-                    label: const Text('Thử lại'),
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: _hasPermission
-                          ? const Color(0xFF3B82F6)
-                          : const Color(0xFFF59E0B),
-                      foregroundColor: Colors.white,
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 24,
-                        vertical: 12,
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      OutlinedButton.icon(
+                        onPressed: _load,
+                        icon: const Icon(Icons.refresh),
+                        label: const Text('Thử lại'),
+                        style: OutlinedButton.styleFrom(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 20,
+                            vertical: 12,
+                          ),
+                        ),
                       ),
-                    ),
+                      if (!_hasPermission) ...[
+                        const SizedBox(width: 12),
+                        ElevatedButton.icon(
+                          onPressed: () {
+                            Navigator.of(context).push(
+                              MaterialPageRoute(
+                                builder: (_) => const CaregiverSettingsScreen(),
+                              ),
+                            );
+                          },
+                          icon: const Icon(Icons.key),
+                          label: const Text('Yêu cầu quyền'),
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: const Color(0xFFF59E0B),
+                            foregroundColor: Colors.white,
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 20,
+                              vertical: 12,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ],
                   ),
                 ],
               ),

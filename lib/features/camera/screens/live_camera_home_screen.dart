@@ -1,8 +1,13 @@
 import 'dart:async';
 
+import 'package:flutter/foundation.dart';
+import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
+import 'package:provider/provider.dart';
+
 import 'package:detect_care_caregiver_app/core/utils/logger.dart';
+import 'package:detect_care_caregiver_app/core/providers/permissions_provider.dart';
 import 'package:detect_care_caregiver_app/features/auth/data/auth_storage.dart';
-import 'package:detect_care_caregiver_app/features/camera/core/camera_stream_helper.dart';
 import 'package:detect_care_caregiver_app/features/camera/models/camera_entry.dart';
 import 'package:detect_care_caregiver_app/features/camera/screens/camera_timeline_screen.dart';
 import 'package:detect_care_caregiver_app/features/camera/screens/live_camera_screen.dart';
@@ -13,10 +18,8 @@ import 'package:detect_care_caregiver_app/features/camera/widgets/add_camera_dia
 import 'package:detect_care_caregiver_app/features/camera/widgets/components/camera_layouts.dart';
 import 'package:detect_care_caregiver_app/features/camera/widgets/components/camera_views.dart';
 import 'package:detect_care_caregiver_app/features/camera/widgets/components/controls_bar.dart';
+import 'package:detect_care_caregiver_app/features/shared_permissions/screens/caregiver_settings_screen.dart';
 import 'package:detect_care_caregiver_app/features/subscription/data/service_package_api.dart';
-import 'package:flutter/foundation.dart';
-import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 
 enum _CameraHomeMenuOption {
   toggleView,
@@ -84,10 +87,14 @@ class _LiveCameraHomeScreenState extends State<LiveCameraHomeScreen>
   Future<void> _playCamera(CameraEntry camera) async {
     if (!mounted) return;
 
-    final playUrl = CameraStreamHelper.getBestUrl(camera) ?? '';
+    final playUrl = camera.rtspUrl?.isNotEmpty == true
+        ? camera.rtspUrl!
+        : camera.hlsUrl?.isNotEmpty == true
+        ? camera.hlsUrl!
+        : camera.url;
 
     AppLogger.api(
-      '▶️ Mở LiveCameraScreen với cameraId=${camera.id}, playUrl=$playUrl',
+      '▶️ Mở LiveCameraScreen với cameraId=${camera.id}, customerId=${camera.userId}, playUrl=$playUrl',
     );
 
     final result = await Navigator.of(context).push<String?>(
@@ -96,6 +103,7 @@ class _LiveCameraHomeScreenState extends State<LiveCameraHomeScreen>
           initialUrl: playUrl,
           loadCache: false,
           camera: camera,
+          customerId: camera.userId,
         ),
         settings: const RouteSettings(name: 'live_camera_screen'),
       ),
@@ -113,7 +121,7 @@ class _LiveCameraHomeScreenState extends State<LiveCameraHomeScreen>
   Future<void> _openCameraTimeline(CameraEntry camera) async {
     if (!mounted) return;
     await _state.refreshCameraThumb(camera);
-    await Navigator.of(context).push(
+    await Navigator.of(context, rootNavigator: true).push(
       MaterialPageRoute(
         builder: (_) => CameraTimelineScreen(camera: camera),
         settings: const RouteSettings(name: 'camera_timeline_screen'),
@@ -355,6 +363,30 @@ class _LiveCameraHomeScreenState extends State<LiveCameraHomeScreen>
 
     final filteredCameras = _state.filteredCameras;
 
+    // Check stream_view permission
+    bool hasStreamPermission = true;
+    String? customerIdToCheck;
+    try {
+      final prov = context.watch<PermissionsProvider>();
+      // Try to get customer ID from active assignment
+      if (_state.cameras.isNotEmpty && _state.cameras.first.userId != null) {
+        customerIdToCheck = _state.cameras.first.userId;
+      }
+
+      if (customerIdToCheck != null && customerIdToCheck.isNotEmpty) {
+        hasStreamPermission = prov.hasPermission(
+          customerIdToCheck,
+          'stream_view',
+        );
+        AppLogger.d(
+          '[LiveCameraHome] Permission check: customerId=$customerIdToCheck, hasStreamPermission=$hasStreamPermission',
+        );
+      }
+    } catch (e) {
+      AppLogger.w('[LiveCameraHome] Permission check error: $e');
+      hasStreamPermission = true;
+    }
+
     return PopScope(
       canPop: true,
       onPopInvokedWithResult: (didPop, result) async {
@@ -507,19 +539,88 @@ class _LiveCameraHomeScreenState extends State<LiveCameraHomeScreen>
         //     ),
         //   )
         // : null,
-        body: AnimatedSwitcher(
-          duration: const Duration(milliseconds: 150),
-          child: _state.loading
-              ? const LoadingView()
-              : _state.cameras.isEmpty
-              ? EmptyView(onAddCamera: _addCamera)
-              : filteredCameras.isEmpty
-              ? NoSearchResultsView(
-                  searchQuery: _state.search,
-                  onClearSearch: () => _state.updateSearch(''),
-                )
-              : _buildContentView(filteredCameras),
-        ),
+        body: !hasStreamPermission
+            ? Center(
+                child: Padding(
+                  padding: const EdgeInsets.all(24),
+                  child: Column(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      Icon(
+                        Icons.lock_outline,
+                        size: 64,
+                        color: const Color(0xFFF59E0B),
+                      ),
+                      const SizedBox(height: 16),
+                      Text(
+                        'Không có quyền truy cập',
+                        style: TextStyle(
+                          fontSize: 18,
+                          fontWeight: FontWeight.w600,
+                          color: Colors.grey[800],
+                        ),
+                      ),
+                      const SizedBox(height: 8),
+                      Text(
+                        'Bạn chưa được chia sẻ quyền xem camera. Hãy nhờ bệnh nhân cấp quyền truy cập trong "Quyền được chia sẻ".',
+                        textAlign: TextAlign.center,
+                        style: TextStyle(color: Colors.grey[600]),
+                      ),
+                      const SizedBox(height: 24),
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          OutlinedButton.icon(
+                            onPressed: () => setState(() {}),
+                            icon: const Icon(Icons.refresh),
+                            label: const Text('Thử lại'),
+                            style: OutlinedButton.styleFrom(
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 20,
+                                vertical: 12,
+                              ),
+                            ),
+                          ),
+                          const SizedBox(width: 12),
+                          ElevatedButton.icon(
+                            onPressed: () {
+                              Navigator.of(context).push(
+                                MaterialPageRoute(
+                                  builder: (_) =>
+                                      const CaregiverSettingsScreen(),
+                                ),
+                              );
+                            },
+                            icon: const Icon(Icons.key),
+                            label: const Text('Yêu cầu quyền'),
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: const Color(0xFFF59E0B),
+                              foregroundColor: Colors.white,
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 20,
+                                vertical: 12,
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ],
+                  ),
+                ),
+              )
+            : AnimatedSwitcher(
+                duration: const Duration(milliseconds: 150),
+                child: _state.loading
+                    ? const LoadingView()
+                    : _state.cameras.isEmpty
+                    ? EmptyView(onAddCamera: _addCamera)
+                    : filteredCameras.isEmpty
+                    ? NoSearchResultsView(
+                        searchQuery: _state.search,
+                        onClearSearch: () => _state.updateSearch(''),
+                      )
+                    : _buildContentView(filteredCameras),
+              ),
       ),
     );
   }

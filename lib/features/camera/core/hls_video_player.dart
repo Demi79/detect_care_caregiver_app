@@ -1,9 +1,10 @@
 import 'package:detect_care_caregiver_app/core/utils/logger.dart';
-import 'package:detect_care_caregiver_app/features/camera/core/camera_stream_helper.dart';
 import 'package:detect_care_caregiver_app/features/camera/core/i_camera_player.dart';
 import 'package:flutter/material.dart';
 import 'package:video_player/video_player.dart';
 
+/// HLS / MP4 Player using video_player package
+/// Used for HLS streams and MP4 recordings
 class HlsVideoPlayer implements ICameraPlayer {
   final String url;
   VideoPlayerController? _controller;
@@ -36,12 +37,6 @@ class HlsVideoPlayer implements ICameraPlayer {
 
       final proto = protocol;
       AppLogger.i('[HlsVideoPlayer] Initializing $proto: $url');
-
-      if (proto == 'hls' && !await CameraStreamHelper.probeHlsPlaylist(url)) {
-        AppLogger.w(
-          '[HlsVideoPlayer] HLS preflight could not confirm playlist, will still attempt initialize: $url',
-        );
-      }
 
       _controller = VideoPlayerController.networkUrl(
         Uri.parse(url),
@@ -111,5 +106,13 @@ class HlsVideoPlayer implements ICameraPlayer {
     } catch (e) {
       AppLogger.e('[HlsVideoPlayer] Dispose error: $e', e);
     }
+  }
+
+  @override
+  Future<String?> takeSnapshot() async {
+    AppLogger.w(
+      '[HlsVideoPlayer] takeSnapshot not supported for HLS/MP4 players',
+    );
+    return null;
   }
 }

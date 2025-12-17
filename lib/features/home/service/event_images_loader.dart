@@ -17,13 +17,29 @@ class ImageSource {
 final _snapshotUrlCache = <String, String>{};
 
 Future<List<ImageSource>> loadEventImageUrls(EventLog log) async {
+  AppLogger.d(
+    '[EventImageLoader] ========== loadEventImageUrls called ==========',
+  );
+  AppLogger.d('[EventImageLoader] log.eventId=${log.eventId}');
+  AppLogger.d(
+    '[EventImageLoader] log.detectionData[snapshot_id]=${log.detectionData?['snapshot_id']}',
+  );
+
   final urls = <String>[];
   final cacheService = EventImageCacheService();
 
-  final cachedPaths = await cacheService.getEventImages(log.eventId);
+  // If a specific snapshot_id is provided, include it in the cache key
+  final overrideSnapshotId =
+      (log.detectionData?['snapshot_id'] ?? log.contextData?['snapshot_id'])
+          ?.toString();
+  final cacheKey = (overrideSnapshotId != null && overrideSnapshotId.isNotEmpty)
+      ? '${log.eventId}__snap_${overrideSnapshotId}'
+      : log.eventId;
+
+  final cachedPaths = await cacheService.getEventImages(cacheKey);
   if (cachedPaths.isNotEmpty) {
     AppLogger.d(
-      '[EventImageLoader] Using ${cachedPaths.length} cached images for ${log.eventId}',
+      '[EventImageLoader] Using ${cachedPaths.length} cached images for $cacheKey',
     );
     return cachedPaths.map((path) => ImageSource(path)).toList();
   }
@@ -174,14 +190,17 @@ Future<List<ImageSource>> loadEventImageUrls(EventLog log) async {
     AppLogger.d(
       '[loadEventImageUrls] event=${log.eventId} found imageCount=${uniq.length}',
     );
+    AppLogger.d('[loadEventImageUrls] URLs: $uniq');
+    AppLogger.d(
+      '[EventImageLoader] ========== loadEventImageUrls done ==========',
+    );
   } catch (_) {}
 
   // Cache all images for future use (async, don't block return)
   if (uniq.isNotEmpty) {
     Future.wait(
       uniq.map(
-        (url) =>
-            cacheService.cacheEventImage(eventId: log.eventId, imageUrl: url),
+        (url) => cacheService.cacheEventImage(eventId: cacheKey, imageUrl: url),
       ),
     ).catchError((e) {
       AppLogger.e('[EventImageLoader] Background cache failed: $e');

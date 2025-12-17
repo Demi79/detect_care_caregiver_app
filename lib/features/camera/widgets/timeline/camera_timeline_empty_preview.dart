@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
-import 'timeline_models.dart';
-import 'timeline_utils.dart';
+
+import 'camera_timeline_components.dart';
 
 class CameraTimelineEmptyPreview extends StatelessWidget {
   final List<CameraTimelineClip> clips;

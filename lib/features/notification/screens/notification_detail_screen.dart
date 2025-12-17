@@ -447,8 +447,11 @@ class _NotificationDetailScreenState extends State<NotificationDetailScreen>
       Navigator.push(
         context,
         MaterialPageRoute(
-          builder: (_) =>
-              LiveCameraScreen(initialUrl: cameraUrl, camera: matched),
+          builder: (_) => LiveCameraScreen(
+            initialUrl: cameraUrl,
+            camera: matched,
+            customerId: widget.notification.patientId,
+          ),
         ),
       );
     } catch (e) {
@@ -1216,7 +1219,9 @@ class _NotificationDetailScreenState extends State<NotificationDetailScreen>
                                               builder: (_) => LiveCameraScreen(
                                                 initialUrl: stream,
                                                 camera: camera,
-                                                
+                                                customerId: widget
+                                                    .notification
+                                                    .patientId,
                                               ),
                                             ),
                                           );

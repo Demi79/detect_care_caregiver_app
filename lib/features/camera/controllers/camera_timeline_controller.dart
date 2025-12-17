@@ -29,6 +29,23 @@ class CameraTimelineController extends ChangeNotifier {
   static const int _kRealtimeThrottleMs = 1000;
   static const int _kPreviewMax = 1500;
 
+  // Getters để check giới hạn ngày
+  bool get canGoToPreviousDay {
+    final today = DateTime.now();
+    final oldestAllowed = DateTime(
+      today.year,
+      today.month,
+      today.day,
+    ).subtract(const Duration(days: 2));
+    return selectedDay.isAfter(oldestAllowed);
+  }
+
+  bool get canGoToNextDay {
+    final today = DateTime.now();
+    final newestAllowed = DateTime(today.year, today.month, today.day);
+    return selectedDay.isBefore(newestAllowed);
+  }
+
   CameraTimelineController({
     required this.api,
     required this.cameraId,
@@ -294,7 +311,28 @@ class CameraTimelineController extends ChangeNotifier {
   }
 
   void changeDay(int offset) {
-    selectedDay = selectedDay.add(Duration(days: offset));
+    final newDay = selectedDay.add(Duration(days: offset));
+
+    // Giới hạn 3 ngày: ngày hiện tại và 2 ngày trước
+    final today = DateTime.now();
+    final oldestAllowed = DateTime(
+      today.year,
+      today.month,
+      today.day,
+    ).subtract(const Duration(days: 2));
+    final newestAllowed = DateTime(today.year, today.month, today.day);
+
+    // Không cho phép vượt quá ngày hiện tại
+    if (newDay.isAfter(newestAllowed)) {
+      return;
+    }
+
+    // Không cho phép quá 2 ngày trước
+    if (newDay.isBefore(oldestAllowed)) {
+      return;
+    }
+
+    selectedDay = newDay;
     if (loadFromApi) {
       loadTimeline();
     } else {

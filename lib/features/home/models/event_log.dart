@@ -30,6 +30,8 @@ class EventLog implements LogEntry {
   final bool confirmStatus;
   @override
   final String? lifecycleState;
+  @override
+  final String? createBy;
   final List<String> imageUrls;
 
   final String? confirmationState;
@@ -64,6 +66,7 @@ class EventLog implements LogEntry {
     this.imageUrls = const [],
     this.lifecycleState,
     this.cameraId,
+    this.createBy,
   });
 
   factory EventLog.fromJson(Map<String, dynamic> json) {
@@ -292,6 +295,7 @@ class EventLog implements LogEntry {
       contextData: ctxMap,
       boundingBoxes: m(first(json, ['bounding_boxes', 'boundingBoxes'])),
       confirmStatus: parsedConfirm,
+      createBy: s(first(json, ['create_by', 'created_by', 'createBy'])),
       confirmationState: s(
         first(json, ['confirmation_state', 'confirmationState']),
       ),
@@ -338,6 +342,7 @@ class EventLog implements LogEntry {
         'pending_until': pendingUntil!.toIso8601String(),
       if (imageUrls.isNotEmpty) 'image_urls': imageUrls,
       if (cameraId != null) 'camera_id': cameraId,
+      if (createBy != null) 'create_by': createBy,
       if (lifecycleState != null) 'lifecycle_state': lifecycleState,
     };
   }
@@ -372,6 +377,7 @@ class EventLog implements LogEntry {
     String? pendingReason,
     String? confirmationState,
     String? cameraId,
+    String? createBy,
   }) => EventLog(
     eventId: eventId,
     status: status ?? this.status,
@@ -390,5 +396,6 @@ class EventLog implements LogEntry {
     pendingReason: pendingReason ?? this.pendingReason,
     confirmationState: confirmationState ?? this.confirmationState,
     cameraId: cameraId ?? this.cameraId,
+    createBy: createBy ?? this.createBy,
   );
 }

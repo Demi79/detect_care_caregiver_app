@@ -1,4 +1,5 @@
 import 'package:detect_care_caregiver_app/features/auth/providers/auth_provider.dart';
+import 'package:detect_care_caregiver_app/core/providers/permissions_provider.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
@@ -41,6 +42,9 @@ class CustomAppBar extends StatelessWidget implements PreferredSizeWidget {
               icon: const Icon(Icons.logout, color: AppTheme.primaryBlue),
               tooltip: 'Đăng xuất',
               onPressed: () {
+                try {
+                  context.read<PermissionsProvider>().reset();
+                } catch (_) {}
                 context.read<AuthProvider>().logout();
               },
             ),

@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+
 import 'camera_timeline_components.dart';
 
 class CameraTimelineZoomControl extends StatelessWidget {

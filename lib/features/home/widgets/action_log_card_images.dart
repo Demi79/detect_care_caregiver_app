@@ -2,14 +2,46 @@ part of 'action_log_card.dart';
 
 extension _ActionLogCardImages on ActionLogCard {
   Future<void> _showImagesModal(BuildContext pageContext, EventLog event) {
+    final permissionCustomerId =
+        ActionLogCard._cachedAcceptedCustomerId ??
+        data.contextData?['customer_id']?.toString();
+
+    bool hasAlertAck = false;
+    if (permissionCustomerId != null && permissionCustomerId.isNotEmpty) {
+      try {
+        final prov = Provider.of<PermissionsProvider>(
+          pageContext,
+          listen: false,
+        );
+        hasAlertAck = prov.hasPermission(permissionCustomerId, 'alert_ack');
+      } catch (e) {
+        AppLogger.w('[ActionLogCard] Image modal permission check failed: $e');
+      }
+    }
+
+    final canEdit = _canEditWithContext(
+      pageContext,
+      customerIdOverride: permissionCustomerId,
+      hasAlertAckOverride: hasAlertAck,
+    );
+
     return buildEventImagesModal(
       pageContext: pageContext,
       event: event,
       onOpenCamera: _openCameraForEvent,
-      onEdit: _canEditEvent ? () => _showUpdateModal(pageContext) : null,
+      onEdit: canEdit
+          ? () {
+              Navigator.push(
+                pageContext,
+                MaterialPageRoute(
+                  builder: (_) => ProposeScreen(logEntry: data),
+                ),
+              );
+            }
+          : null,
       showEditButton: true,
       editTooltipBuilder: (enabled) =>
-          enabled ? 'Cập nhật sự kiện' : 'Đã quá hạn cập nhật',
+          enabled ? 'Cập nhật sự kiện' : _cannotEditReason,
       alarmSectionBuilder:
           (
             context,
@@ -24,80 +56,6 @@ extension _ActionLogCardImages on ActionLogCard {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
-                  ValueListenableBuilder<bool>(
-                    valueListenable: ActiveAlarmNotifier.instance,
-                    builder: (context, alarmActive, _) {
-                      final isDisabled =
-                          isAlarmWorking ||
-                          selectedIndex == null ||
-                          _shouldHideAlarmButtons;
-                      final title = alarmActive
-                          ? 'Hủy báo động'
-                          : 'Gửi báo động?';
-                      final content = alarmActive
-                          ? 'Bạn có chắc muốn hủy báo động?'
-                          : 'Bạn muốn gửi báo động dựa trên hình ảnh này?';
-                      final icon = alarmActive
-                          ? Icons.cancel_outlined
-                          : Icons.warning_amber_rounded;
-                      final label = alarmActive
-                          ? (isAlarmWorking ? 'ĐANG HỦY...' : 'Hủy báo động')
-                          : (isAlarmWorking ? 'ĐANG BÁO ĐỘNG...' : 'BÁO ĐỘNG');
-                      final backgroundColor = alarmActive
-                          ? Colors.grey.shade600
-                          : AppTheme.dangerColor;
-                      final confirmLabel = alarmActive ? 'Đồng ý' : 'Gửi';
-
-                      if (alarmActive || selectedIndex != null) {
-                        return ElevatedButton.icon(
-                          onPressed: isDisabled
-                              ? null
-                              : () async {
-                                  final confirmed = await _confirmAlarmDialog(
-                                    context,
-                                    title: title,
-                                    content: content,
-                                    confirmLabel: confirmLabel,
-                                  );
-                                  if (!confirmed || !context.mounted) return;
-                                  setDialogState(() => isAlarmWorking = true);
-                                  try {
-                                    if (alarmActive) {
-                                      await _cancelAlarmForEvent(
-                                        context,
-                                        _buildEventLogForImages(),
-                                      );
-                                    } else {
-                                      await _activateAlarmForEvent(
-                                        context,
-                                        _buildEventLogForImages(),
-                                        snapshotUrl: footerSelectedUrl,
-                                      );
-                                    }
-                                  } finally {
-                                    if (context.mounted) {
-                                      setDialogState(
-                                        () => isAlarmWorking = false,
-                                      );
-                                    }
-                                  }
-                                },
-                          icon: Icon(icon),
-                          label: Text(label),
-                          style: ElevatedButton.styleFrom(
-                            padding: const EdgeInsets.symmetric(vertical: 12),
-                            backgroundColor: backgroundColor,
-                            shape: RoundedRectangleBorder(
-                              borderRadius: BorderRadius.circular(16),
-                            ),
-                          ),
-                        );
-                      }
-
-                      return const SizedBox.shrink();
-                    },
-                  ),
-                  const SizedBox(height: 8),
                   ElevatedButton.icon(
                     onPressed: _shouldHideAlarmButtons
                         ? null

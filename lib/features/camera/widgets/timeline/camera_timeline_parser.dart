@@ -2,6 +2,9 @@ import 'package:flutter/material.dart';
 
 import 'camera_timeline_components.dart';
 
+/// Parsing helpers to convert API payloads into timeline clip models and
+/// build timeline entries.
+
 List<CameraTimelineEntry> buildEntries(List<CameraTimelineClip> clips) {
   final sorted = [...clips]..sort((a, b) => b.startTime.compareTo(a.startTime));
   return sorted
@@ -11,7 +14,7 @@ List<CameraTimelineEntry> buildEntries(List<CameraTimelineClip> clips) {
 
 List<CameraTimelineClip> parseRecordingClips(dynamic payload) {
   final items = _extractItems(payload);
-  final colors = Colors.primaries;
+  const colors = Colors.primaries;
   final clips = <CameraTimelineClip>[];
   for (var i = 0; i < items.length; i++) {
     final item = items[i];
@@ -31,6 +34,7 @@ List<CameraTimelineClip> parseRecordingClips(dynamic payload) {
     final clamped = durationSeconds.clamp(1, 3600).toInt();
     final duration = Duration(seconds: clamped);
     final accent = colors[(i * 2) % colors.length].shade400;
+    // Optional fields from backend that may be useful in the UI
     final cameraId = item['camera_id']?.toString();
     final playUrl = item['play_url']?.toString() ?? item['playUrl']?.toString();
     final downloadUrl =
@@ -55,7 +59,7 @@ List<CameraTimelineClip> parseRecordingClips(dynamic payload) {
         downloadUrl: downloadUrl,
         thumbnailUrl: thumbnailUrl,
         eventType: eventType,
-        metadata: meta ?? Map<String, dynamic>.from(item),
+        metadata: meta,
       ),
     );
   }
@@ -64,7 +68,7 @@ List<CameraTimelineClip> parseRecordingClips(dynamic payload) {
 
 List<CameraTimelineClip> parseSnapshotClips(dynamic payload) {
   final items = _extractItems(payload);
-  final colors = Colors.accents;
+  const colors = Colors.accents;
   final clips = <CameraTimelineClip>[];
   for (var i = 0; i < items.length; i++) {
     final item = items[i];
@@ -73,25 +77,12 @@ List<CameraTimelineClip> parseSnapshotClips(dynamic payload) {
     final captured = _parseDate(timeValue);
     if (captured == null) continue;
     final accent = colors[(i * 3) % colors.length];
-    try {
-      final evt =
-          item['event_id'] ?? item['eventId'] ?? item['event']?['event_id'];
-      final snap =
-          item['snapshot_id'] ??
-          item['snapshotId'] ??
-          item['snapshot']?['snapshot_id'];
-      debugPrint(
-        '[TimelineParser] snapshot item id=$id event_id=$evt snapshot_id=$snap',
-      );
-    } catch (_) {}
-
     clips.add(
       CameraTimelineClip(
         id: id,
         startTime: captured,
         duration: const Duration(seconds: 5),
         accent: accent,
-        metadata: Map<String, dynamic>.from(item),
       ),
     );
   }
@@ -133,8 +124,6 @@ List<CameraTimelineClip> parseEventClips(dynamic payload) {
         startTime: detected,
         duration: duration,
         accent: accent,
-        eventType: item['event_type']?.toString() ?? item['type']?.toString(),
-        metadata: Map<String, dynamic>.from(item),
       ),
     );
   }

@@ -200,6 +200,8 @@ class _CameraTimelineScreenState extends State<CameraTimelineScreen> {
                           formattedDay: _formatDay(ctl.selectedDay),
                           onPrev: () => ctl.changeDay(-1),
                           onNext: () => ctl.changeDay(1),
+                          canGoToPrev: ctl.canGoToPreviousDay,
+                          canGoToNext: ctl.canGoToNextDay,
                           onMenu: () =>
                               ScaffoldMessenger.of(context).showSnackBar(
                                 const SnackBar(
@@ -217,7 +219,6 @@ class _CameraTimelineScreenState extends State<CameraTimelineScreen> {
                           // (responsive multiplier and higher clamps)
                           height: (timelineHeight * 1.35).clamp(380.0, 720.0),
                           child: CameraTimelineList(
-                            camera: widget.camera,
                             entries: ctl.entries,
                             selectedClipId: ctl.selectedClipId,
                             isLoading: ctl.isLoading,
@@ -227,6 +228,7 @@ class _CameraTimelineScreenState extends State<CameraTimelineScreen> {
                             onAdjustZoom: (d) => ctl.adjustZoom(d),
                             onSelectClip: (id) => ctl.selectClip(id),
                             onRetry: () => unawaited(ctl.loadTimeline()),
+                            camera: widget.camera,
                           ),
                         ),
                         const SizedBox(height: 12),
@@ -289,6 +291,8 @@ class _CameraTimelineScreenState extends State<CameraTimelineScreen> {
           formattedDay: _formatDay(ctl.selectedDay),
           onPrev: () => ctl.changeDay(-1),
           onNext: () => ctl.changeDay(1),
+          canGoToPrev: ctl.canGoToPreviousDay,
+          canGoToNext: ctl.canGoToNextDay,
           onMenu: () => ScaffoldMessenger.of(context).showSnackBar(
             const SnackBar(content: Text('Menu ngày đang phát triển.')),
           ),
@@ -300,7 +304,6 @@ class _CameraTimelineScreenState extends State<CameraTimelineScreen> {
         const SizedBox(height: 12),
         Expanded(
           child: CameraTimelineList(
-            camera: widget.camera,
             entries: ctl.entries,
             selectedClipId: ctl.selectedClipId,
             isLoading: ctl.isLoading,
@@ -310,6 +313,7 @@ class _CameraTimelineScreenState extends State<CameraTimelineScreen> {
             onAdjustZoom: (d) => ctl.adjustZoom(d),
             onSelectClip: (id) => ctl.selectClip(id),
             onRetry: () => unawaited(ctl.loadTimeline()),
+            camera: widget.camera,
           ),
         ),
       ],

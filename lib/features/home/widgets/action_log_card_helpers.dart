@@ -216,7 +216,11 @@ extension _ActionLogCardHelpers on ActionLogCard {
         return;
       }
 
-      AppLogger.d('🎬 [ActionLogCard] Mở LiveCameraScreen với url=$cameraUrl');
+      final eventCustomerId = event.contextData['customer_id']?.toString();
+
+      AppLogger.d(
+        '🎬 [ActionLogCard] Mở LiveCameraScreen với url=$cameraUrl, customerId=$eventCustomerId',
+      );
       if (!context.mounted) return;
       Navigator.push(
         context,
@@ -225,6 +229,7 @@ extension _ActionLogCardHelpers on ActionLogCard {
             initialUrl: cameraUrl,
             loadCache: false,
             camera: matched,
+            customerId: eventCustomerId,
           ),
         ),
       );

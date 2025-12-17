@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
-import 'timeline_models.dart';
+
+import 'camera_timeline_components.dart';
 
 class DemoTimelineData {
   final List<CameraTimelineClip> clips;

@@ -21,6 +21,7 @@ import 'package:detect_care_caregiver_app/features/home/repository/event_reposit
 import 'package:detect_care_caregiver_app/features/home/screens/high_confidence_events_screen.dart';
 import 'package:detect_care_caregiver_app/features/home/service/event_service.dart';
 import 'package:detect_care_caregiver_app/features/notification/screens/notification_screen.dart';
+import 'package:detect_care_caregiver_app/features/assignments/data/assignments_remote_data_source.dart';
 import 'package:detect_care_caregiver_app/features/patient/screens/patient_profile_screen.dart';
 import 'package:detect_care_caregiver_app/features/patient/screens/sleep_checkin_screen.dart';
 import 'package:detect_care_caregiver_app/features/profile/screens/profile_screen.dart';
@@ -63,6 +64,7 @@ class _HomeScreenState extends State<HomeScreen>
   String? _error;
   int _invoiceCount = 0;
   int _notificationCount = 0;
+  String? _customerId;
 
   Timer? _searchDebounce;
   Timer? _notificationRefreshTimer;
@@ -77,6 +79,7 @@ class _HomeScreenState extends State<HomeScreen>
     // Initialize PermissionsProvider for realtime permission updates
     WidgetsBinding.instance.addPostFrameCallback((_) {
       context.read<PermissionsProvider>().initialize();
+      _fetchCustomerId();
     });
 
     _eventRepository = EventRepository(
@@ -141,6 +144,20 @@ class _HomeScreenState extends State<HomeScreen>
       const Duration(minutes: 5),
       (_) => _loadNotificationCount(),
     );
+  }
+
+  Future<void> _fetchCustomerId() async {
+    try {
+      final assignDs = AssignmentsRemoteDataSource();
+      final list = await assignDs.listPending(status: 'accepted');
+      if (list.isNotEmpty && mounted) {
+        setState(() {
+          _customerId = list.first.customerId;
+        });
+      }
+    } catch (e) {
+      debugPrint('[Home] Error fetching customerId: $e');
+    }
   }
 
   void _loadNotifications() async {
@@ -760,7 +777,7 @@ class _HomeScreenState extends State<HomeScreen>
           },
         );
       case 'report':
-        return const HealthOverviewScreen();
+        return HealthOverviewScreen(patientId: _customerId);
       default:
         return const SizedBox.shrink();
     }

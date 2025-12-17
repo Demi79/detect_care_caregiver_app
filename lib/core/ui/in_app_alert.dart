@@ -31,18 +31,21 @@ class InAppAlert {
 
     final currentUserId = await AuthStorage.getUserId();
 
-    if (e.confirmStatus == true) {
-      print(
-        '❌ Popup suppressed: event already confirmed (likely manual alarm)',
-      );
-      return;
-    }
+    try {
+      final creator = e.createBy?.toString();
+      if (creator != null && creator.isNotEmpty && currentUserId != null) {
+        if (creator == currentUserId || creator.contains(currentUserId)) {
+          print('❌ Popup suppressed: self-triggered by create_by');
+          return;
+        }
+      }
+    } catch (_) {}
 
     try {
       final actor = e.contextData?['actor']?.toString();
       if (actor != null && actor.isNotEmpty && currentUserId != null) {
-        if (actor == currentUserId) {
-          print('❌ Popup suppressed: self-triggered event by current user');
+        if (actor == currentUserId || actor.contains(currentUserId)) {
+          print('❌ Popup suppressed: self-triggered by actor');
           return;
         }
       }

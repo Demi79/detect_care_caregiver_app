@@ -297,7 +297,16 @@ Future<void> main() async {
       providers: [
         ChangeNotifierProvider(create: (_) => ThemeProvider()),
         ChangeNotifierProvider(create: (_) => AuthProvider(authRepo)),
-        ChangeNotifierProvider(create: (_) => PermissionsProvider()),
+        ChangeNotifierProxyProvider<AuthProvider, PermissionsProvider>(
+          create: (_) => PermissionsProvider(),
+          update: (_, auth, previous) {
+            final provider = previous ?? PermissionsProvider();
+            if (auth.user != null) {
+              provider.initialize();
+            }
+            return provider;
+          },
+        ),
         ChangeNotifierProvider(
           create: (_) => HealthOverviewProvider(healthOverviewRepo),
         ),
@@ -416,6 +425,13 @@ void _setupApiClientUnauthenticatedHandler() {
       // Logout qua AuthProvider
       try {
         final auth = Provider.of<AuthProvider>(ctx, listen: false);
+        try {
+          final permProvider = Provider.of<PermissionsProvider>(
+            ctx,
+            listen: false,
+          );
+          permProvider.reset();
+        } catch (_) {}
         await auth.logout();
       } catch (_) {}
 

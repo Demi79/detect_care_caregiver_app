@@ -9,6 +9,9 @@ import 'package:intl/intl.dart';
 import 'dart:developer' as dev;
 import 'package:detect_care_caregiver_app/core/ui/overlay_toast.dart';
 import 'package:detect_care_caregiver_app/core/events/app_events.dart';
+import 'package:detect_care_caregiver_app/core/utils/event_edit_validation.dart';
+import 'package:detect_care_caregiver_app/core/providers/permissions_provider.dart';
+import 'package:provider/provider.dart';
 
 class EventDetailScreen extends StatefulWidget {
   final String eventId;
@@ -63,6 +66,44 @@ class _EventDetailScreenState extends State<EventDetailScreen> {
   }
 
   Future<void> _showProposeDialog() async {
+    if (_event == null) {
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('Sự kiện không có sẵn')));
+      return;
+    }
+
+    try {
+      final permProvider = Provider.of<PermissionsProvider>(
+        context,
+        listen: true,
+      );
+      final customerId =
+          _event!.contextData?['customer_id']?.toString() ??
+          await AuthStorage.getUserId();
+
+      final validation = canEditEvent(
+        event: _event!,
+        permissionsProvider: permProvider,
+        customerId: customerId,
+      );
+
+      if (!validation.canEdit) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(validation.reason ?? 'Không thể đề xuất thay đổi'),
+            backgroundColor: Colors.orange.shade600,
+          ),
+        );
+        return;
+      }
+    } catch (e) {
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('Lỗi kiểm tra quyền: $e')));
+      return;
+    }
+
     final reasonCtrl = TextEditingController();
     String? selectedStatus;
     DateTime? deadline;
@@ -369,7 +410,7 @@ class _EventDetailScreenState extends State<EventDetailScreen> {
                             },
                           ),
                           const SizedBox(height: 8),
-                          Text('Mô tả: ${_event?.eventDescription ?? '-'}'),
+                          Text('Mô tả: ${_getEventDisplayText(_event)}'),
                           const SizedBox(height: 8),
                           if (_event?.detectedAt != null)
                             Text(
@@ -401,6 +442,25 @@ class _EventDetailScreenState extends State<EventDetailScreen> {
               ),
             ),
     );
+  }
+
+  String _getEventDisplayText(EventLog? event) {
+    if (event == null) return '-';
+
+    // Ưu tiên 1: description
+    if (event.eventDescription?.trim().isNotEmpty == true) {
+      return event.eventDescription!.trim();
+    }
+
+    // Ưu tiên 2: notes
+    try {
+      final notes = event.contextData?['notes']?.toString().trim();
+      if (notes != null && notes.isNotEmpty && notes != 'null') {
+        return notes;
+      }
+    } catch (_) {}
+
+    return '-';
   }
 
   Widget _buildConfirmTile(bool confirmed) {

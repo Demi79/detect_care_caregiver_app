@@ -1,27 +1,32 @@
 import 'package:flutter/material.dart';
+
 import 'camera_timeline_components.dart';
 import 'camera_timeline_zoom_control.dart';
 
 class CameraTimelineDateSelector extends StatelessWidget {
   final String formattedDay;
-  final VoidCallback? onPrev;
-  final VoidCallback? onNext;
+  final VoidCallback onPrev;
+  final VoidCallback onNext;
   final VoidCallback? onMenu;
   final bool compact;
   final bool showZoom;
   final double zoomLevel;
   final ValueChanged<double> onAdjustZoom;
+  final bool canGoToPrev;
+  final bool canGoToNext;
 
   const CameraTimelineDateSelector({
     super.key,
     required this.formattedDay,
-    this.onPrev,
-    this.onNext,
+    required this.onPrev,
+    required this.onNext,
     this.onMenu,
     this.compact = false,
     this.showZoom = true,
     this.zoomLevel = 0.5,
     required this.onAdjustZoom,
+    this.canGoToPrev = true,
+    this.canGoToNext = true,
   });
 
   @override
@@ -36,16 +41,8 @@ class CameraTimelineDateSelector extends StatelessWidget {
         children: [
           CameraTimelineCircleButton(
             icon: Icons.chevron_left,
-            onTap:
-                onPrev ??
-                () {
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(
-                      content: Text('Chỉ xem được hôm nay và 2 ngày trước.'),
-                    ),
-                  );
-                },
-            enabled: onPrev != null,
+            onTap: canGoToPrev ? onPrev : null,
+            enabled: canGoToPrev,
           ),
           Expanded(
             child: Container(
@@ -76,16 +73,8 @@ class CameraTimelineDateSelector extends StatelessWidget {
           ),
           CameraTimelineCircleButton(
             icon: Icons.chevron_right,
-            onTap:
-                onNext ??
-                () {
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(
-                      content: Text('Chỉ xem được hôm nay và 2 ngày trước.'),
-                    ),
-                  );
-                },
-            enabled: onNext != null,
+            onTap: canGoToNext ? onNext : null,
+            enabled: canGoToNext,
           ),
           if (showZoom) ...[
             const SizedBox(width: 8),

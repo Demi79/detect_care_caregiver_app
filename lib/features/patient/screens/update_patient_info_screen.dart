@@ -1,9 +1,13 @@
 import 'dart:async';
+import 'package:detect_care_caregiver_app/core/providers/permissions_provider.dart';
 import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
 import 'package:detect_care_caregiver_app/features/patient/models/medical_info.dart';
 import 'package:detect_care_caregiver_app/features/patient/data/medical_info_upsert_service.dart';
 import 'package:detect_care_caregiver_app/features/assignments/data/assignments_remote_data_source.dart';
 import 'package:detect_care_caregiver_app/core/utils/backend_enums.dart';
+import 'package:detect_care_caregiver_app/core/utils/logger.dart';
+import 'package:detect_care_caregiver_app/features/shared_permissions/screens/caregiver_settings_screen.dart';
 
 class UpdatePatientInfoScreen extends StatefulWidget {
   final String? customerId;
@@ -25,7 +29,8 @@ class UpdatePatientInfoScreen extends StatefulWidget {
 class _UpdatePatientInfoScreenState extends State<UpdatePatientInfoScreen> {
   List<HabitFormData> _habits = [];
   bool _saving = false;
-  Timer? _permissionCheckTimer;
+  bool _hasPermission = true;
+  VoidCallback? _permListener;
 
   @override
   void initState() {
@@ -34,68 +39,47 @@ class _UpdatePatientInfoScreenState extends State<UpdatePatientInfoScreen> {
     _habits = (widget.initialHabits ?? [])
         .map((h) => HabitFormData.fromHabit(h))
         .toList();
-    _startPermissionCheck();
   }
 
   @override
   void dispose() {
-    _permissionCheckTimer?.cancel();
+    try {
+      final permProvider = context.read<PermissionsProvider>();
+      if (_permListener != null) {
+        permProvider.removeListener(_permListener!);
+      }
+    } catch (_) {}
     for (final h in _habits) {
       h.dispose();
     }
     super.dispose();
   }
 
-  void _startPermissionCheck() {
-    // Check permission every 2 seconds for faster response
-    _permissionCheckTimer = Timer.periodic(
-      const Duration(seconds: 2),
-      (_) => _checkPermissionAndKick(),
-    );
-  }
-
-  Future<void> _checkPermissionAndKick() async {
-    if (!mounted) return;
-
-    try {
-      final assignDs = AssignmentsRemoteDataSource();
-      final list = await assignDs.listPending(status: 'accepted');
-
-      print(
-        '[UpdatePatient] Permission check: found ${list.length} accepted assignments',
-      );
-
-      if (list.isEmpty) {
-        // Permission revoked - kick user out
-        print('[UpdatePatient] ⚠️ Permission revoked! Kicking user out...');
-        if (mounted) {
-          _permissionCheckTimer?.cancel();
-          Navigator.of(context).popUntil((route) => route.isFirst);
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    final permProvider = context.read<PermissionsProvider>();
+    _permListener ??= () {
+      if (!mounted) return;
+      final cid = widget.customerId;
+      if (cid == null || cid.isEmpty) return;
+      final nowHas = permProvider.hasPermission(cid, 'profile_view');
+      if (nowHas != _hasPermission) {
+        setState(() {
+          _hasPermission = nowHas;
+        });
+        if (!nowHas && mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
             const SnackBar(
-              content: Row(
-                children: [
-                  Icon(Icons.lock_outline, color: Colors.white),
-                  SizedBox(width: 12),
-                  Expanded(
-                    child: Text(
-                      'Quyền truy cập đã bị thu hồi',
-                      style: TextStyle(fontWeight: FontWeight.w600),
-                    ),
-                  ),
-                ],
-              ),
+              content: Text('Quyền xem hồ sơ đã bị thu hồi'),
               backgroundColor: Color(0xFFF59E0B),
-              behavior: SnackBarBehavior.floating,
-              duration: Duration(seconds: 4),
             ),
           );
+          Navigator.pop(context);
         }
       }
-    } catch (e) {
-      print('[UpdatePatient] Permission check error: $e');
-      // Ignore errors during background check
-    }
+    };
+    permProvider.addListener(_permListener!);
   }
 
   void _addHabit() => setState(() => _habits.add(HabitFormData()));
@@ -210,6 +194,120 @@ class _UpdatePatientInfoScreenState extends State<UpdatePatientInfoScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final customerId = widget.customerId;
+
+    if (customerId != null && customerId.isNotEmpty) {
+      final permProvider = context.read<PermissionsProvider>();
+      _hasPermission = permProvider.hasPermission(customerId, 'profile_view');
+      AppLogger.d(
+        '[UpdatePatient] customerId=$customerId, profileView=$_hasPermission',
+      );
+    }
+
+    if (!_hasPermission) {
+      return Scaffold(
+        backgroundColor: const Color(0xFFF1F5F9),
+        appBar: AppBar(
+          centerTitle: true,
+          backgroundColor: Colors.white,
+          elevation: 0,
+          shadowColor: Colors.black.withValues(alpha: 0.1),
+          leading: Container(
+            margin: const EdgeInsets.all(8),
+            decoration: BoxDecoration(
+              color: const Color(0xFFF8FAFC),
+              borderRadius: BorderRadius.circular(12),
+              border: Border.all(color: const Color(0xFFE2E8F0)),
+            ),
+            child: IconButton(
+              onPressed: () => Navigator.pop(context),
+              icon: const Icon(
+                Icons.arrow_back_ios_new,
+                color: Color(0xFF374151),
+                size: 18,
+              ),
+            ),
+          ),
+          title: const Text(
+            'Cập nhật hồ sơ',
+            style: TextStyle(
+              color: Color(0xFF1E293B),
+              fontSize: 20,
+              fontWeight: FontWeight.w700,
+              letterSpacing: -0.5,
+            ),
+          ),
+        ),
+        body: Center(
+          child: Padding(
+            padding: const EdgeInsets.all(24),
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                const Icon(
+                  Icons.lock_outline,
+                  size: 64,
+                  color: Color(0xFFF59E0B),
+                ),
+                const SizedBox(height: 16),
+                Text(
+                  'Không có quyền truy cập',
+                  style: TextStyle(
+                    fontSize: 18,
+                    fontWeight: FontWeight.w600,
+                    color: Colors.grey[800],
+                  ),
+                ),
+                const SizedBox(height: 8),
+                Text(
+                  'Quyền "Xem hồ sơ bệnh nhân" đã bị thu hồi. Vui lòng nhờ bệnh nhân cấp lại quyền.',
+                  textAlign: TextAlign.center,
+                  style: TextStyle(color: Colors.grey[600]),
+                ),
+                const SizedBox(height: 24),
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    OutlinedButton.icon(
+                      onPressed: () => Navigator.pop(context),
+                      icon: const Icon(Icons.arrow_back),
+                      label: const Text('Quay lại'),
+                      style: OutlinedButton.styleFrom(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 20,
+                          vertical: 12,
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 12),
+                    ElevatedButton.icon(
+                      onPressed: () {
+                        Navigator.of(context).push(
+                          MaterialPageRoute(
+                            builder: (_) => const CaregiverSettingsScreen(),
+                          ),
+                        );
+                      },
+                      icon: const Icon(Icons.key),
+                      label: const Text('Yêu cầu quyền'),
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: const Color(0xFFF59E0B),
+                        foregroundColor: Colors.white,
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 20,
+                          vertical: 12,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ],
+            ),
+          ),
+        ),
+      );
+    }
+
     return Scaffold(
       backgroundColor: const Color(0xFFF1F5F9),
       appBar: AppBar(
