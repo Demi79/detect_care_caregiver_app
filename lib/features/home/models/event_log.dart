@@ -32,6 +32,7 @@ class EventLog implements LogEntry {
   final String? lifecycleState;
   @override
   final String? createBy;
+  final String? updatedBy;
   final List<String> imageUrls;
 
   final String? confirmationState;
@@ -67,6 +68,7 @@ class EventLog implements LogEntry {
     this.lifecycleState,
     this.cameraId,
     this.createBy,
+    this.updatedBy,
   });
 
   factory EventLog.fromJson(Map<String, dynamic> json) {
@@ -162,6 +164,7 @@ class EventLog implements LogEntry {
 
     final rawDetected = first(json, ['detected_at', 'detectedAt']);
     final rawCreated = first(json, ['created_at', 'createdAt']);
+    final updatedByValue = s(first(json, ['updated_by', 'updatedBy']));
     final parsedDetected = dt(rawDetected);
     final parsedCreated = dt(rawCreated);
 
@@ -314,6 +317,7 @@ class EventLog implements LogEntry {
           s(topCamera) ??
           s(detMap['camera_id']) ??
           s(ctxMap['camera_id']),
+      updatedBy: s(first(json, ['updated_by', 'updatedBy'])),
     );
   }
 
@@ -343,6 +347,7 @@ class EventLog implements LogEntry {
       if (imageUrls.isNotEmpty) 'image_urls': imageUrls,
       if (cameraId != null) 'camera_id': cameraId,
       if (createBy != null) 'create_by': createBy,
+      if (updatedBy != null) 'updated_by': updatedBy,
       if (lifecycleState != null) 'lifecycle_state': lifecycleState,
     };
   }
@@ -378,6 +383,7 @@ class EventLog implements LogEntry {
     String? confirmationState,
     String? cameraId,
     String? createBy,
+    String? updatedBy,
   }) => EventLog(
     eventId: eventId,
     status: status ?? this.status,
@@ -397,5 +403,6 @@ class EventLog implements LogEntry {
     confirmationState: confirmationState ?? this.confirmationState,
     cameraId: cameraId ?? this.cameraId,
     createBy: createBy ?? this.createBy,
+    updatedBy: updatedBy ?? this.updatedBy,
   );
 }

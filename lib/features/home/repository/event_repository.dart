@@ -15,6 +15,7 @@ class EventRepository {
     String? period,
     String? search,
     String? lifecycleState,
+    bool? includeCanceled,
   }) async {
     try {
       final events = await _service.fetchLogs(
@@ -25,6 +26,7 @@ class EventRepository {
         period: period,
         search: search,
         lifecycleState: lifecycleState,
+        includeCanceled: includeCanceled,
       );
       try {
         final sample = events.take(5).map((e) => e.eventId).toList();

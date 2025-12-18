@@ -4,6 +4,7 @@ import 'package:detect_care_caregiver_app/core/alerts/alert_coordinator.dart';
 import 'package:detect_care_caregiver_app/core/utils/logger.dart';
 import 'package:detect_care_caregiver_app/features/home/models/event_log.dart';
 import 'package:flutter/foundation.dart';
+import 'package:detect_care_caregiver_app/core/events/app_events.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 class SupabaseService {
@@ -117,6 +118,12 @@ class SupabaseService {
 
                   AlertCoordinator.handle(EventLog.fromJson(mobileEvent));
                   onEventReceived(mobileEvent);
+                  try {
+                    AppEvents.instance.notifyEventUpdated(mobileEvent);
+                  } catch (_) {}
+                  try {
+                    AppEvents.instance.notifyTableChanged('event_detections');
+                  } catch (_) {}
                 } catch (e, st) {
                   debugPrint('⚠️ Uncaught error in realtime callback: $e');
                   debugPrint(st.toString());
@@ -133,6 +140,12 @@ class SupabaseService {
                   var mobileEvent = await _mapEventToMobile(row);
                   AlertCoordinator.handle(EventLog.fromJson(mobileEvent));
                   onEventReceived(mobileEvent);
+                  try {
+                    AppEvents.instance.notifyEventUpdated(mobileEvent);
+                  } catch (_) {}
+                  try {
+                    AppEvents.instance.notifyTableChanged('event_detections');
+                  } catch (_) {}
                 } catch (e, st) {
                   debugPrint(
                     '⚠️ Uncaught error in realtime update callback: $e',
@@ -152,6 +165,9 @@ class SupabaseService {
 
                   AlertCoordinator.handle(EventLog.fromJson(mobileEvent));
                   onEventReceived(mobileEvent);
+                  try {
+                    AppEvents.instance.notifyTableChanged('event_detections');
+                  } catch (_) {}
                 } catch (e, st) {
                   debugPrint(
                     '⚠️ Uncaught error in realtime delete callback: $e',
@@ -216,6 +232,7 @@ class SupabaseService {
     final snapshotId = s(raw['snapshot_id']);
     final notes = s(raw['notes']);
     final userId = s(raw['user_id']);
+    final updatedBy = s(raw['updated_by']) ?? s(raw['updatedBy']) ?? userId;
     String eventType = s(raw['event_type']) ?? '';
     double confidenceScore = d(raw['confidence_score']);
     final detectedAt = iso(raw['detected_at']);
@@ -352,6 +369,7 @@ class SupabaseService {
       'acknowledged_by': acknowledgedBy,
       'dismissed_at': dismissedAt,
       'user_id': userId,
+      'updated_by': updatedBy,
       'detected_at': detectedAt,
       'created_at': createdAt,
       'detection_data': detectionData,

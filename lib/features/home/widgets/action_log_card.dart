@@ -497,9 +497,6 @@ class ActionLogCard extends StatelessWidget {
                           );
                         }
 
-                        // Removed inline "Đề xuất xóa" button; that flow
-                        // has been moved into `ProposeScreen` to centralize
-                        // proposal UI/logic and avoid duplicated dialogs.
                         return const SizedBox.shrink();
                       },
                     ),
@@ -2169,7 +2166,7 @@ class ActionLogCard extends StatelessWidget {
                               final eventForImages = EventLog(
                                 eventId: data.eventId,
                                 eventType: data.eventType,
-                                detectedAt: data.detectedAt,
+                                detectedAt: data.createdAt ?? data.detectedAt,
                                 eventDescription: data.eventDescription,
                                 confidenceScore: data.confidenceScore,
                                 status: data.status,

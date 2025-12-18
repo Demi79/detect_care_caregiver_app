@@ -1,4 +1,10 @@
+import 'package:detect_care_caregiver_app/core/network/api_client.dart';
 import 'package:detect_care_caregiver_app/features/activity_logs/screens/activity_logs_screen.dart';
+import 'package:detect_care_caregiver_app/features/auth/data/auth_storage.dart';
+import 'package:detect_care_caregiver_app/features/home/constants/filter_constants.dart';
+import 'package:detect_care_caregiver_app/features/home/repository/event_repository.dart';
+import 'package:detect_care_caregiver_app/features/home/screens/cancel_event_log_screen.dart';
+import 'package:detect_care_caregiver_app/features/home/service/event_service.dart';
 import 'package:detect_care_caregiver_app/features/patient/screens/sleep_checkin_screen.dart';
 import 'package:detect_care_caregiver_app/features/profile/screens/profile_screen.dart';
 import 'package:flutter/material.dart';
@@ -144,6 +150,67 @@ class _SettingsScreenState extends State<SettingsScreen> {
           );
         },
       ),
+      SettingsItem(
+        icon: Icons.event_busy,
+        title: 'Danh sách sự kiện đã hủy',
+        onTap: () async {
+          showDialog(
+            context: context,
+            barrierDismissible: false,
+            builder: (_) => const Center(child: CircularProgressIndicator()),
+          );
+
+          try {
+            final repo = EventRepository(
+              EventService(
+                ApiClient(tokenProvider: AuthStorage.getAccessToken),
+              ),
+            );
+            final events = await repo.getEvents(lifecycleState: 'CANCELED');
+            try {
+              print(
+                '[Settings] fetched CANCELED events count=${events.length}',
+              );
+              for (final ev in events) {
+                try {
+                  print(
+                    '[Settings] event id=${ev.eventId} status=${ev.status} detectedAt=${ev.detectedAt} createdAt=${ev.createdAt} confirm=${ev.confirmStatus} confirmationState=${ev.confirmationState}',
+                  );
+                  print('[Settings] event full map=${ev.toMapString()}');
+                } catch (e) {
+                  print('[Settings] error printing event details: $e');
+                }
+              }
+            } catch (e) {
+              print('[Settings] error printing fetched events: $e');
+            }
+            if (mounted) Navigator.of(context).pop();
+            if (!mounted) return;
+            Navigator.of(context).push(
+              MaterialPageRoute(
+                builder: (_) => CancelEventLogScreen(
+                  logs: events,
+                  selectedDayRange: HomeFilters.defaultDayRange,
+                  selectedStatus: HomeFilters.defaultStatus,
+                  selectedPeriod: HomeFilters.defaultPeriod,
+                  onRefresh: () {},
+                  onStatusChanged: (_) {},
+                  onDayRangeChanged: (_) {},
+                  onPeriodChanged: (_) {},
+                ),
+              ),
+            );
+          } catch (e) {
+            if (mounted) Navigator.of(context).pop();
+            if (mounted) {
+              ScaffoldMessenger.of(context).showSnackBar(
+                SnackBar(content: Text('Lỗi tải danh sách đã hủy: $e')),
+              );
+            }
+          }
+        },
+      ),
+
       const Padding(
         padding: EdgeInsets.only(left: 16, right: 16, bottom: 10),
         // child: Text(

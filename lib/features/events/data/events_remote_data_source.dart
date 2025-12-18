@@ -16,20 +16,20 @@ class EventsRemoteDataSource {
     int? page,
     int? limit,
     Map<String, dynamic>? extraQuery,
+    bool? isCanceled,
+    DateTime? dateFrom,
+    DateTime? dateTo,
   }) async {
     // dev.log('\n📥 [Events] Listing events via REST /events');
     final query = <String, dynamic>{};
     if (page != null) query['page'] = page;
     if (limit != null) query['limit'] = limit;
     if (extraQuery != null) query.addAll(extraQuery);
-    if (!query.containsKey('caregiverId') && !query.containsKey('customerId')) {
-      try {
-        final uid = await AuthStorage.getUserId();
-        if (uid != null && uid.isNotEmpty) {
-          query['caregiverId'] = uid;
-        }
-      } catch (_) {}
-    }
+    if (isCanceled != null)
+      query['is_canceled'] = isCanceled ? 'true' : 'false';
+    if (dateFrom != null)
+      query['dateFrom'] = dateFrom.toUtc().toIso8601String();
+    if (dateTo != null) query['dateTo'] = dateTo.toUtc().toIso8601String();
     // try {
     //   if (AppConfig.logHttpRequests) {
     //     AppLogger.api(

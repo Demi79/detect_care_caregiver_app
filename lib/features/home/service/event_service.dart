@@ -41,14 +41,9 @@ class EventService {
     String? period,
     String? search,
     String? lifecycleState,
+    bool? includeCanceled,
   }) async {
     try {
-      // final session = _supabase.auth.currentSession;
-      // if (session == null) {
-      //   print('[EventService.fetchLogs] No Supabase session found');
-      //   return [];
-      // }
-
       print(
         'filters status=$status, dayRange=${dayRange != null ? "${dayRange.start}..${dayRange.end}" : "null"}, period=$period, search=$search, page=$page, limit=$limit',
       );
@@ -75,10 +70,32 @@ class EventService {
               extra['status'] = status;
             }
           }
+
+          final bool? isCanceledArg = includeCanceled;
+          DateTime? df;
+          DateTime? dt;
+          if (dayRange != null) {
+            df = DateTime(
+              dayRange.start.year,
+              dayRange.start.month,
+              dayRange.start.day,
+            ).toUtc();
+            dt = DateTime(
+              dayRange.end.year,
+              dayRange.end.month,
+              dayRange.end.day,
+              23,
+              59,
+              59,
+            ).toUtc();
+          }
           final list = await ds.listEvents(
             page: page,
             limit: limit,
             extraQuery: extra.isNotEmpty ? extra : null,
+            isCanceled: isCanceledArg,
+            dateFrom: df,
+            dateTo: dt,
           );
           for (final r in list) {
             final m = await _normalizeRow(r);
@@ -172,10 +189,15 @@ class EventService {
                 extra['status'] = status;
               }
             }
+            // Pass through includeCanceled directly: `null` => don't send param
+            // (backend returns all), `false` => send is_canceled=false,
+            // `true` => send is_canceled=true.
+            final bool? isCanceledArg = includeCanceled;
             final list = await ds.listEvents(
               page: page,
               limit: limit,
               extraQuery: extra.isNotEmpty ? extra : null,
+              isCanceled: isCanceledArg,
             );
             for (final r in list) {
               final m = await _normalizeRow(r);
@@ -437,7 +459,8 @@ class EventService {
       } catch (_) {}
 
       List<Map<String, dynamic>> finalList = List.from(filtered);
-      if (lifecycleState == null || lifecycleState.isEmpty) {
+      if ((lifecycleState == null || lifecycleState.isEmpty) &&
+          includeCanceled == false) {
         finalList = finalList.where((e) {
           try {
             final ls = (e['lifecycle_state'] ?? e['lifecycleState'])
@@ -448,70 +471,65 @@ class EventService {
             return true;
           }
         }).toList();
-        try {
-          final finalIds = finalList
-              .map(
-                (e) => (e['eventId'] ?? e['event_id'] ?? e['id'])?.toString(),
-              )
-              .where((e) => e != null)
-              .cast<String>()
-              .toList();
-          final dropped = normalizedIds
-              .where((id) => !finalIds.contains(id))
-              .toList();
-          print(
-            '[EventService.fetchLogs] FINAL length=${finalList.length} final_ids=${finalIds.take(50).toList()} dropped_count=${dropped.length} dropped_sample=${dropped.take(50).toList()}',
-          );
-          try {
-            if (dropped.isNotEmpty) {
-              // Map dropped ids back to normalized rows to see why they were removed
-              final droppedDetails = normalizedIds
-                  .where((id) => dropped.contains(id))
-                  .map((id) {
-                    try {
-                      final row = normalized.firstWhere(
-                        (r) =>
-                            ((r['eventId'] ?? r['event_id'] ?? r['id'])
-                                ?.toString()) ==
-                            id,
-                      );
-                      final st = (row['status'] ?? '').toString();
-                      final ls =
-                          (row['lifecycle_state'] ??
-                                  row['lifecycleState'] ??
-                                  '')
-                              .toString();
-                      return {'id': id, 'status': st, 'lifecycle': ls};
-                    } catch (_) {
-                      return {'id': id};
-                    }
-                  })
-                  .toList();
-              print(
-                '[EventService DEBUG] dropped details sample=${droppedDetails.take(50).toList()}',
-              );
-            }
-          } catch (_) {}
-          try {
-            final finDanger = finalList
-                .where(
-                  (e) =>
-                      (e['status']?.toString() ?? '').toLowerCase() == 'danger',
-                )
-                .length;
-            final finWarning = finalList
-                .where(
-                  (e) =>
-                      (e['status']?.toString() ?? '').toLowerCase() ==
-                      'warning',
-                )
-                .length;
-            print(
-              '[EventService DEBUG] after lifecycle filter: danger=$finDanger warning=$finWarning total=${finalList.length}',
-            );
-          } catch (_) {}
-        } catch (_) {}
       }
+
+      try {
+        final finalIds = finalList
+            .map((e) => (e['eventId'] ?? e['event_id'] ?? e['id'])?.toString())
+            .where((e) => e != null)
+            .cast<String>()
+            .toList();
+        final dropped = normalizedIds
+            .where((id) => !finalIds.contains(id))
+            .toList();
+        print(
+          '[EventService.fetchLogs] FINAL length=${finalList.length} final_ids=${finalIds.take(50).toList()} dropped_count=${dropped.length} dropped_sample=${dropped.take(50).toList()}',
+        );
+        try {
+          if (dropped.isNotEmpty) {
+            final droppedDetails = normalizedIds
+                .where((id) => dropped.contains(id))
+                .map((id) {
+                  try {
+                    final row = normalized.firstWhere(
+                      (r) =>
+                          ((r['eventId'] ?? r['event_id'] ?? r['id'])
+                              ?.toString()) ==
+                          id,
+                    );
+                    final st = (row['status'] ?? '').toString();
+                    final ls =
+                        (row['lifecycle_state'] ?? row['lifecycleState'] ?? '')
+                            .toString();
+                    return {'id': id, 'status': st, 'lifecycle': ls};
+                  } catch (_) {
+                    return {'id': id};
+                  }
+                })
+                .toList();
+            print(
+              '[EventService DEBUG] dropped details sample=${droppedDetails.take(50).toList()}',
+            );
+          }
+        } catch (_) {}
+        try {
+          final finDanger = finalList
+              .where(
+                (e) =>
+                    (e['status']?.toString() ?? '').toLowerCase() == 'danger',
+              )
+              .length;
+          final finWarning = finalList
+              .where(
+                (e) =>
+                    (e['status']?.toString() ?? '').toLowerCase() == 'warning',
+              )
+              .length;
+          print(
+            '[EventService DEBUG] after lifecycle filter: danger=$finDanger warning=$finWarning total=${finalList.length}',
+          );
+        } catch (_) {}
+      } catch (_) {}
 
       return finalList.map(EventLog.fromJson).toList();
     } catch (e) {
@@ -940,6 +958,7 @@ class EventService {
       'lifecycle_state': row['lifecycle_state'] ?? row['lifecycleState'],
       'detectedAt': detectedAtIso,
       'confirm_status': row[EventEndpoints.confirmStatus],
+      'updated_by': row['updated_by'] ?? row['updatedBy'],
     };
   }
 

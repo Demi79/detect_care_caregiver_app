@@ -16,6 +16,8 @@ class FilterBar extends StatelessWidget {
   final bool showStatus;
   final bool showPeriod;
   final bool enforceTwoDayRange;
+  final int? maxRangeDays;
+  final int? maxPastMonths;
   final int? maxPastDays;
 
   static const List<Map<String, String>> timeSlots = [
@@ -38,6 +40,8 @@ class FilterBar extends StatelessWidget {
     this.showStatus = true,
     this.showPeriod = true,
     this.enforceTwoDayRange = false,
+    this.maxRangeDays,
+    this.maxPastMonths,
     this.maxPastDays,
   });
 
@@ -238,14 +242,64 @@ class FilterBar extends StatelessWidget {
     DateTimeRange fallback,
   ) async {
     final DateTime today = DateTime.now();
-    final int days = 3;
-    final DateTime threeAgo = today.subtract(Duration(days: days - 1));
+
+    DateTime computeFirstDate() {
+      final base = DateTime(2023, 1, 1);
+      // If a strict maxRangeDays is provided (e.g., 3), prefer to limit
+      // the selectable window to the last `maxRangeDays` days relative to today.
+      if (maxRangeDays != null) {
+        final limitedByRange = DateTime(
+          today.year,
+          today.month,
+          today.day,
+        ).subtract(Duration(days: maxRangeDays! - 1));
+        return limitedByRange.isAfter(base) ? limitedByRange : base;
+      }
+
+      if (maxPastDays != null) {
+        final limitedByDays = DateTime(
+          today.year,
+          today.month,
+          today.day,
+        ).subtract(Duration(days: maxPastDays!));
+        return limitedByDays.isAfter(base) ? limitedByDays : base;
+      }
+      if (maxPastMonths == null) return base;
+      final limited = DateTime(
+        today.year,
+        today.month - maxPastMonths!,
+        today.day,
+      );
+      return limited.isAfter(base) ? limited : base;
+    }
+
+    // Use the standard date range picker UI; restrict overall window by first/lastDate
+    final DateTime firstDate = computeFirstDate();
+    final DateTime lastDate = DateTime(today.year, today.month, today.day);
+
     final DateTimeRange? picked = await showDateRangePicker(
       context: context,
-      firstDate: DateTime(threeAgo.year, threeAgo.month, threeAgo.day),
-      lastDate: DateTime(today.year, today.month, today.day),
+      firstDate: firstDate,
+      lastDate: lastDate,
       initialDateRange: initial,
       locale: const Locale('vi', 'VN'),
+      selectableDayPredicate:
+          (DateTime day, DateTime? rangeStart, DateTime? rangeEnd) {
+            if (day.isBefore(firstDate) || day.isAfter(lastDate)) return false;
+
+            if (maxRangeDays != null) {
+              if (rangeStart != null && rangeEnd == null) {
+                final span = (day.difference(rangeStart).inDays).abs() + 1;
+                return span <= maxRangeDays!;
+              }
+              if (rangeStart == null && rangeEnd != null) {
+                final span = (rangeEnd.difference(day).inDays).abs() + 1;
+                return span <= maxRangeDays!;
+              }
+            }
+
+            return true;
+          },
       builder: (context, child) {
         return Theme(
           data: Theme.of(context).copyWith(
@@ -280,19 +334,30 @@ class FilterBar extends StatelessWidget {
     DateTimeRange fallback,
   ) async {
     final today = DateTime.now();
-    final int days = (maxPastDays != null && maxPastDays! > 0)
-        ? maxPastDays!
-        : 2;
-    final DateTime firstAllowed = today.subtract(Duration(days: days - 1));
+
+    DateTime computeFirstDate() {
+      final base = DateTime(2023, 1, 1);
+      if (maxPastDays != null) {
+        final limitedByDays = DateTime(
+          today.year,
+          today.month,
+          today.day,
+        ).subtract(Duration(days: maxPastDays!));
+        return limitedByDays.isAfter(base) ? limitedByDays : base;
+      }
+      if (maxPastMonths == null) return base;
+      final limited = DateTime(
+        today.year,
+        today.month - maxPastMonths!,
+        today.day,
+      );
+      return limited.isAfter(base) ? limited : base;
+    }
 
     final DateTime? picked = await showDatePicker(
       context: context,
       initialDate: initial.start,
-      firstDate: DateTime(
-        firstAllowed.year,
-        firstAllowed.month,
-        firstAllowed.day,
-      ),
+      firstDate: computeFirstDate(),
       lastDate: DateTime(today.year, today.month, today.day),
       locale: const Locale('vi', 'VN'),
       builder: (context, child) {

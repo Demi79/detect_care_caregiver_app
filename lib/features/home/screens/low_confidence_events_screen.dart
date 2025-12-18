@@ -8,9 +8,12 @@ import '../widgets/action_log_card.dart';
 
 class LowConfidenceEventsScreen extends StatelessWidget {
   final List<LogEntry> logs;
+  final List<LogEntry> allLogs;
   final DateTimeRange? selectedDayRange;
   final String selectedStatus;
   final String selectedPeriod;
+  final ScrollController? scrollController;
+  final Key? filterBarKey;
 
   final ValueChanged<DateTimeRange?> onDayRangeChanged;
   final ValueChanged<String?> onStatusChanged;
@@ -21,6 +24,7 @@ class LowConfidenceEventsScreen extends StatelessWidget {
   const LowConfidenceEventsScreen({
     super.key,
     required this.logs,
+    required this.allLogs,
     required this.selectedDayRange,
     required this.selectedStatus,
     required this.selectedPeriod,
@@ -29,11 +33,15 @@ class LowConfidenceEventsScreen extends StatelessWidget {
     required this.onPeriodChanged,
     this.onRefresh,
     this.onEventUpdated,
+    this.scrollController,
+    this.filterBarKey,
   });
 
   @override
   Widget build(BuildContext context) {
     final lowAllowed = const {'unknowns', 'suspect'};
+    final int totalAll = allLogs.length;
+
     final filtered = logs.where((log) {
       try {
         final ls = log.lifecycleState?.toString().toLowerCase();
@@ -46,7 +54,7 @@ class LowConfidenceEventsScreen extends StatelessWidget {
 
       bool statusMatches;
       if (selectedSt == 'all') {
-        statusMatches = true; // already constrained by lowAllowed above
+        statusMatches = true;
       } else {
         statusMatches = st == selectedSt;
       }
@@ -70,45 +78,70 @@ class LowConfidenceEventsScreen extends StatelessWidget {
         );
         if (dateOnly.isBefore(start) || dateOnly.isAfter(end)) return false;
       }
-
       final slot = selectedPeriod.toLowerCase();
       if (slot != 'all' && slot.isNotEmpty) {
         final hour = dt.hour;
-        bool inSlot = switch (slot) {
-          '00-06' => hour >= 0 && hour < 6,
-          '06-12' => hour >= 6 && hour < 12,
-          '12-18' => hour >= 12 && hour < 18,
-          '18-24' => hour >= 18 && hour < 24,
-          'morning' => hour >= 5 && hour < 12,
-          'afternoon' => hour >= 12 && hour < 18,
-          'evening' => hour >= 18 && hour < 22,
-          'night' => hour >= 22 || hour < 5,
-          _ => true,
-        };
+        bool inSlot;
+        switch (slot) {
+          case '00-06':
+            inSlot = hour >= 0 && hour < 6;
+            break;
+          case '06-12':
+            inSlot = hour >= 6 && hour < 12;
+            break;
+          case '12-18':
+            inSlot = hour >= 12 && hour < 18;
+            break;
+          case '18-24':
+            inSlot = hour >= 18 && hour < 24;
+            break;
+          case 'morning':
+            inSlot = hour >= 5 && hour < 12;
+            break;
+          case 'afternoon':
+            inSlot = hour >= 12 && hour < 18;
+            break;
+          case 'evening':
+            inSlot = hour >= 18 && hour < 22;
+            break;
+          case 'night':
+            inSlot = hour >= 22 || hour < 5;
+            break;
+          default:
+            inSlot = true;
+        }
         if (!inSlot) return false;
       }
       return true;
     }).toList();
 
-    // --- UI ---
     return SingleChildScrollView(
-      physics: const BouncingScrollPhysics(),
+      controller: scrollController,
+      physics: filtered.isEmpty
+          ? const NeverScrollableScrollPhysics()
+          : const AlwaysScrollableScrollPhysics(),
       padding: const EdgeInsets.all(16),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.center,
         children: [
           FilterBar(
+            key: filterBarKey,
             statusOptions: const ['all', 'suspect', 'unknowns'],
             periodOptions: HomeFilters.periodOptions,
             selectedDayRange: selectedDayRange,
             selectedStatus: selectedStatus,
             selectedPeriod: selectedPeriod,
+            maxRangeDays: 3,
             onDayRangeChanged: onDayRangeChanged,
             onStatusChanged: onStatusChanged,
             onPeriodChanged: onPeriodChanged,
           ),
           const SizedBox(height: 24),
-          _SummaryRow(logs: filtered, selectedStatus: selectedStatus),
+          _SummaryRow(
+            filteredLogs: filtered,
+            allLogs: allLogs,
+            selectedStatus: selectedStatus,
+          ),
           const SizedBox(height: 12),
           const Divider(height: 1),
           const SizedBox(height: 12),
@@ -120,7 +153,6 @@ class LowConfidenceEventsScreen extends StatelessWidget {
                 onStatusChanged('all');
                 onPeriodChanged(HomeFilters.defaultPeriod);
               },
-              onRefresh: onRefresh,
             )
           else
             ...filtered.map((log) {
@@ -145,15 +177,20 @@ class LowConfidenceEventsScreen extends StatelessWidget {
 }
 
 class _SummaryRow extends StatelessWidget {
-  const _SummaryRow({required this.logs, required this.selectedStatus});
-  final List<LogEntry> logs;
+  const _SummaryRow({
+    required this.filteredLogs,
+    required this.allLogs,
+    required this.selectedStatus,
+  });
+  final List<LogEntry> filteredLogs;
+  final List<LogEntry> allLogs;
   final String selectedStatus;
 
   @override
   Widget build(BuildContext context) {
     final sel = selectedStatus.toLowerCase();
 
-    final int suspectCount = logs.where((e) {
+    final int suspectCount = filteredLogs.where((e) {
       try {
         return e.status.toLowerCase() == 'suspect';
       } catch (_) {
@@ -161,7 +198,7 @@ class _SummaryRow extends StatelessWidget {
       }
     }).length;
 
-    final int unknownCount = logs.where((e) {
+    final int unknownCount = filteredLogs.where((e) {
       try {
         return e.status.toLowerCase() == 'unknowns';
       } catch (_) {
@@ -170,10 +207,18 @@ class _SummaryRow extends StatelessWidget {
     }).length;
 
     final int totalLow = suspectCount + unknownCount;
+    final int totalAll = allLogs.length; // include canceled events for total
 
     late final Widget leftCard;
     late final Widget middleCard;
     late final Widget rightCard;
+
+    middleCard = _SummaryCard(
+      title: 'Tổng nhật ký',
+      value: '$totalAll',
+      icon: Icons.list_alt_rounded,
+      color: AppTheme.reportColor,
+    );
 
     if (sel == 'all') {
       leftCard = _SummaryCard(
@@ -181,13 +226,6 @@ class _SummaryRow extends StatelessWidget {
         value: '$suspectCount',
         icon: Icons.help_outline_rounded,
         color: const Color(0xFFF59E0B),
-      );
-
-      middleCard = _SummaryCard(
-        title: 'Tổng nhật ký',
-        value: '$totalLow',
-        icon: Icons.list_alt_rounded,
-        color: AppTheme.reportColor,
       );
       rightCard = _SummaryCard(
         title: 'Sự kiện khác',
@@ -202,13 +240,6 @@ class _SummaryRow extends StatelessWidget {
         icon: Icons.help_outline_rounded,
         color: const Color(0xFFF59E0B),
       );
-
-      middleCard = _SummaryCard(
-        title: 'Tổng nhật ký',
-        value: '$suspectCount',
-        icon: Icons.list_alt_rounded,
-        color: AppTheme.reportColor,
-      );
       rightCard = _SummaryCard(
         title: 'Sự kiện khác',
         value: '0',
@@ -222,12 +253,6 @@ class _SummaryRow extends StatelessWidget {
         icon: Icons.help_outline_rounded,
         color: Colors.grey,
       );
-      middleCard = _SummaryCard(
-        title: 'Tổng nhật ký',
-        value: '$unknownCount',
-        icon: Icons.list_alt_rounded,
-        color: AppTheme.reportColor,
-      );
       rightCard = _SummaryCard(
         title: 'Sự kiện khác',
         value: '0',
@@ -240,13 +265,6 @@ class _SummaryRow extends StatelessWidget {
         value: '$suspectCount',
         icon: Icons.help_outline_rounded,
         color: const Color(0xFFF59E0B),
-      );
-
-      middleCard = _SummaryCard(
-        title: 'Tổng nhật ký',
-        value: '$totalLow',
-        icon: Icons.list_alt_rounded,
-        color: AppTheme.reportColor,
       );
       rightCard = _SummaryCard(
         title: 'Sự kiện khác',
@@ -369,14 +387,14 @@ class _EmptyState extends StatelessWidget {
               color: AppTheme.text,
             ),
           ),
-          const SizedBox(height: 8),
-          Text(
-            'Thử điều chỉnh tìm kiếm hoặc bộ lọc',
-            style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-              color: AppTheme.unselectedTextColor,
-            ),
-            textAlign: TextAlign.center,
-          ),
+          // const SizedBox(height: 8),
+          // Text(
+          //   'Thử điều chỉnh tìm kiếm hoặc bộ lọc',
+          //   style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+          //     color: AppTheme.unselectedTextColor,
+          //   ),
+          //   textAlign: TextAlign.center,
+          // ),
           const SizedBox(height: 12),
           Row(
             mainAxisSize: MainAxisSize.min,

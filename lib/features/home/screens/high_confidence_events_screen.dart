@@ -8,9 +8,12 @@ import '../widgets/action_log_card.dart';
 
 class HighConfidenceEventsScreen extends StatelessWidget {
   final List<LogEntry> logs;
+  final List<LogEntry> allLogs;
   final DateTimeRange? selectedDayRange;
   final String selectedStatus;
   final String selectedPeriod;
+  final ScrollController? scrollController;
+  final Key? filterBarKey;
 
   final ValueChanged<DateTimeRange?> onDayRangeChanged;
   final ValueChanged<String?> onStatusChanged;
@@ -21,6 +24,7 @@ class HighConfidenceEventsScreen extends StatelessWidget {
   const HighConfidenceEventsScreen({
     super.key,
     required this.logs,
+    required this.allLogs,
     required this.selectedDayRange,
     required this.selectedStatus,
     required this.selectedPeriod,
@@ -29,6 +33,8 @@ class HighConfidenceEventsScreen extends StatelessWidget {
     required this.onPeriodChanged,
     this.onRefresh,
     this.onEventUpdated,
+    this.scrollController,
+    this.filterBarKey,
   });
 
   @override
@@ -97,12 +103,16 @@ class HighConfidenceEventsScreen extends StatelessWidget {
 
     // --- UI ---
     return SingleChildScrollView(
-      physics: const BouncingScrollPhysics(),
+      controller: scrollController,
+      physics: filtered.isEmpty
+          ? const NeverScrollableScrollPhysics()
+          : const AlwaysScrollableScrollPhysics(),
       padding: const EdgeInsets.all(16),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.center,
         children: [
           FilterBar(
+            key: filterBarKey,
             statusOptions: const [
               'all',
               'abnormal',
@@ -114,12 +124,17 @@ class HighConfidenceEventsScreen extends StatelessWidget {
             selectedDayRange: selectedDayRange,
             selectedStatus: selectedStatus,
             selectedPeriod: selectedPeriod,
+            maxRangeDays: 3,
             onDayRangeChanged: onDayRangeChanged,
             onStatusChanged: onStatusChanged,
             onPeriodChanged: onPeriodChanged,
           ),
           const SizedBox(height: 24),
-          _SummaryRow(logs: filtered, selectedStatus: selectedStatus),
+          _SummaryRow(
+            filteredLogs: filtered,
+            allLogs: allLogs,
+            selectedStatus: selectedStatus,
+          ),
           const SizedBox(height: 12),
           const Divider(height: 1),
           const SizedBox(height: 12),
@@ -157,15 +172,20 @@ class HighConfidenceEventsScreen extends StatelessWidget {
 }
 
 class _SummaryRow extends StatelessWidget {
-  const _SummaryRow({required this.logs, required this.selectedStatus});
-  final List<LogEntry> logs;
+  const _SummaryRow({
+    required this.filteredLogs,
+    required this.allLogs,
+    required this.selectedStatus,
+  });
+  final List<LogEntry> filteredLogs;
+  final List<LogEntry> allLogs;
   final String selectedStatus;
 
   @override
   Widget build(BuildContext context) {
     final sel = selectedStatus.toLowerCase();
 
-    final int dangerCount = logs.where((e) {
+    final int dangerCount = filteredLogs.where((e) {
       try {
         return e.status.toString().toLowerCase() == 'danger';
       } catch (_) {
@@ -173,7 +193,7 @@ class _SummaryRow extends StatelessWidget {
       }
     }).length;
 
-    final int warningCount = logs.where((e) {
+    final int warningCount = filteredLogs.where((e) {
       try {
         return e.status.toString().toLowerCase() == 'warning';
       } catch (_) {
@@ -181,7 +201,7 @@ class _SummaryRow extends StatelessWidget {
       }
     }).length;
 
-    final int normalCount = logs.where((e) {
+    final int normalCount = filteredLogs.where((e) {
       try {
         return e.status.toString().toLowerCase() == 'normal';
       } catch (_) {
@@ -190,11 +210,25 @@ class _SummaryRow extends StatelessWidget {
     }).length;
 
     final int abnormalCount = dangerCount + warningCount;
-    final int total = logs.length;
+    final int totalAll = allLogs.length;
+    final int total = allLogs.where((e) {
+      try {
+        return e.lifecycleState?.toString().toLowerCase() != 'canceled';
+      } catch (_) {
+        return true;
+      }
+    }).length;
 
     late final Widget leftCard;
     late final Widget middleCard;
     late final Widget rightCard;
+
+    middleCard = _SummaryCard(
+      title: 'Tổng nhật ký',
+      value: '$totalAll',
+      icon: Icons.list_alt_rounded,
+      color: AppTheme.reportColor,
+    );
 
     if (sel == 'abnormal') {
       leftCard = _SummaryCard(
@@ -203,12 +237,6 @@ class _SummaryRow extends StatelessWidget {
         icon: Icons.emergency_rounded,
         color: Colors.red,
       );
-      middleCard = _SummaryCard(
-        title: 'Tổng nhật ký',
-        value: '$abnormalCount',
-        icon: Icons.list_alt_rounded,
-        color: AppTheme.reportColor,
-      );
       rightCard = _SummaryCard(
         title: 'Cảnh báo',
         value: '$warningCount',
@@ -216,18 +244,11 @@ class _SummaryRow extends StatelessWidget {
         color: const Color.fromARGB(255, 220, 139, 17),
       );
     } else if (sel == 'all') {
-      final totalLogged = dangerCount + warningCount + normalCount;
       leftCard = _SummaryCard(
         title: 'Bất thường',
         value: '$abnormalCount',
         icon: Icons.emergency_rounded,
         color: Colors.red,
-      );
-      middleCard = _SummaryCard(
-        title: 'Tổng nhật ký',
-        value: '$totalLogged',
-        icon: Icons.list_alt_rounded,
-        color: AppTheme.reportColor,
       );
       rightCard = _SummaryCard(
         title: 'Bình thường',
@@ -242,12 +263,6 @@ class _SummaryRow extends StatelessWidget {
         icon: Icons.emergency_rounded,
         color: Colors.red,
       );
-      middleCard = _SummaryCard(
-        title: 'Tổng nhật ký',
-        value: '$dangerCount',
-        icon: Icons.list_alt_rounded,
-        color: AppTheme.reportColor,
-      );
       rightCard = _SummaryCard(
         title: 'Sự kiện khác',
         value: '0',
@@ -261,12 +276,6 @@ class _SummaryRow extends StatelessWidget {
         icon: Icons.warning_amber_rounded,
         color: const Color.fromARGB(255, 220, 139, 17),
       );
-      middleCard = _SummaryCard(
-        title: 'Tổng nhật ký',
-        value: '$warningCount',
-        icon: Icons.list_alt_rounded,
-        color: AppTheme.reportColor,
-      );
       rightCard = _SummaryCard(
         title: 'Sự kiện khác',
         value: '0',
@@ -279,12 +288,6 @@ class _SummaryRow extends StatelessWidget {
         value: '$abnormalCount',
         icon: Icons.emergency_rounded,
         color: Colors.red,
-      );
-      middleCard = _SummaryCard(
-        title: 'Tổng nhật ký',
-        value: '$total',
-        icon: Icons.list_alt_rounded,
-        color: AppTheme.reportColor,
       );
       rightCard = _SummaryCard(
         title: 'Bình thường',
@@ -407,14 +410,14 @@ class _EmptyState extends StatelessWidget {
               color: AppTheme.text,
             ),
           ),
-          const SizedBox(height: 8),
-          Text(
-            'Thử điều chỉnh tìm kiếm hoặc bộ lọc',
-            style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-              color: AppTheme.unselectedTextColor,
-            ),
-            textAlign: TextAlign.center,
-          ),
+          // const SizedBox(height: 8),
+          // Text(
+          //   'Thử điều chỉnh tìm kiếm hoặc bộ lọc',
+          //   style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+          //     color: AppTheme.unselectedTextColor,
+          //   ),
+          //   textAlign: TextAlign.center,
+          // ),
           const SizedBox(height: 12),
           Row(
             mainAxisSize: MainAxisSize.min,

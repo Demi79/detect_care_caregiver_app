@@ -1,12 +1,12 @@
 import 'dart:async';
 
 import 'package:detect_care_caregiver_app/core/events/app_events.dart';
+import 'package:detect_care_caregiver_app/features/assignments/data/assignments_remote_data_source.dart';
 import 'package:provider/provider.dart';
 import 'package:detect_care_caregiver_app/core/network/api_client.dart';
 import 'package:detect_care_caregiver_app/core/providers/permissions_provider.dart';
 import 'package:detect_care_caregiver_app/core/theme/app_theme.dart';
 import 'package:detect_care_caregiver_app/core/utils/logger.dart';
-import 'package:detect_care_caregiver_app/features/assignments/data/assignments_remote_data_source.dart';
 import 'package:detect_care_caregiver_app/features/auth/data/auth_storage.dart';
 import 'package:detect_care_caregiver_app/features/camera/data/camera_api.dart';
 import 'package:detect_care_caregiver_app/features/camera/models/camera_entry.dart';
@@ -95,6 +95,9 @@ class _AlertEventCardState extends State<AlertEventCard>
   int? _snoozeRemaining;
   bool _isCancelling = false;
   bool _isEmergencyCalling = false;
+  bool _isImagesLoading = false;
+  bool _imagesPrefetched = false;
+  Future<List<ImageSource>>? _prefetchFuture;
 
   @override
   void initState() {
@@ -146,6 +149,34 @@ class _AlertEventCardState extends State<AlertEventCard>
           AudioService.instance.play(urgent: true, loud: true);
         }
       } catch (_) {}
+    }
+
+    // Cancel auto-dismiss listeners were moved to InAppAlert.
+
+    // Prefetch images for the event and gate the "Xem ảnh" button
+    try {
+      _isImagesLoading = true;
+      final event = _buildEventLogForImages();
+      _prefetchFuture = loadEventImageUrls(event);
+      _prefetchFuture!
+          .then((_) {
+            if (!mounted) return;
+            setState(() {
+              _isImagesLoading = false;
+              _imagesPrefetched = true;
+            });
+          })
+          .catchError((_) {
+            if (!mounted) return;
+            setState(() {
+              _isImagesLoading = false;
+              _imagesPrefetched = true; // allow opening modal even if failed
+            });
+          });
+    } catch (_) {
+      // In case of any unexpected error, ensure the button isn't blocked
+      _isImagesLoading = false;
+      _imagesPrefetched = true;
     }
   }
 
@@ -950,9 +981,22 @@ class _AlertEventCardState extends State<AlertEventCard>
           SizedBox(
             width: double.infinity,
             child: TextButton.icon(
-              onPressed: () => _showImagesModal(context),
-              icon: const Icon(Icons.image_outlined),
-              label: const Text('Xem ảnh'),
+              onPressed: _isImagesLoading
+                  ? null
+                  : () => _showImagesModal(context),
+              icon: _isImagesLoading
+                  ? SizedBox(
+                      width: 16,
+                      height: 16,
+                      child: CircularProgressIndicator(
+                        strokeWidth: 2,
+                        valueColor: AlwaysStoppedAnimation<Color>(
+                          _getSeverityColor(),
+                        ),
+                      ),
+                    )
+                  : const Icon(Icons.image_outlined),
+              label: Text(_isImagesLoading ? 'Đang tải ảnh…' : 'Xem ảnh'),
               style: TextButton.styleFrom(
                 foregroundColor: _getSeverityColor(),
                 padding: const EdgeInsets.symmetric(vertical: 12),
@@ -1074,36 +1118,44 @@ class _AlertEventCardState extends State<AlertEventCard>
                   try {
                     final ds = EventsRemoteDataSource();
                     await ds.cancelEvent(eventId: widget.eventId);
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      const SnackBar(
-                        content: Text('Cảnh báo đã được hủy.'),
-                        backgroundColor: Colors.green,
-                        behavior: SnackBarBehavior.floating,
-                      ),
-                    );
+
+                    // Show success message
+                    if (mounted && context.mounted) {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        const SnackBar(
+                          content: Text('Cảnh báo đã được hủy thành công.'),
+                          backgroundColor: Colors.green,
+                          behavior: SnackBarBehavior.floating,
+                          duration: Duration(milliseconds: 1500),
+                        ),
+                      );
+                    }
+
                     try {
                       AppEvents.instance.notifyEventsChanged();
                     } catch (_) {}
-                    // Close the in-app alert popup after successful cancel.
-                    // Prefer calling the provided onDismiss callback (host may
-                    // manage how the alert was shown). Fallback to popping the
-                    // current route/dialog if no callback is provided.
+
+                    // Close the in-app alert popup immediately after successful cancel
                     try {
-                      if (widget.onDismiss != null) {
-                        widget.onDismiss!();
-                      } else {
-                        Navigator.of(context).maybePop();
+                      if (mounted) {
+                        if (widget.onDismiss != null) {
+                          widget.onDismiss!();
+                        } else {
+                          Navigator.of(context, rootNavigator: true).maybePop();
+                        }
                       }
                     } catch (_) {}
                   } catch (e) {
                     AppLogger.e('Cancel event failed: $e');
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      SnackBar(
-                        content: Text('Hủy cảnh báo thất bại: $e'),
-                        backgroundColor: Colors.red.shade600,
-                        behavior: SnackBarBehavior.floating,
-                      ),
-                    );
+                    if (mounted && context.mounted) {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        SnackBar(
+                          content: Text('Hủy cảnh báo thất bại: $e'),
+                          backgroundColor: Colors.red.shade600,
+                          behavior: SnackBarBehavior.floating,
+                        ),
+                      );
+                    }
                   } finally {
                     if (mounted) setState(() => _isCancelling = false);
                   }
