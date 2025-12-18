@@ -1,8 +1,22 @@
 import 'package:flutter/material.dart';
+
 import 'timeline_utils.dart';
 
+enum TimelineItemKind { event, snapshot, recording }
+
 class CameraTimelineClip {
-  final String id;
+  /// The kind of timeline item — event, snapshot, or recording.
+  final TimelineItemKind kind;
+
+  /// Canonical timeline item id (the id returned by the backend for the
+  /// timeline list record). This was previously called `id`.
+  final String timelineItemId;
+
+  /// Optional canonical ids (only one will be populated depending on kind):
+  final String? eventId;
+  final String? snapshotId;
+  final String? recordingId;
+
   final DateTime startTime;
   final Duration duration;
   final Color accent;
@@ -14,10 +28,14 @@ class CameraTimelineClip {
   final Map<String, dynamic>? metadata;
 
   const CameraTimelineClip({
-    required this.id,
+    required this.kind,
+    required this.timelineItemId,
     required this.startTime,
     required this.duration,
     required this.accent,
+    this.eventId,
+    this.snapshotId,
+    this.recordingId,
     this.cameraId,
     this.playUrl,
     this.downloadUrl,
@@ -25,6 +43,10 @@ class CameraTimelineClip {
     this.eventType,
     this.metadata,
   });
+
+  // Backwards-compatible accessors used throughout the codebase.
+  String get id => timelineItemId;
+  String get timelineEntryId => timelineItemId;
 
   String get timeLabel => formatHmsVn(startTime);
 

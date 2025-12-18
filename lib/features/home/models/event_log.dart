@@ -129,8 +129,35 @@ class EventLog implements LogEntry {
       return null;
     }
 
-    final rawEventId = first(json, ['event_id', 'eventId', 'id']);
-    final parsedEventId = s(rawEventId) ?? '';
+    // final rawEventId = first(json, ['event_id', 'eventId', 'id']);
+    // final parsedEventId = s(rawEventId) ?? '';
+    bool isUuidLoose(String s) => RegExp(
+      r'^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$',
+      caseSensitive: false,
+    ).hasMatch(s.trim());
+
+    final hasEventShape = [
+      'event_type',
+      'eventType',
+      'type',
+      'status',
+      'event_status',
+      'lifecycle_state',
+      'lifecycleState',
+    ].any((key) => json.containsKey(key));
+
+    final rawEventIdKeys = hasEventShape
+        ? ['event_id', 'eventId', 'id']
+        : ['event_id', 'eventId'];
+
+    final ev = s(first(json, rawEventIdKeys))?.trim();
+    final id = s(first(json, ['id']))?.trim();
+
+    final parsedEventId = (ev != null && ev.isNotEmpty)
+        ? ev
+        : ((hasEventShape && id != null && id.isNotEmpty && isUuidLoose(id))
+              ? id
+              : '');
 
     final confirmKeys = [
       'confirm_status',

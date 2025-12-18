@@ -409,8 +409,8 @@ class _SearchScreenState extends State<SearchScreen> {
           ),
           const SizedBox(height: 16),
           _buildDateRangePicker(),
-          const SizedBox(height: 16),
-          _buildConfidenceSlider(),
+          // const SizedBox(height: 16),
+          // _buildConfidenceSlider(),
         ],
       ),
     );
@@ -458,54 +458,54 @@ class _SearchScreenState extends State<SearchScreen> {
     );
   }
 
-  Widget _buildConfidenceSlider() {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Row(
-          children: [
-            const Icon(
-              Icons.show_chart_rounded,
-              color: AppTheme.primaryBlue,
-              size: 22,
-            ),
-            const SizedBox(width: 10),
-            const Text(
-              'Độ tin cậy tối thiểu',
-              style: TextStyle(
-                color: Color(0xFF475569),
-                fontSize: 14,
-                fontWeight: FontWeight.w600,
-              ),
-            ),
-            const Spacer(),
-            Text(
-              '${(_minConfidence * 100).round()}%',
-              style: const TextStyle(
-                color: AppTheme.primaryBlue,
-                fontWeight: FontWeight.w700,
-              ),
-            ),
-          ],
-        ),
-        SliderTheme(
-          data: const SliderThemeData(
-            activeTrackColor: AppTheme.primaryBlue,
-            inactiveTrackColor: Color(0xFFE2E8F0),
-            thumbColor: Colors.white,
-            trackHeight: 4,
-          ),
-          child: Slider(
-            value: _minConfidence,
-            min: 0,
-            max: 1,
-            divisions: 10,
-            onChanged: (val) => setState(() => _minConfidence = val),
-          ),
-        ),
-      ],
-    );
-  }
+  // Widget _buildConfidenceSlider() {
+  //   return Column(
+  //     crossAxisAlignment: CrossAxisAlignment.start,
+  //     children: [
+  //       Row(
+  //         children: [
+  //           const Icon(
+  //             Icons.show_chart_rounded,
+  //             color: AppTheme.primaryBlue,
+  //             size: 22,
+  //           ),
+  //           const SizedBox(width: 10),
+  //           const Text(
+  //             'Độ tin cậy tối thiểu',
+  //             style: TextStyle(
+  //               color: Color(0xFF475569),
+  //               fontSize: 14,
+  //               fontWeight: FontWeight.w600,
+  //             ),
+  //           ),
+  //           const Spacer(),
+  //           Text(
+  //             '${(_minConfidence * 100).round()}%',
+  //             style: const TextStyle(
+  //               color: AppTheme.primaryBlue,
+  //               fontWeight: FontWeight.w700,
+  //             ),
+  //           ),
+  //         ],
+  //       ),
+  //       SliderTheme(
+  //         data: const SliderThemeData(
+  //           activeTrackColor: AppTheme.primaryBlue,
+  //           inactiveTrackColor: Color(0xFFE2E8F0),
+  //           thumbColor: Colors.white,
+  //           trackHeight: 4,
+  //         ),
+  //         child: Slider(
+  //           value: _minConfidence,
+  //           min: 0,
+  //           max: 1,
+  //           divisions: 10,
+  //           onChanged: (val) => setState(() => _minConfidence = val),
+  //         ),
+  //       ),
+  //     ],
+  //   );
+  // }
 
   Future<void> _selectDateRange() async {
     final picked = await showDateRangePicker(
@@ -671,38 +671,39 @@ class _SearchScreenState extends State<SearchScreen> {
                           ),
                         ],
                       ),
-                      if (result.confidenceScore > 0)
-                        Padding(
-                          padding: const EdgeInsets.only(top: 6),
-                          child: Row(
-                            children: [
-                              Expanded(
-                                flex: 1,
-                                child: ClipRRect(
-                                  borderRadius: BorderRadius.circular(3),
-                                  child: LinearProgressIndicator(
-                                    value: result.confidenceScore,
-                                    backgroundColor: const Color(0xFFF1F5F9),
-                                    valueColor:
-                                        const AlwaysStoppedAnimation<Color>(
-                                          AppTheme.primaryBlue,
-                                        ),
-                                    minHeight: 6,
-                                  ),
-                                ),
-                              ),
-                              const SizedBox(width: 8),
-                              Text(
-                                '${(result.confidenceScore * 100).round()}%',
-                                style: const TextStyle(
-                                  fontSize: 12,
-                                  color: AppTheme.primaryBlue,
-                                  fontWeight: FontWeight.w600,
-                                ),
-                              ),
-                            ],
-                          ),
-                        ),
+
+                      // if (result.confidenceScore > 0)
+                      //   Padding(
+                      //     padding: const EdgeInsets.only(top: 6),
+                      //     child: Row(
+                      //       children: [
+                      //         Expanded(
+                      //           flex: 1,
+                      //           child: ClipRRect(
+                      //             borderRadius: BorderRadius.circular(3),
+                      //             child: LinearProgressIndicator(
+                      //               value: result.confidenceScore,
+                      //               backgroundColor: const Color(0xFFF1F5F9),
+                      //               valueColor:
+                      //                   const AlwaysStoppedAnimation<Color>(
+                      //                     AppTheme.primaryBlue,
+                      //                   ),
+                      //               minHeight: 6,
+                      //             ),
+                      //           ),
+                      //         ),
+                      //         const SizedBox(width: 8),
+                      //         Text(
+                      //           '${(result.confidenceScore * 100).round()}%',
+                      //           style: const TextStyle(
+                      //             fontSize: 12,
+                      //             color: AppTheme.primaryBlue,
+                      //             fontWeight: FontWeight.w600,
+                      //           ),
+                      //         ),
+                      //       ],
+                      //     ),
+                      //   ),
                     ],
                   ),
                 ),
@@ -727,7 +728,7 @@ class _SearchScreenState extends State<SearchScreen> {
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
       itemBuilder: (context) => [
         const PopupMenuItem(value: 'Xem chi tiết', child: Text('Xem chi tiết')),
-        const PopupMenuItem(value: 'Chia sẻ', child: Text('Chia sẻ')),
+        // const PopupMenuItem(value: 'Chia sẻ', child: Text('Chia sẻ')),
       ],
       icon: const Icon(
         Icons.more_vert_rounded,

@@ -1,19 +1,25 @@
-import 'package:detect_care_caregiver_app/features/auth/data/auth_storage.dart';
-import 'package:detect_care_caregiver_app/services/push_service.dart';
+import 'dart:async';
+import 'dart:convert';
+import 'dart:io';
+
 import 'package:detect_care_caregiver_app/core/alerts/alert_coordinator.dart';
 import 'package:detect_care_caregiver_app/core/utils/deep_link_handler.dart';
 import 'package:detect_care_caregiver_app/core/utils/logger.dart';
+import 'package:detect_care_caregiver_app/features/auth/data/auth_storage.dart';
 import 'package:detect_care_caregiver_app/features/home/service/event_service.dart';
+import 'package:detect_care_caregiver_app/firebase_options.dart';
+import 'package:detect_care_caregiver_app/services/push_service.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
-import 'dart:convert';
-import 'package:supabase_flutter/supabase_flutter.dart';
+import 'package:http/http.dart' as http;
+import 'package:path_provider/path_provider.dart';
+import 'package:permission_handler/permission_handler.dart';
 import 'package:shared_preferences/shared_preferences.dart';
-import 'dart:async';
+import 'package:supabase_flutter/supabase_flutter.dart';
 
 /// Quản lý thông báo và push notifications cho ứng dụng y tế
 /// Xử lý Firebase FCM, local notifications và Supabase realtime
@@ -49,7 +55,7 @@ class NotificationManager {
   static const String _channelDesc =
       'Thông báo cảnh báo y tế và sự kiện khẩn cấp';
   // Silent channel for notifications that should not play sound
-  static const String _silentChannelId = 'healthcare_alerts_silent';
+  static const String _silentChannelId = 'healthcare_alerts_silent_v2';
   static const String _silentChannelName = 'Cảnh báo Y tế (Im lặng)';
   static const String _silentChannelDesc = 'Thông báo y tế không phát âm thanh';
   // Foreground realtime wait timeout when trying to sync notification timing
@@ -281,7 +287,7 @@ class NotificationManager {
       _silentChannelId,
       _silentChannelName,
       description: _silentChannelDesc,
-      importance: Importance.defaultImportance,
+      importance: Importance.high,
       enableVibration: false,
       enableLights: false,
       sound: null,
@@ -301,7 +307,9 @@ class NotificationManager {
     try {
       // Khởi tạo Firebase nếu chưa sẵn sàng
       if (!_isFirebaseReady) {
-        await Firebase.initializeApp();
+        await Firebase.initializeApp(
+          options: DefaultFirebaseOptions.currentPlatform,
+        );
         _isFirebaseReady = true;
         AppLogger.i('🔥 Firebase đã khởi tạo thành công');
       }
@@ -322,6 +330,26 @@ class NotificationManager {
       } else {
         AppLogger.w('⚠️ Quyền thông báo bị từ chối');
         return;
+      }
+
+      if (Platform.isAndroid) {
+        try {
+          final status = await Permission.notification.status;
+          if (!status.isGranted) {
+            final result = await Permission.notification.request();
+            if (result.isGranted) {
+              AppLogger.i('✅ Android POST_NOTIFICATIONS permission granted');
+            } else {
+              AppLogger.w(
+                '⚠️ Android POST_NOTIFICATIONS permission not granted',
+              );
+            }
+          }
+        } catch (e) {
+          AppLogger.w(
+            'Không thể yêu cầu permission notification trên Android: $e',
+          );
+        }
       }
 
       Future.delayed(Duration.zero, () => _registerDeviceToken());
@@ -386,9 +414,7 @@ class NotificationManager {
       final jwt = await AuthStorage.getAccessToken();
 
       if (userId != null && jwt != null) {
-        // PushService.registerDeviceToken() handles fetching the FCM
-        // token and registering it with the backend. The current
-        // implementation doesn't accept userId/jwt parameters.
+        await PushService.registerDeviceToken();
         // AppLogger.i('✅ FCM token đã đăng ký thành công');
       } else {
         // AppLogger.d('⏳ Bỏ qua đăng ký device token - user chưa xác thực');
@@ -400,13 +426,65 @@ class NotificationManager {
 
   /// Thiết lập Supabase realtime cho sự kiện foreground
   void _setupSupabaseRealtime() {
-    _supabase
-        .channel('healthcare_events')
+    // Listen for new event inserts (existing behavior) and also for
+    // updates that represent caregiver proposals so we can show a
+    // notification when a proposal is created/updated.
+    final ch = _supabase.channel('healthcare_events');
+
+    ch
         .onPostgresChanges(
           event: PostgresChangeEvent.insert,
           schema: 'public',
           table: 'event_detections',
           callback: _handleForegroundEvent,
+        )
+        .onPostgresChanges(
+          event: PostgresChangeEvent.update,
+          schema: 'public',
+          table: 'event_detections',
+          callback: (payload) async {
+            try {
+              final newRow = payload.newRecord;
+              if (newRow.isEmpty) return;
+
+              // Consider this an incoming proposal if confirmation_state == 'pending'
+              // or proposed_status is present.
+              final confirmation = (newRow['confirmation_state'] ?? '')
+                  .toString();
+              final proposed = newRow['proposed_status'];
+              if ((confirmation.isNotEmpty &&
+                      confirmation.toLowerCase() == 'pending') ||
+                  (proposed != null && proposed.toString().isNotEmpty)) {
+                AppLogger.i(
+                  '🔔 Detected proposal update for event ${newRow['event_id']}',
+                );
+
+                final eventId = (newRow['event_id'] ?? newRow['id'])
+                    ?.toString();
+                final title = 'Đề xuất trạng thái từ caregiver';
+                final body = proposed != null && proposed.toString().isNotEmpty
+                    ? 'Đề xuất: ${proposed.toString()}'
+                    : 'Có đề xuất trạng thái mới cần xem xét';
+
+                // Show a silent notification (no sound) to avoid doubling alert sounds
+                // since proposals are informational. We still include deeplink.
+                await showNotification(
+                  title: title,
+                  body: body,
+                  urgent: false,
+                  playSound: false,
+                  eventId: eventId,
+                  eventData: newRow.cast<String, dynamic>(),
+                );
+              }
+            } catch (e, st) {
+              AppLogger.e(
+                'Error handling proposal update realtime payload: $e',
+                e,
+                st,
+              );
+            }
+          },
         )
         .subscribe();
 
@@ -425,6 +503,11 @@ class NotificationManager {
       '└─ Độ khẩn cấp: ${isUrgent ? '🚨 KHẨN CẤP' : '📝 Bình thường'}\n',
     );
 
+    final imageUrl = _extractImageUrl(eventData);
+    AppLogger.d('📷 [Foreground] Extracted imageUrl: ${imageUrl ?? "(null)"}');
+    if (imageUrl != null) {
+      AppLogger.d('📷 [Foreground] Image URL length: ${imageUrl.length}');
+    }
     await showNotification(
       title: 'Cảnh báo Y tế',
       body: _generateNotificationBody(eventData),
@@ -433,6 +516,8 @@ class NotificationManager {
       // system/local notification sound.
       playSound: false,
       eventId: (eventData['event_id'] ?? eventData['id'])?.toString(),
+      imageUrl: imageUrl,
+      eventData: eventData,
     );
     AppLogger.d('Đã gọi showNotification cho sự kiện Supabase (foreground)');
   }
@@ -446,6 +531,9 @@ class NotificationManager {
   /// Xử lý foreground FCM messages
   Future<void> _handleForegroundMessage(RemoteMessage message) async {
     AppLogger.i('📨 Nhận foreground FCM message');
+    AppLogger.i(
+      '📨 onMessage fired. data=${message.data} notification=${message.notification}',
+    );
 
     final data = message.data;
     if (data.isEmpty) return;
@@ -466,12 +554,15 @@ class NotificationManager {
           _fgRealtimeTimeout,
         );
         if (realtimeRow != null) {
+          final imageUrl = _extractImageUrl(realtimeRow);
           await showNotification(
             title: message.notification?.title ?? 'Cảnh báo Y tế',
             body: _generateNotificationBody(realtimeRow),
             urgent: urgent,
             playSound: false,
             eventId: eventId,
+            imageUrl: imageUrl,
+            eventData: realtimeRow,
           );
           AppLogger.d(
             'Foreground FCM: shown (synced via realtime) for $eventId',
@@ -486,12 +577,18 @@ class NotificationManager {
       try {
         final svc = EventService.withDefaultClient();
         final found = await svc.fetchLogDetail(eventId);
+        final eventMap = found.toMapString();
+        final imageUrl = found.imageUrls.isNotEmpty
+            ? found.imageUrls.first
+            : null;
         await showNotification(
           title: message.notification?.title ?? 'Cảnh báo Y tế',
-          body: _generateNotificationBody(found.toMapString()),
+          body: _generateNotificationBody(eventMap),
           urgent: urgent,
           playSound: false,
           eventId: eventId,
+          imageUrl: imageUrl,
+          eventData: eventMap,
         );
         AppLogger.d('Foreground FCM: shown (synced via fetch) for $eventId');
         return;
@@ -518,6 +615,8 @@ class NotificationManager {
     bool urgent = false,
     bool playSound = true,
     String? eventId,
+    String? imageUrl,
+    Map<String, dynamic>? eventData,
   }) async {
     try {
       AppLogger.i(
@@ -555,12 +654,67 @@ class NotificationManager {
       final selectedChannelName = playSound ? _channelName : _silentChannelName;
       final selectedChannelDesc = playSound ? _channelDesc : _silentChannelDesc;
 
+      // Download and prepare image for notification
+      String? bigPicturePath;
+      if (imageUrl != null && imageUrl.isNotEmpty) {
+        AppLogger.d(
+          '📷 [ShowNotification] Attempting to download image from: $imageUrl',
+        );
+        try {
+          bigPicturePath = await _downloadAndSaveImage(
+            imageUrl,
+            eventId ?? 'event',
+          );
+          if (bigPicturePath != null) {
+            AppLogger.i(
+              '✅ [ShowNotification] Image downloaded successfully: $bigPicturePath',
+            );
+          } else {
+            AppLogger.w('⚠️ [ShowNotification] Image download returned null');
+          }
+        } catch (e, st) {
+          AppLogger.e(
+            '❌ [ShowNotification] Failed to download notification image: $e',
+            e,
+            st,
+          );
+        }
+      } else {
+        AppLogger.d(
+          '📷 [ShowNotification] No imageUrl provided (imageUrl=${imageUrl ?? "null"})',
+        );
+      }
+
+      // Enhanced body with event details
+      String enhancedBody = body;
+      if (eventData != null) {
+        final cameraId = eventData['camera_id'] as String?;
+        final detectedAt = eventData['detected_at'] as String?;
+
+        final parts = <String>[body];
+        if (cameraId != null) {
+          parts.add('Camera: $cameraId');
+        }
+        if (detectedAt != null) {
+          try {
+            final dt = DateTime.parse(detectedAt);
+            parts.add(
+              'Thời gian: ${dt.hour}:${dt.minute.toString().padLeft(2, '0')}',
+            );
+          } catch (_) {}
+        }
+        enhancedBody = parts.join('\n');
+      }
+
+      final importanceValue = urgent ? Importance.max : Importance.high;
+      final priorityValue = Priority.high;
+
       final androidDetails = AndroidNotificationDetails(
         selectedChannelId,
         selectedChannelName,
         channelDescription: selectedChannelDesc,
-        importance: playSound ? Importance.max : Importance.defaultImportance,
-        priority: playSound ? Priority.high : Priority.defaultPriority,
+        importance: importanceValue,
+        priority: priorityValue,
         sound: playSound
             ? RawResourceAndroidNotificationSound(soundName)
             : null,
@@ -572,6 +726,15 @@ class NotificationManager {
         ledColor: playSound ? (urgent ? const Color(0xFFFF0000) : null) : null,
         ledOnMs: playSound ? (urgent ? 1000 : null) : null,
         ledOffMs: playSound ? (urgent ? 500 : null) : null,
+        styleInformation: bigPicturePath != null
+            ? BigPictureStyleInformation(
+                FilePathAndroidBitmap(bigPicturePath),
+                contentTitle: title,
+                summaryText: enhancedBody,
+                htmlFormatContentTitle: true,
+                htmlFormatSummaryText: true,
+              )
+            : null,
       );
 
       final iosDetails = DarwinNotificationDetails(
@@ -579,16 +742,30 @@ class NotificationManager {
         presentSound: playSound,
         presentAlert: true,
         presentBadge: true,
+        attachments: bigPicturePath != null
+            ? [DarwinNotificationAttachment(bigPicturePath)]
+            : null,
       );
 
       AppLogger.i(
-        '[NotificationManager] Calling _localNotifications.show() sound=$soundName playSound=$playSound urgent=$urgent',
+        '[NotificationManager] Calling _localNotifications.show() sound=$soundName playSound=$playSound urgent=$urgent imageUrl=$imageUrl',
       );
+
+      String? payload;
+      try {
+        if (eventId != null && eventId.isNotEmpty) {
+          payload = jsonEncode({'deeplink': 'detectcare://alert/$eventId'});
+        }
+      } catch (e) {
+        AppLogger.w('Failed to build notification payload: $e');
+      }
+
       await _localNotifications.show(
         _generateNotificationId(),
         title,
-        body,
+        enhancedBody,
         NotificationDetails(android: androidDetails, iOS: iosDetails),
+        payload: payload,
       );
       AppLogger.i('[NotificationManager] _localNotifications.show() completed');
 
@@ -618,6 +795,73 @@ class NotificationManager {
     }
   }
 
+  /// Download và lưu ảnh cho notification
+  Future<String?> _downloadAndSaveImage(String url, String filename) async {
+    try {
+      AppLogger.d('📥 [Download] Starting download from: $url');
+
+      // Validate URL
+      if (!url.startsWith('http://') && !url.startsWith('https://')) {
+        AppLogger.w('❌ [Download] Invalid URL scheme: $url');
+        return null;
+      }
+
+      final uri = Uri.tryParse(url);
+      if (uri == null) {
+        AppLogger.w('❌ [Download] Failed to parse URL: $url');
+        return null;
+      }
+
+      AppLogger.d('🌐 [Download] Parsed URI: ${uri.toString()}');
+
+      final response = await http
+          .get(uri)
+          .timeout(
+            const Duration(seconds: 10),
+            onTimeout: () {
+              AppLogger.w('⏱️ [Download] Timeout after 10s');
+              throw TimeoutException('Image download timeout');
+            },
+          );
+
+      AppLogger.d('📡 [Download] Response status: ${response.statusCode}');
+      AppLogger.d(
+        '📦 [Download] Content length: ${response.contentLength ?? "unknown"} bytes',
+      );
+      AppLogger.d(
+        '📋 [Download] Content type: ${response.headers['content-type'] ?? "unknown"}',
+      );
+
+      if (response.statusCode != 200) {
+        AppLogger.w('❌ [Download] Failed with status ${response.statusCode}');
+        return null;
+      }
+
+      if (response.bodyBytes.isEmpty) {
+        AppLogger.w('❌ [Download] Response body is empty');
+        return null;
+      }
+
+      final directory = await getTemporaryDirectory();
+      final timestamp = DateTime.now().millisecondsSinceEpoch;
+      final filePath =
+          '${directory.path}/notification_${filename}_$timestamp.jpg';
+      final file = File(filePath);
+      await file.writeAsBytes(response.bodyBytes);
+
+      final fileSize = await file.length();
+      AppLogger.i('✅ [Download] Image saved to: $filePath ($fileSize bytes)');
+      return filePath;
+    } catch (e, st) {
+      AppLogger.e(
+        '❌ [Download] Error downloading notification image: $e',
+        e,
+        st,
+      );
+      return null;
+    }
+  }
+
   /// Xác định độ khẩn cấp của sự kiện
   bool _determineUrgency(Map<String, dynamic> eventData) {
     final eventType = eventData['event_type'] as String?;
@@ -625,6 +869,80 @@ class NotificationManager {
 
     return eventType == 'FALL_DETECTION' ||
         (confidenceScore != null && confidenceScore > 0.85);
+  }
+
+  /// Extract image URL từ event data
+  String? _extractImageUrl(Map<String, dynamic> eventData) {
+    try {
+      AppLogger.d(
+        '🔍 [ExtractImage] Event data keys: ${eventData.keys.join(", ")}',
+      );
+
+      // Thử lấy từ snapshot_url trực tiếp
+      final snapshotUrl = eventData['snapshot_url'] ?? eventData['snapshotUrl'];
+      if (snapshotUrl != null && snapshotUrl.toString().isNotEmpty) {
+        final url = snapshotUrl.toString();
+        AppLogger.i('✅ [ExtractImage] Found snapshot_url: $url');
+        return url;
+      }
+
+      // Thử lấy từ snapshots object
+      final snapshots = eventData['snapshots'] ?? eventData['snapshot'];
+      if (snapshots != null) {
+        AppLogger.d(
+          '🔍 [ExtractImage] Found snapshots field: ${snapshots.runtimeType}',
+        );
+
+        if (snapshots is String && snapshots.isNotEmpty) {
+          AppLogger.i('✅ [ExtractImage] Found snapshots as string: $snapshots');
+          return snapshots;
+        }
+        if (snapshots is Map) {
+          AppLogger.d(
+            '🔍 [ExtractImage] Snapshots map keys: ${snapshots.keys.join(", ")}',
+          );
+          final url = snapshots['cloud_url'] ?? snapshots['url'];
+          if (url != null && url.toString().isNotEmpty) {
+            final urlStr = url.toString();
+            AppLogger.i('✅ [ExtractImage] Found URL in snapshots map: $urlStr');
+            return urlStr;
+          }
+          // Thử lấy từ files array trong snapshots
+          if (snapshots['files'] is List) {
+            final files = snapshots['files'] as List;
+            AppLogger.d(
+              '🔍 [ExtractImage] Found files array with ${files.length} items',
+            );
+            if (files.isNotEmpty) {
+              final first = files.first;
+              if (first is Map) {
+                final fileUrl = first['cloud_url'] ?? first['url'];
+                if (fileUrl != null && fileUrl.toString().isNotEmpty) {
+                  final urlStr = fileUrl.toString();
+                  AppLogger.i(
+                    '✅ [ExtractImage] Found URL in files[0]: $urlStr',
+                  );
+                  return urlStr;
+                }
+              }
+            }
+          }
+        }
+      }
+
+      // Thử lấy từ image_urls array
+      final imageUrls = eventData['image_urls'] ?? eventData['imageUrls'];
+      if (imageUrls is List && imageUrls.isNotEmpty) {
+        final url = imageUrls.first.toString();
+        AppLogger.i('✅ [ExtractImage] Found image_urls[0]: $url');
+        return url;
+      }
+
+      AppLogger.w('⚠️ [ExtractImage] No image URL found in event data');
+    } catch (e, st) {
+      AppLogger.e('❌ [ExtractImage] Error extracting image URL: $e', e, st);
+    }
+    return null;
   }
 
   /// Tạo nội dung thông báo từ dữ liệu sự kiện
@@ -784,9 +1102,7 @@ class NotificationManager {
 /// Firebase background message handler
 @pragma('vm:entry-point')
 Future<void> _firebaseBackgroundHandler(RemoteMessage message) async {
-  // Background handler initialization — use default initialization
-  // which reads native config on mobile platforms.
-  await Firebase.initializeApp();
+  await Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform);
 
   final notificationManager = NotificationManager();
   await notificationManager.showNotification(

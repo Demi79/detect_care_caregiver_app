@@ -1,8 +1,5 @@
 import 'dart:async';
 
-import 'package:flutter/material.dart';
-import 'package:provider/provider.dart';
-
 import 'package:detect_care_caregiver_app/features/camera/controllers/camera_timeline_controller.dart';
 import 'package:detect_care_caregiver_app/features/camera/data/camera_timeline_api.dart';
 import 'package:detect_care_caregiver_app/features/camera/models/camera_entry.dart';
@@ -11,6 +8,8 @@ import 'package:detect_care_caregiver_app/features/camera/widgets/timeline/camer
 import 'package:detect_care_caregiver_app/features/camera/widgets/timeline/camera_timeline_empty_preview.dart';
 import 'package:detect_care_caregiver_app/features/camera/widgets/timeline/camera_timeline_list.dart';
 import 'package:detect_care_caregiver_app/features/camera/widgets/timeline/camera_timeline_mode_selector.dart';
+import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
 
 class CameraTimelineScreen extends StatefulWidget {
   final CameraEntry camera;
@@ -79,8 +78,7 @@ class _CameraTimelineScreenState extends State<CameraTimelineScreen> {
                   Icons.arrow_back_ios_new,
                   color: Colors.black87,
                 ),
-                onPressed: () =>
-                    Navigator.of(context, rootNavigator: true).maybePop(),
+                onPressed: () => Navigator.of(context).maybePop(),
               ),
               titleSpacing: 0,
               title: Column(
@@ -198,10 +196,12 @@ class _CameraTimelineScreenState extends State<CameraTimelineScreen> {
                         ],
                         CameraTimelineDateSelector(
                           formattedDay: _formatDay(ctl.selectedDay),
-                          onPrev: () => ctl.changeDay(-1),
-                          onNext: () => ctl.changeDay(1),
-                          canGoToPrev: ctl.canGoToPreviousDay,
-                          canGoToNext: ctl.canGoToNextDay,
+                          onPrev: ctl.canGoPrev
+                              ? () => ctl.changeDay(-1)
+                              : () {},
+                          onNext: ctl.canGoNext
+                              ? () => ctl.changeDay(1)
+                              : () {},
                           onMenu: () =>
                               ScaffoldMessenger.of(context).showSnackBar(
                                 const SnackBar(
@@ -220,13 +220,15 @@ class _CameraTimelineScreenState extends State<CameraTimelineScreen> {
                           height: (timelineHeight * 1.35).clamp(380.0, 720.0),
                           child: CameraTimelineList(
                             entries: ctl.entries,
-                            selectedClipId: ctl.selectedClipId,
+                            selectedTimelineEntryId:
+                                ctl.selectedTimelineEntryId,
                             isLoading: ctl.isLoading,
                             errorMessage: ctl.errorMessage,
                             compact: false,
                             zoomLevel: ctl.zoomLevel,
                             onAdjustZoom: (d) => ctl.adjustZoom(d),
-                            onSelectClip: (id) => ctl.selectClip(id),
+                            onSelectClip: (timelineEntryId) =>
+                                ctl.selectClip(timelineEntryId),
                             onRetry: () => unawaited(ctl.loadTimeline()),
                             camera: widget.camera,
                           ),
@@ -289,10 +291,8 @@ class _CameraTimelineScreenState extends State<CameraTimelineScreen> {
         ],
         CameraTimelineDateSelector(
           formattedDay: _formatDay(ctl.selectedDay),
-          onPrev: () => ctl.changeDay(-1),
-          onNext: () => ctl.changeDay(1),
-          canGoToPrev: ctl.canGoToPreviousDay,
-          canGoToNext: ctl.canGoToNextDay,
+          onPrev: ctl.canGoPrev ? () => ctl.changeDay(-1) : () {},
+          onNext: ctl.canGoNext ? () => ctl.changeDay(1) : () {},
           onMenu: () => ScaffoldMessenger.of(context).showSnackBar(
             const SnackBar(content: Text('Menu ngày đang phát triển.')),
           ),
@@ -305,13 +305,13 @@ class _CameraTimelineScreenState extends State<CameraTimelineScreen> {
         Expanded(
           child: CameraTimelineList(
             entries: ctl.entries,
-            selectedClipId: ctl.selectedClipId,
+            selectedTimelineEntryId: ctl.selectedTimelineEntryId,
             isLoading: ctl.isLoading,
             errorMessage: ctl.errorMessage,
             compact: true,
             zoomLevel: ctl.zoomLevel,
             onAdjustZoom: (d) => ctl.adjustZoom(d),
-            onSelectClip: (id) => ctl.selectClip(id),
+            onSelectClip: (timelineEntryId) => ctl.selectClip(timelineEntryId),
             onRetry: () => unawaited(ctl.loadTimeline()),
             camera: widget.camera,
           ),

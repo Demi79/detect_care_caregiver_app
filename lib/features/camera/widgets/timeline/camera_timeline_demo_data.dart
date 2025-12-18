@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
-
-import 'camera_timeline_components.dart';
+import 'timeline_models.dart';
 
 class DemoTimelineData {
   final List<CameraTimelineClip> clips;
@@ -12,19 +11,25 @@ class DemoTimelineData {
     final base = DateTime(selectedDay.year, selectedDay.month, selectedDay.day);
     final clips = [
       CameraTimelineClip(
-        id: 'clip-210133',
+        kind: TimelineItemKind.recording,
+        timelineItemId: 'clip-210133',
+        recordingId: 'clip-210133',
         startTime: base.add(const Duration(hours: 21, minutes: 1, seconds: 33)),
         duration: const Duration(seconds: 24),
         accent: Colors.orange,
       ),
       CameraTimelineClip(
-        id: 'clip-210109',
+        kind: TimelineItemKind.recording,
+        timelineItemId: 'clip-210109',
+        recordingId: 'clip-210109',
         startTime: base.add(const Duration(hours: 21, minutes: 1, seconds: 9)),
         duration: const Duration(seconds: 24),
         accent: Colors.blueGrey,
       ),
       CameraTimelineClip(
-        id: 'clip-201732',
+        kind: TimelineItemKind.recording,
+        timelineItemId: 'clip-201732',
+        recordingId: 'clip-201732',
         startTime: base.add(
           const Duration(hours: 20, minutes: 17, seconds: 32),
         ),
@@ -32,7 +37,9 @@ class DemoTimelineData {
         accent: Colors.blue,
       ),
       CameraTimelineClip(
-        id: 'clip-201546',
+        kind: TimelineItemKind.recording,
+        timelineItemId: 'clip-201546',
+        recordingId: 'clip-201546',
         startTime: base.add(
           const Duration(hours: 20, minutes: 15, seconds: 46),
         ),
@@ -40,7 +47,9 @@ class DemoTimelineData {
         accent: Colors.teal,
       ),
       CameraTimelineClip(
-        id: 'clip-201345',
+        kind: TimelineItemKind.recording,
+        timelineItemId: 'clip-201345',
+        recordingId: 'clip-201345',
         startTime: base.add(
           const Duration(hours: 20, minutes: 13, seconds: 45),
         ),

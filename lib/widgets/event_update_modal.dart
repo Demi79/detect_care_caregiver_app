@@ -4,6 +4,7 @@ import 'package:detect_care_caregiver_app/core/events/app_events.dart';
 import 'package:detect_care_caregiver_app/core/theme/app_theme.dart';
 import 'package:detect_care_caregiver_app/core/utils/backend_enums.dart' as be;
 import 'package:detect_care_caregiver_app/features/events/data/events_remote_data_source.dart';
+import 'package:detect_care_caregiver_app/features/home/service/event_service.dart';
 import 'package:detect_care_caregiver_app/features/home/models/event_log.dart';
 import 'package:detect_care_caregiver_app/features/home/widgets/action_log_card.dart';
 import 'package:detect_care_caregiver_app/features/home/service/event_images_loader.dart';
@@ -218,7 +219,7 @@ showEventUpdateModal({
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: const [
                               Text(
-                                'Cập nhật sự kiện',
+                                'Đề xuất sự kiện',
                                 style: TextStyle(
                                   fontWeight: FontWeight.w800,
                                   fontSize: 22,
@@ -261,7 +262,7 @@ showEventUpdateModal({
                             const SizedBox(width: 8),
                             Expanded(
                               child: Text(
-                                'Cập nhật chỉ khả dụng trong vòng $eventUpdateWindowDays ngày kể từ khi sự kiện được ghi nhận.',
+                                'Đề xuất chỉ khả dụng trong vòng $eventUpdateWindowDays ngày kể từ khi sự kiện được ghi nhận.',
                                 style: TextStyle(
                                   color: Colors.orange.shade800,
                                   fontWeight: FontWeight.w600,
@@ -594,7 +595,7 @@ showEventUpdateModal({
                               Padding(
                                 padding: const EdgeInsets.only(top: 8),
                                 child: Text(
-                                  'Không có trạng thái khác để cập nhật.',
+                                  'Không có trạng thái khác để đề xuất.',
                                   style: TextStyle(
                                     fontSize: 13,
                                     color: Colors.grey.shade500,
@@ -831,7 +832,7 @@ showEventUpdateModal({
                               maxLines: 4,
                               maxLength: 240,
                               decoration: InputDecoration(
-                                hintText: 'Nhập lý do cập nhật...',
+                                hintText: 'Nhập lý do đề xuất...',
                                 hintStyle: TextStyle(
                                   color: Colors.grey.shade400,
                                   fontSize: 14,
@@ -948,7 +949,7 @@ showEventUpdateModal({
                                       ).showSnackBar(
                                         SnackBar(
                                           content: Text(
-                                            'Không thể cập nhật về trạng thái hiện tại',
+                                            'Không thể đề xuất về trạng thái hiện tại',
                                           ),
                                           backgroundColor:
                                               Colors.orange.shade600,
@@ -963,7 +964,7 @@ showEventUpdateModal({
                                       ).showSnackBar(
                                         SnackBar(
                                           content: Text(
-                                            'Không thể cập nhật về loại sự kiện hiện tại',
+                                            'Không thể đề xuất về loại sự kiện hiện tại',
                                           ),
                                           backgroundColor:
                                               Colors.orange.shade600,
@@ -985,7 +986,7 @@ showEventUpdateModal({
                               size: 20,
                             ),
                             label: const Text(
-                              'Lưu thay đổi',
+                              'Đề xuất thay đổi',
                               style: TextStyle(
                                 fontWeight: FontWeight.w700,
                                 fontSize: 15,
@@ -1014,7 +1015,13 @@ showEventUpdateModal({
         );
       },
     ),
-  ).whenComplete(() => noteController.dispose());
+  ).whenComplete(() {
+    Future.delayed(const Duration(milliseconds: 400), () {
+      try {
+        noteController.dispose();
+      } catch (_) {}
+    });
+  });
 }
 
 // Minimal in-memory draft cache used by the shared modal wrapper.
@@ -1102,6 +1109,42 @@ Future<void> showEventUpdateModalForEvent({
         );
       }
     }
+    try {
+      final det = event.detectionData;
+      final ctx = event.contextData;
+      final recordingId =
+          (det['recording_id'] ??
+                  det['recordingId'] ??
+                  ctx['recording_id'] ??
+                  ctx['recordingId'])
+              ?.toString();
+      if ((resolvedEvent.eventId.isEmpty ||
+              resolvedEvent.status.toString().trim().toLowerCase() ==
+                  'unknown') &&
+          recordingId != null &&
+          recordingId.isNotEmpty) {
+        try {
+          final ds = EventsRemoteDataSource();
+          final found = await ds.listEvents(
+            limit: 1,
+            extraQuery: {'recording_id': recordingId},
+          );
+          if (found.isNotEmpty) {
+            try {
+              resolvedEvent = EventLog.fromJson(found.first);
+              debugPrint(
+                '[EventUpdateModal] Resolved event by recording $recordingId -> ${resolvedEvent.eventId}',
+              );
+              if (imageSourceEvent == event) imageSourceEvent = resolvedEvent;
+            } catch (_) {}
+          }
+        } catch (e) {
+          debugPrint(
+            '[EventUpdateModal] Failed to resolve event by recording: $e',
+          );
+        }
+      }
+    } catch (_) {}
   } catch (_) {}
 
   showEventUpdateModal(
@@ -1175,29 +1218,36 @@ Future<void> showEventUpdateModalForEvent({
 
       final messenger = ScaffoldMessenger.of(pageContext);
       try {
-        final ds = EventsRemoteDataSource();
-        await ds.updateEvent(
-          eventId: event.eventId,
-          status: newStatus,
-          notes: note.trim().isEmpty ? '-' : note.trim(),
-          eventType: eventType ?? event.eventType,
+        // await ds.updateEvent(
+        //   eventId: resolvedEvent.eventId,
+        //   status: newStatus,
+        //   notes: note.trim().isEmpty ? '-' : note.trim(),
+        //   eventType: eventType ?? resolvedEvent.eventType,
+        // );
+        final svc = EventService.withDefaultClient();
+        await svc.proposeEventStatus(
+          eventId: resolvedEvent.eventId,
+          proposedStatus: newStatus,
+          proposedEventType: eventType ?? resolvedEvent.eventType,
+          reason: note.trim().isEmpty ? '-' : note.trim(),
         );
+
         messenger.showSnackBar(
           SnackBar(
-            content: const Text('Cập nhật sự kiện thành công'),
+            content: const Text('Đề xuất sự kiện thành công'),
             backgroundColor: Colors.green.shade600,
             behavior: SnackBarBehavior.floating,
             duration: const Duration(seconds: 2),
           ),
         );
         try {
-          AppEvents.instance.notifyEventsChanged();
+          AppEvents.instance.notifyTableChanged('event_detections');
         } catch (_) {}
         try {
           Navigator.of(pageContext).maybePop();
         } catch (_) {}
         _persistSharedDraft(
-          event.eventId,
+          resolvedEvent.eventId,
           status: null,
           eventType: null,
           note: '',
@@ -1205,7 +1255,7 @@ Future<void> showEventUpdateModalForEvent({
       } catch (e) {
         messenger.showSnackBar(
           SnackBar(
-            content: Text('Cập nhật sự kiện thất bại: $e'),
+            content: Text('Đề xuất sự kiện thất bại: $e'),
             backgroundColor: Colors.red.shade600,
             behavior: SnackBarBehavior.floating,
           ),

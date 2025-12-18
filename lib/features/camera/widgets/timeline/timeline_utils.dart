@@ -47,42 +47,29 @@ double toDouble(dynamic value) {
   return 0.0;
 }
 
-String? _findEventIdDeep(dynamic node) {
-  if (node is Map) {
-    final v1 = node['event_id'];
-    if (v1 != null && v1.toString().isNotEmpty) return v1.toString();
+String? resolveEventIdStrict(Map<String, dynamic> meta) {
+  final direct = meta['event_id'] ?? meta['eventId'];
+  if (direct != null) {
+    final trimmed = direct.toString().trim();
+    if (trimmed.isNotEmpty) return trimmed;
+  }
 
-    final v2 = node['eventId'];
-    if (v2 != null && v2.toString().isNotEmpty) return v2.toString();
-
-    for (final v in node.values) {
-      final found = _findEventIdDeep(v);
-      if (found != null && found.isNotEmpty) return found;
-    }
-  } else if (node is List) {
-    for (final item in node) {
-      final found = _findEventIdDeep(item);
-      if (found != null && found.isNotEmpty) return found;
+  final ev = meta['event'];
+  if (ev is Map) {
+    final nested = ev['event_id'] ?? ev['eventId'] ?? ev['id'];
+    if (nested != null) {
+      final trimmed = nested.toString().trim();
+      if (trimmed.isNotEmpty) return trimmed;
     }
   }
+
   return null;
 }
 
 String resolveEventId({
   required String clipId,
   required Map<String, dynamic> meta,
-}) {
-  final direct = pickString(meta, const ['event_id', 'eventId']);
-  if (direct != null && direct.isNotEmpty) return direct;
-
-  final nested = _findEventIdDeep(meta);
-  if (nested != null && nested.isNotEmpty) return nested;
-
-  final top = pickString(meta, const ['id']);
-  if (top != null && top.isNotEmpty) return top;
-
-  return clipId;
-}
+}) => resolveEventIdStrict(meta) ?? '';
 
 List<String> collectImageUrls(Map<String, dynamic> meta, {String? thumb}) {
   final set = <String>{};

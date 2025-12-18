@@ -1,6 +1,5 @@
-import 'package:flutter/foundation.dart';
-
 import 'package:detect_care_caregiver_app/core/config/app_config.dart';
+import 'package:flutter/foundation.dart';
 
 class CameraEntry {
   final String id;
@@ -52,6 +51,10 @@ class CameraEntry {
     this.createdAt,
     this.updatedAt,
   });
+
+  /// Alias for clarity: prefer `cameraId` where code may otherwise confuse with
+  /// other `id` fields (eventId, timelineEntryId, snapshotId).
+  String get cameraId => id;
 
   CameraEntry copyWith({
     String? id,

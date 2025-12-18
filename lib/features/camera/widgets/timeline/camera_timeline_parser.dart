@@ -2,9 +2,6 @@ import 'package:flutter/material.dart';
 
 import 'camera_timeline_components.dart';
 
-/// Parsing helpers to convert API payloads into timeline clip models and
-/// build timeline entries.
-
 List<CameraTimelineEntry> buildEntries(List<CameraTimelineClip> clips) {
   final sorted = [...clips]..sort((a, b) => b.startTime.compareTo(a.startTime));
   return sorted
@@ -18,7 +15,8 @@ List<CameraTimelineClip> parseRecordingClips(dynamic payload) {
   final clips = <CameraTimelineClip>[];
   for (var i = 0; i < items.length; i++) {
     final item = items[i];
-    final id = (item['id'] ?? item['recording_id'] ?? 'rec-$i').toString();
+    final recordingId = (item['id'] ?? item['recording_id'] ?? 'rec-$i')
+        .toString();
     final timeValue =
         item['start'] ??
         item['start_time'] ??
@@ -34,7 +32,6 @@ List<CameraTimelineClip> parseRecordingClips(dynamic payload) {
     final clamped = durationSeconds.clamp(1, 3600).toInt();
     final duration = Duration(seconds: clamped);
     final accent = colors[(i * 2) % colors.length].shade400;
-    // Optional fields from backend that may be useful in the UI
     final cameraId = item['camera_id']?.toString();
     final playUrl = item['play_url']?.toString() ?? item['playUrl']?.toString();
     final downloadUrl =
@@ -47,10 +44,26 @@ List<CameraTimelineClip> parseRecordingClips(dynamic payload) {
     if (item['metadata'] is Map) {
       meta = Map<String, dynamic>.from(item['metadata']);
     }
+    meta ??= Map<String, dynamic>.from(item);
+    try {
+      // Keep recording ids normalized in metadata, but do NOT alias to snapshot_id.
+      if ((meta['recording_id'] == null ||
+              meta['recording_id'].toString().isEmpty) &&
+          recordingId.isNotEmpty) {
+        meta['recording_id'] = recordingId;
+      }
+      if ((meta['recordingId'] == null ||
+              meta['recordingId'].toString().isEmpty) &&
+          recordingId.isNotEmpty) {
+        meta['recordingId'] = recordingId;
+      }
+    } catch (_) {}
 
     clips.add(
       CameraTimelineClip(
-        id: id,
+        kind: TimelineItemKind.recording,
+        timelineItemId: recordingId,
+        recordingId: recordingId,
         startTime: started,
         duration: duration,
         accent: accent,
@@ -68,21 +81,42 @@ List<CameraTimelineClip> parseRecordingClips(dynamic payload) {
 
 List<CameraTimelineClip> parseSnapshotClips(dynamic payload) {
   final items = _extractItems(payload);
-  const colors = Colors.accents;
+  final colors = Colors.accents;
   final clips = <CameraTimelineClip>[];
   for (var i = 0; i < items.length; i++) {
     final item = items[i];
-    final id = (item['id'] ?? item['snapshot_id'] ?? 'snap-$i').toString();
+    final snapshotId = (item['id'] ?? item['snapshot_id'] ?? 'snap-$i')
+        .toString();
     final timeValue = item['captured_at'] ?? item['created_at'] ?? item['time'];
     final captured = _parseDate(timeValue);
     if (captured == null) continue;
     final accent = colors[(i * 3) % colors.length];
+    String? evtId;
+    try {
+      evtId =
+          (item['event_id'] ?? item['eventId'] ?? item['event']?['event_id'])
+              ?.toString();
+      final snap =
+          item['snapshot_id'] ??
+          item['snapshotId'] ??
+          item['snapshot']?['snapshot_id'];
+      debugPrint(
+        '[TimelineParser] snapshot item id=$snapshotId event_id=$evtId snapshot_id=$snap',
+      );
+    } catch (_) {}
+
     clips.add(
       CameraTimelineClip(
-        id: id,
+        kind: TimelineItemKind.snapshot,
+        timelineItemId: snapshotId,
+        snapshotId: snapshotId,
+        eventId: (evtId != null && evtId.trim().isNotEmpty)
+            ? evtId.trim()
+            : null,
         startTime: captured,
         duration: const Duration(seconds: 5),
         accent: accent,
+        metadata: Map<String, dynamic>.from(item),
       ),
     );
   }
@@ -101,7 +135,7 @@ List<CameraTimelineClip> parseEventClips(dynamic payload) {
   final clips = <CameraTimelineClip>[];
   for (var i = 0; i < items.length; i++) {
     final item = items[i];
-    final id = (item['event_id'] ?? item['id'] ?? 'evt-$i').toString();
+    final eventId = (item['event_id'] ?? item['id'] ?? 'evt-$i').toString();
     final timeValue =
         item['detected_at'] ??
         item['detectedAt'] ??
@@ -120,10 +154,16 @@ List<CameraTimelineClip> parseEventClips(dynamic payload) {
     final accent = colors[i % colors.length];
     clips.add(
       CameraTimelineClip(
-        id: id,
+        kind: TimelineItemKind.event,
+        timelineItemId: eventId,
+        eventId: eventId,
+        // If the event payload references a snapshot id include it as well.
+        snapshotId: (item['snapshot_id'] ?? item['snapshotId'])?.toString(),
         startTime: detected,
         duration: duration,
         accent: accent,
+        eventType: item['event_type']?.toString() ?? item['type']?.toString(),
+        metadata: Map<String, dynamic>.from(item),
       ),
     );
   }

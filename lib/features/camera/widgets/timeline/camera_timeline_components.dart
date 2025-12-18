@@ -1,27 +1,20 @@
-import 'dart:io';
 import 'dart:math' as math;
 
 import 'package:cached_network_image/cached_network_image.dart';
-import 'package:detect_care_caregiver_app/core/providers/permissions_provider.dart';
-import 'package:detect_care_caregiver_app/core/utils/event_edit_validation.dart';
 import 'package:detect_care_caregiver_app/core/utils/logger.dart';
-import 'package:detect_care_caregiver_app/features/assignments/data/assignments_remote_data_source.dart';
-import 'package:detect_care_caregiver_app/features/auth/data/auth_storage.dart';
 import 'package:detect_care_caregiver_app/features/camera/models/camera_entry.dart';
-import 'package:provider/provider.dart';
 import 'package:detect_care_caregiver_app/features/events/data/events_remote_data_source.dart';
-import 'package:detect_care_caregiver_app/features/events/screens/propose_screen.dart';
 import 'package:detect_care_caregiver_app/features/home/models/event_log.dart';
-import 'package:detect_care_caregiver_app/features/home/service/event_images_loader.dart';
-import 'package:detect_care_caregiver_app/features/home/models/event_log.dart';
-
+import 'package:detect_care_caregiver_app/features/home/widgets/action_log_card.dart';
+import 'package:detect_care_caregiver_app/widgets/event_update_modal.dart';
 import 'package:flutter/material.dart';
 
+import 'timeline_mapper.dart';
 import 'timeline_models.dart';
 import 'timeline_utils.dart';
-import 'timeline_mapper.dart';
-export 'timeline_utils.dart';
+
 export 'timeline_models.dart';
+export 'timeline_utils.dart';
 
 EventLog _buildTimelineEventLog(CameraTimelineClip clip, CameraEntry camera) =>
     buildTimelineEventLog(clip, camera);
@@ -29,6 +22,15 @@ EventLog _buildTimelineEventLog(CameraTimelineClip clip, CameraEntry camera) =>
 bool _timelineCanEdit(EventLog event) => timelineCanEdit(
   EventLogLike(createdAt: event.createdAt, detectedAt: event.detectedAt),
 );
+
+void _showUpdateModal(BuildContext context, EventLog event) {
+  showEventUpdateModalForEvent(
+    context: context,
+    event: event,
+    imageSourceEvent: event,
+    canEditEvent: _timelineCanEdit(event),
+  );
+}
 
 class CameraTimelineModeOption {
   final IconData icon;
@@ -260,9 +262,6 @@ class CameraTimelineClipCard extends StatelessWidget {
   final bool showCameraIcon;
   final CameraEntry camera;
 
-  // Cache accepted customer_id to avoid repeated async calls
-  static String? _cachedAcceptedCustomerId;
-
   const CameraTimelineClipCard({
     super.key,
     required this.clip,
@@ -436,177 +435,42 @@ class CameraTimelineClipCard extends StatelessWidget {
   }
 
   void _handleTap(BuildContext context) async {
-    AppLogger.d('[Timeline] ========== _handleTap called ==========');
-    AppLogger.d('[Timeline] Clicked clip.id=${clip.id}');
-    AppLogger.d('[Timeline] Clicked clip.thumbnailUrl=${clip.thumbnailUrl}');
-
     onTap?.call();
     final meta = clip.metadata;
     if (meta != null && meta.isNotEmpty) {
       var event = _buildTimelineEventLog(clip, camera);
 
-      AppLogger.d('[Timeline] Initial event imageUrls: ${event.imageUrls}');
-      AppLogger.d(
-        '[Timeline] event.eventId=${event.eventId}, clip.id=${clip.id}',
-      );
-
-      if (event.eventId == clip.id) {
-        try {
-          final resolver = EventsRemoteDataSource();
-          final found = await resolver.listEvents(
-            limit: 1,
-            extraQuery: {'snapshot_id': clip.id},
-          );
-          if (found.isNotEmpty) {
-            final resolved = EventLog.fromJson(found.first);
-
-            final updatedDetectionData = Map<String, dynamic>.from(
-              resolved.detectionData ?? {},
+      // Only attempt snapshot->event resolution for snapshot items. Avoid
+      // treating recordings (or events) as snapshots which could trigger
+      // incorrect lookups when ids were normalized incorrectly earlier.
+      if (clip.kind == TimelineItemKind.snapshot) {
+        final snapId = clip.snapshotId;
+        if (event.eventId.isEmpty && (snapId != null && snapId.isNotEmpty)) {
+          try {
+            final resolver = EventsRemoteDataSource();
+            final found = await resolver.listEvents(
+              limit: 1,
+              extraQuery: {'snapshot_id': snapId},
             );
-            updatedDetectionData['snapshot_id'] = clip.id;
-
-            AppLogger.d(
-              '[Timeline] Overriding snapshot_id with clip.id=${clip.id} (was: ${resolved.detectionData?['snapshot_id']})',
-            );
-
-            event = EventLog(
-              eventId: resolved.eventId,
-              status: resolved.status,
-              eventType: resolved.eventType,
-              eventDescription: resolved.eventDescription,
-              confidenceScore: resolved.confidenceScore,
-              detectedAt: resolved.detectedAt,
-              createdAt: resolved.createdAt,
-              detectionData: updatedDetectionData,
-              contextData: resolved.contextData,
-              boundingBoxes: resolved.boundingBoxes,
-              confirmStatus: resolved.confirmStatus,
-              lifecycleState: resolved.lifecycleState,
-              cameraId: resolved.cameraId,
-              imageUrls: resolved.imageUrls,
-              aiAnalysisResult: resolved.aiAnalysisResult,
-              proposedStatus: resolved.proposedStatus,
-              pendingUntil: resolved.pendingUntil,
-            );
-
-            AppLogger.d(
-              '[Timeline] Snapshot lookup resolved eventId=${event.eventId} for snapshot=${clip.id}',
-            );
-            AppLogger.d(
-              '[Timeline] Resolved event imageUrls: ${event.imageUrls}',
-            );
-            AppLogger.d(
-              '[Timeline] Resolved event detectionData keys: ${event.detectionData?.keys}',
-            );
-          } else {
-            AppLogger.w('[Timeline] No event found for snapshot_id=${clip.id}');
-          }
-        } catch (e) {
-          AppLogger.e('[Timeline] Snapshot->event lookup failed: $e');
-        }
-      } else {
-        AppLogger.d(
-          '[Timeline] event.eventId already a real eventId, skipping API lookup',
-        );
-      }
-
-      try {
-        final updatedDetectionData = Map<String, dynamic>.from(
-          event.detectionData ?? {},
-        );
-        updatedDetectionData['snapshot_id'] = clip.id;
-
-        event = EventLog(
-          eventId: event.eventId,
-          status: event.status,
-          eventType: event.eventType,
-          eventDescription: event.eventDescription,
-          confidenceScore: event.confidenceScore,
-          detectedAt: event.detectedAt,
-          createdAt: event.createdAt,
-          detectionData: updatedDetectionData,
-          contextData: event.contextData,
-          boundingBoxes: event.boundingBoxes,
-          confirmStatus: event.confirmStatus,
-          lifecycleState: event.lifecycleState,
-          cameraId: event.cameraId,
-          imageUrls: event.imageUrls,
-          aiAnalysisResult: event.aiAnalysisResult,
-          proposedStatus: event.proposedStatus,
-          pendingUntil: event.pendingUntil,
-        );
-        AppLogger.d('[Timeline] Enforced snapshot_id=${clip.id} on event');
-      } catch (e) {
-        AppLogger.w('[Timeline] Failed to enforce snapshot_id: $e');
-      }
-
-      AppLogger.d(
-        '[Timeline] About to show images modal for event.eventId=${event.eventId}',
-      );
-      AppLogger.d(
-        '[Timeline] Final event detectionData[snapshot_id]=${event.detectionData?['snapshot_id']}',
-      );
-      bool precomputedCanEdit = false;
-      String? precomputedReason;
-      try {
-        final permProvider = Provider.of<PermissionsProvider>(
-          context,
-          listen: false,
-        );
-        String? customerId = event.contextData?['customer_id']?.toString();
-        customerId ??= _cachedAcceptedCustomerId; // use cached if available
-
-        if (customerId == null || customerId.isEmpty) {
-          precomputedCanEdit = false;
-          precomputedReason = 'Thiếu thông tin customer_id';
-        } else {
-          final hasPermission = permProvider.hasPermission(
-            customerId,
-            'alert_ack',
-          );
-          if (!hasPermission) {
-            precomputedCanEdit = false;
-            precomputedReason =
-                'Bạn không có quyền đề xuất thay đổi sự kiện. Quyền "Thay đổi sự kiện" đã bị thu hồi.';
-          } else {
-            final ref = event.createdAt ?? event.detectedAt;
-            if (ref != null &&
-                DateTime.now().difference(ref) > const Duration(days: 2)) {
-              precomputedCanEdit = false;
-              precomputedReason =
-                  'Sự kiện đã quá 2 ngày, không thể đề xuất thay đổi.';
-            } else {
-              final status = event.confirmationState?.toUpperCase();
-              final canPropose =
-                  status == 'DETECTED' || status == 'REJECTED_BY_CUSTOMER';
-              if (!canPropose) {
-                precomputedCanEdit = false;
-                precomputedReason =
-                    'Sự kiện đã được thay đổi trước đó hoặc đang chờ duyệt, không thể đề xuất lần nữa.';
-              } else {
-                precomputedCanEdit = true;
-                precomputedReason = null;
-              }
+            if (found.isNotEmpty) {
+              final resolved = EventLog.fromJson(found.first);
+              event = resolved;
+              AppLogger.d(
+                '[Timeline] Snapshot lookup resolved eventId=${event.eventId} for snapshot=$snapId',
+              );
             }
+          } catch (e) {
+            AppLogger.d('[Timeline] Snapshot->event lookup failed: $e');
           }
         }
-      } catch (e) {
-        AppLogger.e('[Timeline] Permission compute error: $e');
-        precomputedCanEdit = false;
-        precomputedReason = 'Lỗi kiểm tra quyền';
       }
 
-      AppLogger.d(
-        '[Timeline] ========== _handleTap about to call _showImagesModal ==========',
-      );
-
-      _showImagesModal(
-        context,
-        event,
-        camera,
-        snapshotId: clip.id,
-        precomputedCanEdit: precomputedCanEdit,
-        precomputedReason: precomputedReason,
+      buildEventImagesModal(
+        pageContext: context,
+        event: event,
+        title: 'Hình ảnh sự kiện',
+        onEdit: () => _showUpdateModal(context, event),
+        editTooltipBuilder: (_) => 'Đề xuất sự kiện',
       );
       return;
     }
@@ -650,363 +514,6 @@ class CameraTimelineClipCard extends StatelessWidget {
         ),
       ),
     );
-  }
-
-  Future<void> _showImagesModal(
-    BuildContext pageContext,
-    EventLog event,
-    CameraEntry camera, {
-    required String snapshotId,
-    bool? precomputedCanEdit,
-    String? precomputedReason,
-  }) {
-    return showDialog(
-      context: pageContext,
-      builder: (dialogCtx) {
-        int? selectedIndex;
-
-        return StatefulBuilder(
-          builder: (context, setDialogState) => Dialog(
-            backgroundColor: Colors.white,
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(16),
-            ),
-            child: Container(
-              width: MediaQuery.of(pageContext).size.width * 0.9,
-              height: MediaQuery.of(pageContext).size.height * 0.7,
-              padding: const EdgeInsets.all(20),
-              child: Column(
-                children: [
-                  // Header
-                  Row(
-                    children: [
-                      Container(
-                        padding: const EdgeInsets.all(8),
-                        decoration: BoxDecoration(
-                          color: Colors.blue.shade50,
-                          borderRadius: BorderRadius.circular(12),
-                        ),
-                        child: Icon(
-                          Icons.image_outlined,
-                          color: Colors.blue.shade600,
-                          size: 24,
-                        ),
-                      ),
-                      const SizedBox(width: 12),
-                      const Expanded(
-                        child: Text(
-                          'Hình ảnh',
-                          style: TextStyle(
-                            fontWeight: FontWeight.w700,
-                            fontSize: 20,
-                          ),
-                        ),
-                      ),
-                      // Edit button - use precomputed permission (aligned with ActionLogCardImages)
-                      Builder(
-                        builder: (ctx) {
-                          final canEdit = precomputedCanEdit == true;
-                          final tooltip = canEdit
-                              ? 'Cập nhật sự kiện'
-                              : (precomputedReason ?? 'Không đủ điều kiện');
-
-                          return IconButton(
-                            icon: const Icon(Icons.edit_outlined),
-                            tooltip: tooltip,
-                            onPressed: canEdit
-                                ? () {
-                                    try {
-                                      Navigator.of(pageContext).pop();
-                                    } catch (_) {}
-                                    Navigator.push(
-                                      pageContext,
-                                      MaterialPageRoute(
-                                        builder: (_) =>
-                                            ProposeScreen(logEntry: event),
-                                      ),
-                                    );
-                                  }
-                                : null,
-                          );
-                        },
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 16),
-                  // Image list (grid or list)
-                  Expanded(
-                    child: FutureBuilder<List<String>>(
-                      key: ValueKey('images_' + snapshotId),
-                      future: _loadImagesForClip(event, snapshotId),
-                      builder: (ctx, snapshot) {
-                        if (snapshot.connectionState ==
-                            ConnectionState.waiting) {
-                          return const Center(
-                            child: CircularProgressIndicator(),
-                          );
-                        }
-
-                        final urls = snapshot.data ?? [];
-
-                        if (urls.isEmpty) {
-                          return Center(
-                            child: Text(
-                              'Không có hình ảnh',
-                              style: TextStyle(color: Colors.grey.shade600),
-                            ),
-                          );
-                        }
-
-                        return GridView.builder(
-                          gridDelegate:
-                              const SliverGridDelegateWithFixedCrossAxisCount(
-                                crossAxisCount: 2,
-                                crossAxisSpacing: 12,
-                                mainAxisSpacing: 12,
-                              ),
-                          itemCount: urls.length,
-                          itemBuilder: (ctx, idx) {
-                            return GestureDetector(
-                              onTap: () => setDialogState(() {
-                                selectedIndex = idx;
-                              }),
-                              child: Container(
-                                decoration: BoxDecoration(
-                                  border: Border.all(
-                                    color: selectedIndex == idx
-                                        ? Colors.blue
-                                        : Colors.grey.shade300,
-                                    width: selectedIndex == idx ? 2 : 1,
-                                  ),
-                                  borderRadius: BorderRadius.circular(8),
-                                ),
-                                child: ClipRRect(
-                                  borderRadius: BorderRadius.circular(7),
-                                  child: _buildImage(urls[idx]),
-                                ),
-                              ),
-                            );
-                          },
-                        );
-                      },
-                    ),
-                  ),
-                  const SizedBox(height: 16),
-                  SizedBox(
-                    width: double.infinity,
-                    child: TextButton(
-                      onPressed: () => Navigator.of(context).pop(),
-                      child: const Text('Đóng'),
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ),
-        );
-      },
-    );
-  }
-
-  Future<EventEditValidation> _checkCanEditAsync(
-    BuildContext context,
-    EventLog event,
-  ) async {
-    try {
-      final permProvider = Provider.of<PermissionsProvider>(
-        context,
-        listen: false,
-      );
-
-      // 1) From event context if available
-      String? customerId = event.contextData?['customer_id']?.toString();
-
-      // 2) Use cached accepted customer id if present
-      customerId ??= _cachedAcceptedCustomerId;
-
-      // 3) Fallback: fetch accepted assignments (await)
-      if (customerId == null || customerId.isEmpty) {
-        try {
-          final assignmentsDs = AssignmentsRemoteDataSource();
-          final list = await assignmentsDs.listPending(status: 'accepted');
-          final active = list
-              .where(
-                (a) => a.isActive && (a.status.toLowerCase() == 'accepted'),
-              )
-              .toList();
-          if (active.isNotEmpty) {
-            customerId = active.first.customerId;
-            _cachedAcceptedCustomerId = customerId;
-          }
-        } catch (e) {
-          AppLogger.w('[Timeline] Failed to fetch accepted assignments: $e');
-        }
-      }
-
-      if (customerId == null || customerId.isEmpty) {
-        AppLogger.w(
-          '[Timeline] Cannot edit: missing customer_id for event ${event.eventId}',
-        );
-        return EventEditValidation.denied('Thiếu thông tin customer_id');
-      }
-
-      return canEditEvent(
-        event: event,
-        permissionsProvider: permProvider,
-        customerId: customerId,
-      );
-    } catch (e) {
-      AppLogger.e('[Timeline] Failed to check edit permission: $e');
-      return EventEditValidation.denied('Lỗi kiểm tra quyền');
-    }
-  }
-
-  Future<List<String>> _loadEventImages(EventLog event) async {
-    try {
-      AppLogger.d('[Timeline] Loading images for eventId=${event.eventId}');
-      AppLogger.d('[Timeline] Event imageUrls: ${event.imageUrls}');
-      AppLogger.d('[Timeline] Event detectionData: ${event.detectionData}');
-
-      final imageSources = await loadEventImageUrls(event);
-      final urls = imageSources.map((src) => src.path).toList();
-
-      AppLogger.d('[Timeline] Loaded ${urls.length} image URLs: $urls');
-      return urls;
-    } catch (e) {
-      AppLogger.e('[Timeline] Failed to load event images: $e');
-      return [];
-    }
-  }
-
-  Future<List<String>> _loadImagesForEvent(EventLog event) async {
-    try {
-      AppLogger.d(
-        '[Timeline] ========== _loadImagesForEvent called ==========',
-      );
-      AppLogger.d('[Timeline] Loading images for eventId=${event.eventId}');
-      AppLogger.d('[Timeline] Event has imageUrls: ${event.imageUrls}');
-      AppLogger.d('[Timeline] Event detectionData: ${event.detectionData}');
-      AppLogger.d(
-        '[Timeline] Event detectionData[snapshot_id]: ${event.detectionData?['snapshot_id']}',
-      );
-
-      final imageSources = await loadEventImageUrls(event);
-      final urls = imageSources.map((src) => src.path).toList();
-
-      AppLogger.d('[Timeline] Loaded ${urls.length} image URLs from snapshot');
-      for (var i = 0; i < urls.length; i++) {
-        AppLogger.d('[Timeline]   [$i]: ${urls[i]}');
-      }
-
-      return urls;
-    } catch (e, st) {
-      AppLogger.e('[Timeline] Failed to load event images: $e', e, st);
-      return [];
-    }
-  }
-
-  Future<List<String>> _loadImagesFromSnapshot(String snapshotId) async {
-    try {
-      AppLogger.d('[Timeline] Loading images for snapshot=$snapshotId');
-
-      final resolver = EventsRemoteDataSource();
-      final found = await resolver.listEvents(
-        limit: 1,
-        extraQuery: {'snapshot_id': snapshotId},
-      );
-
-      EventLog event;
-      if (found.isNotEmpty) {
-        final resolved = EventLog.fromJson(found.first);
-        final updatedDetectionData = Map<String, dynamic>.from(
-          resolved.detectionData ?? {},
-        );
-        updatedDetectionData['snapshot_id'] = snapshotId;
-
-        event = EventLog(
-          eventId: resolved.eventId,
-          status: resolved.status,
-          eventType: resolved.eventType,
-          eventDescription: resolved.eventDescription,
-          confidenceScore: resolved.confidenceScore,
-          detectedAt: resolved.detectedAt,
-          createdAt: resolved.createdAt,
-          detectionData: updatedDetectionData,
-          contextData: resolved.contextData,
-          boundingBoxes: resolved.boundingBoxes,
-          confirmStatus: resolved.confirmStatus,
-          lifecycleState: resolved.lifecycleState,
-          cameraId: resolved.cameraId,
-          imageUrls: resolved.imageUrls,
-          aiAnalysisResult: resolved.aiAnalysisResult,
-          proposedStatus: resolved.proposedStatus,
-          pendingUntil: resolved.pendingUntil,
-        );
-      } else {
-        AppLogger.w(
-          '[Timeline] No event found for snapshot_id=$snapshotId, using minimal event',
-        );
-        event = EventLog(
-          eventId: snapshotId,
-          status: 'unknown',
-          eventType: 'unknown',
-          confidenceScore: 0.0,
-          confirmStatus: false,
-          detectionData: {'snapshot_id': snapshotId},
-        );
-      }
-
-      final imageSources = await loadEventImageUrls(event);
-      final urls = imageSources.map((src) => src.path).toList();
-
-      AppLogger.d(
-        '[Timeline] Loaded ${urls.length} images for snapshot=$snapshotId',
-      );
-      for (var i = 0; i < urls.length; i++) {
-        AppLogger.d('[Timeline]   [$i]: ${urls[i]}');
-      }
-      return urls;
-    } catch (e, st) {
-      AppLogger.e('[Timeline] Failed to load snapshot images: $e', e, st);
-      return [];
-    }
-  }
-
-  Future<List<String>> _loadImagesForClip(
-    EventLog event,
-    String snapshotId,
-  ) async {
-    final urls = await _loadImagesForEvent(event);
-    if (urls.isNotEmpty) return urls;
-    return _loadImagesFromSnapshot(snapshotId);
-  }
-
-  Widget _buildImage(String imagePath) {
-    final isLocalFile = !imagePath.startsWith('http');
-
-    if (isLocalFile) {
-      return Image.file(
-        File(imagePath),
-        fit: BoxFit.cover,
-        errorBuilder: (c, e, st) => Container(
-          color: Colors.grey.shade200,
-          child: const Icon(Icons.broken_image),
-        ),
-      );
-    } else {
-      return CachedNetworkImage(
-        imageUrl: imagePath,
-        fit: BoxFit.cover,
-        placeholder: (c, u) => Container(
-          color: Colors.grey.shade200,
-          child: const Icon(Icons.image),
-        ),
-        errorWidget: (c, u, e) => Container(
-          color: Colors.grey.shade200,
-          child: const Icon(Icons.broken_image),
-        ),
-      );
-    }
   }
 }
 

@@ -7,7 +7,7 @@ import 'camera_timeline_zoom_control.dart';
 
 class CameraTimelineList extends StatelessWidget {
   final List<CameraTimelineEntry> entries;
-  final String? selectedClipId;
+  final String? selectedTimelineEntryId;
   final bool isLoading;
   final String? errorMessage;
   final bool compact;
@@ -20,7 +20,7 @@ class CameraTimelineList extends StatelessWidget {
   const CameraTimelineList({
     super.key,
     required this.entries,
-    required this.selectedClipId,
+    required this.selectedTimelineEntryId,
     required this.isLoading,
     required this.errorMessage,
     required this.compact,
@@ -84,14 +84,15 @@ class CameraTimelineList extends StatelessWidget {
                 physics: const BouncingScrollPhysics(),
                 itemBuilder: (context, index) {
                   final entry = entries[index];
-                  final isSelected = entry.clip?.id == selectedClipId;
+                  final isSelected =
+                      entry.clip?.timelineEntryId == selectedTimelineEntryId;
                   return CameraTimelineRow(
                     entry: entry,
                     isSelected: isSelected,
-                    onClipTap: entry.clip != null
-                        ? () => onSelectClip(entry.clip!.id)
-                        : null,
                     camera: camera,
+                    onClipTap: entry.clip != null
+                        ? () => onSelectClip(entry.clip!.timelineEntryId)
+                        : null,
                   );
                 },
                 separatorBuilder: (_, __) => const SizedBox(height: 8),

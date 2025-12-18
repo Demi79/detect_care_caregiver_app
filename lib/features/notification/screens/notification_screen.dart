@@ -60,8 +60,8 @@ class _NotificationScreenState extends State<NotificationScreen> {
   final List<Map<String, dynamic>> _filterOptions = [
     {'label': 'Tất cả loại', 'type': null},
     {'label': 'Cảnh báo sự kiện', 'type': 'event_alert'},
-    {'label': 'Yêu cầu xác nhận', 'type': 'confirmation_request'},
-    {'label': 'Lời mời người chăm sóc', 'type': 'caregiver_invitation'},
+    // {'label': 'Yêu cầu xác nhận', 'type': 'confirmation_request'},
+    // {'label': 'Lời mời người chăm sóc', 'type': 'caregiver_invitation'},
     {'label': 'Cập nhật hệ thống', 'type': 'system_update'},
     {'label': 'Khẩn cấp', 'type': 'emergency_alert'},
   ];
