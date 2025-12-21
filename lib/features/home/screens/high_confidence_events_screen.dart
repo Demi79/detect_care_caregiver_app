@@ -183,26 +183,30 @@ class _SummaryRow extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final sel = selectedStatus.toLowerCase();
-
-    final int dangerCount = filteredLogs.where((e) {
+    final int dangerCount = allLogs.where((e) {
       try {
+        final ls = e.lifecycleState?.toString().toLowerCase();
+        if (ls != null && ls == 'canceled') return false;
         return e.status.toString().toLowerCase() == 'danger';
       } catch (_) {
         return false;
       }
     }).length;
 
-    final int warningCount = filteredLogs.where((e) {
+    final int warningCount = allLogs.where((e) {
       try {
+        final ls = e.lifecycleState?.toString().toLowerCase();
+        if (ls != null && ls == 'canceled') return false;
         return e.status.toString().toLowerCase() == 'warning';
       } catch (_) {
         return false;
       }
     }).length;
 
-    final int normalCount = filteredLogs.where((e) {
+    final int normalCount = allLogs.where((e) {
       try {
+        final ls = e.lifecycleState?.toString().toLowerCase();
+        if (ls != null && ls == 'canceled') return false;
         return e.status.toString().toLowerCase() == 'normal';
       } catch (_) {
         return false;
@@ -211,91 +215,27 @@ class _SummaryRow extends StatelessWidget {
 
     final int abnormalCount = dangerCount + warningCount;
     final int totalAll = allLogs.length;
-    final int total = allLogs.where((e) {
-      try {
-        return e.lifecycleState?.toString().toLowerCase() != 'canceled';
-      } catch (_) {
-        return true;
-      }
-    }).length;
 
-    late final Widget leftCard;
-    late final Widget middleCard;
-    late final Widget rightCard;
+    final Widget leftCard = _SummaryCard(
+      title: 'Bất thường',
+      value: '$abnormalCount',
+      icon: Icons.emergency_rounded,
+      color: Colors.red,
+    );
 
-    middleCard = _SummaryCard(
+    final Widget middleCard = _SummaryCard(
       title: 'Tổng nhật ký',
       value: '$totalAll',
       icon: Icons.list_alt_rounded,
       color: AppTheme.reportColor,
     );
 
-    if (sel == 'abnormal') {
-      leftCard = _SummaryCard(
-        title: 'Nguy hiểm',
-        value: '$dangerCount',
-        icon: Icons.emergency_rounded,
-        color: Colors.red,
-      );
-      rightCard = _SummaryCard(
-        title: 'Cảnh báo',
-        value: '$warningCount',
-        icon: Icons.warning_amber_rounded,
-        color: const Color.fromARGB(255, 220, 139, 17),
-      );
-    } else if (sel == 'all') {
-      leftCard = _SummaryCard(
-        title: 'Bất thường',
-        value: '$abnormalCount',
-        icon: Icons.emergency_rounded,
-        color: Colors.red,
-      );
-      rightCard = _SummaryCard(
-        title: 'Bình thường',
-        value: '$normalCount',
-        icon: Icons.monitor_heart_rounded,
-        color: AppTheme.activityColor,
-      );
-    } else if (sel == 'danger') {
-      leftCard = _SummaryCard(
-        title: 'Nguy hiểm',
-        value: '$dangerCount',
-        icon: Icons.emergency_rounded,
-        color: Colors.red,
-      );
-      rightCard = _SummaryCard(
-        title: 'Sự kiện khác',
-        value: '0',
-        icon: Icons.monitor_heart_rounded,
-        color: AppTheme.activityColor,
-      );
-    } else if (sel == 'warning') {
-      leftCard = _SummaryCard(
-        title: 'Cảnh báo',
-        value: '$warningCount',
-        icon: Icons.warning_amber_rounded,
-        color: const Color.fromARGB(255, 220, 139, 17),
-      );
-      rightCard = _SummaryCard(
-        title: 'Sự kiện khác',
-        value: '0',
-        icon: Icons.monitor_heart_rounded,
-        color: AppTheme.activityColor,
-      );
-    } else {
-      leftCard = _SummaryCard(
-        title: 'Bất thường',
-        value: '$abnormalCount',
-        icon: Icons.emergency_rounded,
-        color: Colors.red,
-      );
-      rightCard = _SummaryCard(
-        title: 'Bình thường',
-        value: '${(total - abnormalCount).clamp(0, total)}',
-        icon: Icons.monitor_heart_rounded,
-        color: AppTheme.activityColor,
-      );
-    }
+    final Widget rightCard = _SummaryCard(
+      title: 'Bình thường',
+      value: '$normalCount',
+      icon: Icons.monitor_heart_rounded,
+      color: AppTheme.activityColor,
+    );
 
     return Row(
       children: [

@@ -20,12 +20,12 @@ import '../utils/app_lifecycle.dart';
 import 'package:detect_care_caregiver_app/features/auth/data/auth_storage.dart';
 
 class InAppAlert {
-  static bool _showing = false;
+  static int _showingCount = 0;
   static DateTime? _lastShownMinute;
 
   static Future<void> show(LogEntry e) async {
     print('🧩 [InAppAlert] Request to show popup for event ${e.eventId}');
-    print(' - _showing: $_showing');
+    // print(' - _showing: $_showing');
     print(' - isForeground: ${AppLifecycle.isForeground}');
 
     await Future.delayed(const Duration(milliseconds: 300));
@@ -76,22 +76,20 @@ class InAppAlert {
       return;
     }
 
-    if (_lastShownMinute != null && _lastShownMinute == eventMinute) {
+    if (_showingCount == 0 &&
+        _lastShownMinute != null &&
+        _lastShownMinute == eventMinute) {
       print('❌ Popup suppressed: already shown an event in the same minute');
       return;
     }
 
-    if (_showing &&
-        _lastShownMinute != null &&
-        eventMinute.isAfter(_lastShownMinute!)) {
-      try {
-        print('ℹ️ New-minute event arrived; dismissing old popup to show new');
-        Navigator.of(ctx, rootNavigator: true).maybePop();
-        await Future.delayed(const Duration(milliseconds: 220));
-      } catch (_) {}
+    if (_showingCount > 0) {
+      print(
+        'ℹ️ ${_showingCount} popup(s) đang hiển thị; show event mới để đè lên (không dismiss event cũ)',
+      );
     }
 
-    _showing = true;
+    _showingCount++;
     _lastShownMinute = eventMinute;
 
     // Subscriptions to auto-dismiss when event is canceled remotely
@@ -549,7 +547,14 @@ class InAppAlert {
       try {
         await eventUpdatedSub?.cancel();
       } catch (_) {}
-      _showing = false;
+
+      // ✅ Update home screen khi popup đóng (do event bị cancel hoặc dismiss)
+      try {
+        AppEvents.instance.notifyEventsChanged();
+      } catch (_) {}
+
+      _showingCount--; // ✅ Giảm counter khi popup đóng
+      if (_showingCount < 0) _showingCount = 0; // ✅ Safety check
     }
   }
 

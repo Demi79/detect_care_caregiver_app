@@ -25,11 +25,13 @@ extension _ActionLogCardImages on ActionLogCard {
       hasAlertAckOverride: hasAlertAck,
     );
 
+    final isCanceled = _canonicalLifecycle(data.lifecycleState) == 'CANCELED';
+
     return buildEventImagesModal(
       pageContext: pageContext,
       event: event,
       onOpenCamera: _openCameraForEvent,
-      onEdit: canEdit
+      onEdit: (canEdit && !isCanceled)
           ? () {
               Navigator.push(
                 pageContext,
@@ -40,8 +42,9 @@ extension _ActionLogCardImages on ActionLogCard {
             }
           : null,
       showEditButton: true,
-      editTooltipBuilder: (enabled) =>
-          enabled ? 'Cập nhật sự kiện' : _cannotEditReason,
+      editTooltipBuilder: (enabled) => isCanceled
+          ? 'Không thể chỉnh sửa sự kiện đã được hủy'
+          : (enabled ? 'Cập nhật sự kiện' : _cannotEditReason),
       alarmSectionBuilder:
           (
             context,
