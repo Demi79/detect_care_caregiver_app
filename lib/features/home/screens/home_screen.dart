@@ -219,8 +219,8 @@ class _HomeScreenState extends State<HomeScreen>
     if (!mounted) return;
 
     final authProvider = context.read<AuthProvider>();
-    debugPrint('[Home] Refresh with auth status: ${authProvider.status}');
-    debugPrint('[Home] Refresh with userID: ${authProvider.currentUserId}');
+    print('[Home] Refresh with auth status: ${authProvider.status}');
+    print('[Home] Refresh with userID: ${authProvider.currentUserId}');
 
     setState(() {
       _isLoading = true;
@@ -281,7 +281,12 @@ class _HomeScreenState extends State<HomeScreen>
 
       if (_skipMergeOnNextRefresh) {
         _skipMergeOnNextRefresh = false;
-        debugPrint('[Home] Skipping local-merge on refresh (eventsChanged)');
+        print('[Home] Skipping local-merge on refresh (eventsChanged)');
+        // ✅ Fallback: Nếu API return [], giữ data cũ
+        if (snapshotMap.isEmpty && _logs.isNotEmpty) {
+          print('[Home] ⚠️ API returned empty, keeping previous data');
+          // Không cập nhật, giữ nguyên _logs cũ
+        }
       } else {
         for (final e in _logs) {
           final matchesStatus =
@@ -314,14 +319,18 @@ class _HomeScreenState extends State<HomeScreen>
         });
 
       setState(() {
-        _logs = merged;
-        _allLogs = allEvents;
+        print('[Home] Before: ${_logs.length} events');
+        _logs = merged.isNotEmpty ? merged : _logs;
+        _allLogs = allEvents.isNotEmpty ? allEvents : _allLogs;
+        print(
+          '[Home] After: ${_logs.length} events (merged: ${merged.length}, fallback: ${merged.isEmpty})',
+        );
         _error = null;
         _isLoading = false;
       });
     } catch (e, stack) {
-      debugPrint('Error refreshing logs: $e');
-      debugPrint('$stack');
+      print('Error refreshing logs: $e');
+      print('$stack');
       if (!mounted) return;
       setState(() {
         _error = 'Không thể tải sự kiện: ${e.toString()}';
@@ -591,7 +600,7 @@ class _HomeScreenState extends State<HomeScreen>
         case 0:
           return const LiveCameraHomeScreen();
         case 1:
-          return const AssignmentsScreen();
+          return const CaregiverSettingsScreen();
         case 2:
           return const PatientProfileScreen(embedInParent: true);
         case 3:
@@ -624,7 +633,7 @@ class _HomeScreenState extends State<HomeScreen>
         ),
         if (_compactVisible)
           Padding(
-            padding: const EdgeInsets.fromLTRB(20, 8, 20, 12),
+            padding: const EdgeInsets.fromLTRB(8, 8, 8, 12),
             child: GestureDetector(
               onTap: () => _contentScrollController.animateTo(
                 0,
@@ -638,7 +647,7 @@ class _HomeScreenState extends State<HomeScreen>
           child: NotificationListener<ScrollNotification>(
             onNotification: _onScrollNotification,
             child: Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 20),
+              padding: const EdgeInsets.symmetric(horizontal: 8),
               child: _buildTabContent(),
             ),
           ),

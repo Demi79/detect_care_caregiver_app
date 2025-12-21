@@ -69,7 +69,7 @@ class _ElevatedCard extends StatelessWidget {
     return Container(
       alignment: Alignment.topLeft,
       constraints: const BoxConstraints(minWidth: double.infinity),
-      padding: const EdgeInsets.all(16),
+      padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
         color: Colors.white,
         borderRadius: BorderRadius.circular(12),
@@ -323,9 +323,61 @@ class ActionLogCard extends StatelessWidget {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
+                    // Row(
+                    //   crossAxisAlignment: CrossAxisAlignment.start,
+                    //   children: [
+                    //     Expanded(
+                    //       child: Wrap(
+                    //         spacing: 8,
+                    //         runSpacing: 6,
+                    //         crossAxisAlignment: WrapCrossAlignment.center,
+                    //         children: [
+                    //           _statusChip(status, statusColor),
+                    //           if ((data.lifecycleState ?? '')
+                    //               .toString()
+                    //               .isNotEmpty)
+                    //             Container(
+                    //               padding: const EdgeInsets.symmetric(
+                    //                 horizontal: 10,
+                    //                 vertical: 6,
+                    //               ),
+                    //               decoration: BoxDecoration(
+                    //                 color: Colors.grey.shade200,
+                    //                 borderRadius: BorderRadius.circular(18),
+                    //               ),
+                    //               child: Text(
+                    //                 be.BackendEnums.lifecycleStateToVietnamese(
+                    //                   data.lifecycleState,
+                    //                 ),
+                    //                 style: const TextStyle(fontSize: 13),
+                    //               ),
+                    //             ),
+                    //         ],
+                    //       ),
+                    //     ),
+
+                    //     const SizedBox(width: 8),
+
+                    //     Column(
+                    //       mainAxisSize: MainAxisSize.min,
+                    //       crossAxisAlignment: CrossAxisAlignment.end,
+                    //       children: [
+                    //         if (!_isUpdateWindowExpired)
+                    //           IconButton(
+                    //             padding: EdgeInsets.zero,
+                    //             constraints: const BoxConstraints(),
+                    //             icon: const Icon(Icons.call, color: Colors.red),
+                    //             onPressed: () =>
+                    //                 _initiateEmergencyCall(context),
+                    //           ),
+                    //       ],
+                    //     ),
+                    //   ],
+                    // ),
                     Row(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
+                        // LEFT: TEXT / CHIP
                         Expanded(
                           child: Wrap(
                             spacing: 8,
@@ -333,6 +385,7 @@ class ActionLogCard extends StatelessWidget {
                             crossAxisAlignment: WrapCrossAlignment.center,
                             children: [
                               _statusChip(status, statusColor),
+
                               if ((data.lifecycleState ?? '')
                                   .toString()
                                   .isNotEmpty)
@@ -356,21 +409,22 @@ class ActionLogCard extends StatelessWidget {
                           ),
                         ),
 
-                        const SizedBox(width: 8),
-
-                        Column(
-                          mainAxisSize: MainAxisSize.min,
-                          crossAxisAlignment: CrossAxisAlignment.end,
-                          children: [
-                            if (!_isUpdateWindowExpired)
-                              IconButton(
-                                padding: EdgeInsets.zero,
-                                constraints: const BoxConstraints(),
-                                icon: const Icon(Icons.call, color: Colors.red),
-                                onPressed: () =>
-                                    _initiateEmergencyCall(context),
+                        // ===== RIGHT: ICON
+                        SizedBox(
+                          height: 32,
+                          child: Align(
+                            alignment: Alignment.centerRight,
+                            child: IconButton(
+                              padding: EdgeInsets.zero,
+                              constraints: const BoxConstraints(),
+                              icon: const Icon(
+                                Icons.call,
+                                color: Colors.red,
+                                size: 20,
                               ),
-                          ],
+                              onPressed: () => _initiateEmergencyCall(context),
+                            ),
+                          ),
                         ),
                       ],
                     ),
@@ -574,14 +628,14 @@ class ActionLogCard extends StatelessWidget {
       builder: (modalCtx) {
         return SafeArea(
           child: Padding(
-            padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+            padding: const EdgeInsets.fromLTRB(8, 0, 8, 16),
             child: ClipRRect(
               borderRadius: BorderRadius.circular(20),
               child: Container(
                 color: Colors.white,
                 child: SingleChildScrollView(
                   child: Padding(
-                    padding: const EdgeInsets.fromLTRB(20, 24, 20, 24),
+                    padding: const EdgeInsets.fromLTRB(12, 24, 12, 24),
                     child: Column(
                       mainAxisSize: MainAxisSize.min,
                       crossAxisAlignment: CrossAxisAlignment.start,
@@ -1666,7 +1720,7 @@ class ActionLogCard extends StatelessWidget {
               ),
               child: SingleChildScrollView(
                 controller: scrollController,
-                padding: const EdgeInsets.only(bottom: 20),
+                padding: const EdgeInsets.only(bottom: 8),
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
@@ -1684,7 +1738,7 @@ class ActionLogCard extends StatelessWidget {
                     // Header
                     Container(
                       width: double.infinity,
-                      padding: const EdgeInsets.fromLTRB(20, 12, 20, 20),
+                      padding: const EdgeInsets.fromLTRB(12, 12, 12, 20),
                       decoration: BoxDecoration(
                         gradient: LinearGradient(
                           colors: [
@@ -1795,207 +1849,211 @@ class ActionLogCard extends StatelessWidget {
                     ),
 
                     // Action Buttons
-                    if (!_canEditWithContext(
-                      context,
-                      customerIdOverride: permissionCustomerId,
-                      hasAlertAckOverride: prefetchedHasAlertAck,
-                    ))
-                      Padding(
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 20,
-                          vertical: 4,
-                        ),
-                        child: Text(
-                          _cannotEditReason,
-                          textAlign: TextAlign.center,
-                          style: TextStyle(
-                            fontSize: 12,
-                            color: Colors.grey.shade600,
-                          ),
-                        ),
-                      ),
-                    Consumer<PermissionsProvider>(
-                      builder: (ctx, permProvider, _) {
-                        return Padding(
+                    if (_canonicalLifecycle(data.lifecycleState) != 'CANCELED')
+                      if (!_canEditWithContext(
+                        context,
+                        customerIdOverride: permissionCustomerId,
+                        hasAlertAckOverride: prefetchedHasAlertAck,
+                      ))
+                        Padding(
                           padding: const EdgeInsets.symmetric(
                             horizontal: 20,
-                            vertical: 8,
+                            vertical: 4,
                           ),
-                          child: Row(
-                            children: [
-                              Expanded(
-                                child: FutureBuilder<EventLog>(
-                                  future: EventRepository(
-                                    EventService.withDefaultClient(),
-                                  ).getEventDetails(data.eventId),
-                                  builder: (context, snap) {
-                                    bool disabled = !_canEditWithContext(
-                                      context,
-                                      customerIdOverride: permissionCustomerId,
-                                      hasAlertAckOverride:
-                                          prefetchedHasAlertAck,
-                                    );
-                                    String confirmationState = '';
-                                    String tooltip = '';
-                                    if (snap.connectionState ==
-                                            ConnectionState.done &&
-                                        !snap.hasError &&
-                                        snap.data != null) {
-                                      final detail = snap.data!;
-                                      final hasPending =
-                                          detail.pendingUntil != null;
-                                      AppLogger.d(
-                                        '[ActionLogCard] Dialog: pendingUntil=${detail.pendingUntil}, hasPending=$hasPending, disabled=$disabled',
+                          child: Text(
+                            _cannotEditReason,
+                            textAlign: TextAlign.center,
+                            style: TextStyle(
+                              fontSize: 12,
+                              color: Colors.grey.shade600,
+                            ),
+                          ),
+                        ),
+                    if (_canonicalLifecycle(data.lifecycleState) != 'CANCELED')
+                      Consumer<PermissionsProvider>(
+                        builder: (ctx, permProvider, _) {
+                          return Padding(
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 20,
+                              vertical: 8,
+                            ),
+                            child: Row(
+                              children: [
+                                Expanded(
+                                  child: FutureBuilder<EventLog>(
+                                    future: EventRepository(
+                                      EventService.withDefaultClient(),
+                                    ).getEventDetails(data.eventId),
+                                    builder: (context, snap) {
+                                      bool disabled = !_canEditWithContext(
+                                        context,
+                                        customerIdOverride:
+                                            permissionCustomerId,
+                                        hasAlertAckOverride:
+                                            prefetchedHasAlertAck,
                                       );
-                                      if (hasPending) {
-                                        disabled = true;
-                                        tooltip =
-                                            'Sự kiện đang có đề xuất chờ duyệt';
-                                      }
-                                      try {
-                                        confirmationState =
-                                            (detail.confirmationState ?? '')
-                                                .toString()
-                                                .toUpperCase()
-                                                .trim();
-                                      } catch (_) {
-                                        confirmationState = '';
-                                      }
-                                      if (confirmationState.isNotEmpty &&
-                                          confirmationState != 'DETECTED' &&
-                                          confirmationState !=
-                                              'REJECTED_BY_CUSTOMER') {
-                                        disabled = true;
-                                        tooltip =
-                                            'Sự kiện đã được thay đổi trước đó hoặc đang chờ duyệt, không thể đề xuất lần nữa.';
-                                      }
-                                    } else if (snap.connectionState ==
-                                        ConnectionState.waiting) {
-                                      AppLogger.d(
-                                        '[ActionLogCard] Dialog: Loading...',
-                                      );
-                                    } else if (snap.hasError) {
-                                      AppLogger.w(
-                                        '[ActionLogCard] Dialog: Error - ${snap.error}',
-                                      );
-                                    }
-
-                                    // Check alert_ack permission (from Consumer's permProvider)
-                                    bool hasAlertAck = prefetchedHasAlertAck;
-                                    String? ackTooltip = prefetchedAckTooltip;
-                                    try {
-                                      final cid = permissionCustomerId;
-                                      if (cid != null && cid.isNotEmpty) {
-                                        hasAlertAck = permProvider
-                                            .hasPermission(cid, 'alert_ack');
-                                        if (!hasAlertAck &&
-                                            ackTooltip == null) {
-                                          ackTooltip =
-                                              'Không có quyền xác nhận sự kiện';
+                                      String confirmationState = '';
+                                      String tooltip = '';
+                                      if (snap.connectionState ==
+                                              ConnectionState.done &&
+                                          !snap.hasError &&
+                                          snap.data != null) {
+                                        final detail = snap.data!;
+                                        final hasPending =
+                                            detail.pendingUntil != null;
+                                        AppLogger.d(
+                                          '[ActionLogCard] Dialog: pendingUntil=${detail.pendingUntil}, hasPending=$hasPending, disabled=$disabled',
+                                        );
+                                        if (hasPending) {
+                                          disabled = true;
+                                          tooltip =
+                                              'Sự kiện đang có đề xuất chờ duyệt';
                                         }
-                                      } else {
-                                        hasAlertAck = false;
-                                        ackTooltip ??=
-                                            'Thiếu customer_id của phân công đã chấp nhận';
+                                        try {
+                                          confirmationState =
+                                              (detail.confirmationState ?? '')
+                                                  .toString()
+                                                  .toUpperCase()
+                                                  .trim();
+                                        } catch (_) {
+                                          confirmationState = '';
+                                        }
+                                        if (confirmationState.isNotEmpty &&
+                                            confirmationState != 'DETECTED' &&
+                                            confirmationState !=
+                                                'REJECTED_BY_CUSTOMER') {
+                                          disabled = true;
+                                          tooltip =
+                                              'Sự kiện đã được thay đổi trước đó hoặc đang chờ duyệt, không thể đề xuất lần nữa.';
+                                        }
+                                      } else if (snap.connectionState ==
+                                          ConnectionState.waiting) {
+                                        AppLogger.d(
+                                          '[ActionLogCard] Dialog: Loading...',
+                                        );
+                                      } else if (snap.hasError) {
+                                        AppLogger.w(
+                                          '[ActionLogCard] Dialog: Error - ${snap.error}',
+                                        );
                                       }
-                                    } catch (e) {
-                                      AppLogger.w(
-                                        '[ActionLogCard] alert_ack permission check failed: $e',
-                                      );
-                                      hasAlertAck = false;
-                                      ackTooltip ??= 'Lỗi kiểm tra quyền';
-                                    }
 
-                                    return ElevatedButton.icon(
-                                      onPressed: (disabled || !hasAlertAck)
-                                          ? null
-                                          : () async {
-                                              try {
-                                                Navigator.of(context).pop();
-                                              } catch (_) {}
-                                              Navigator.push(
-                                                context,
-                                                MaterialPageRoute(
-                                                  builder: (_) => ProposeScreen(
-                                                    logEntry: data,
+                                      // Check alert_ack permission (from Consumer's permProvider)
+                                      bool hasAlertAck = prefetchedHasAlertAck;
+                                      String? ackTooltip = prefetchedAckTooltip;
+                                      try {
+                                        final cid = permissionCustomerId;
+                                        if (cid != null && cid.isNotEmpty) {
+                                          hasAlertAck = permProvider
+                                              .hasPermission(cid, 'alert_ack');
+                                          if (!hasAlertAck &&
+                                              ackTooltip == null) {
+                                            ackTooltip =
+                                                'Không có quyền xác nhận sự kiện';
+                                          }
+                                        } else {
+                                          hasAlertAck = false;
+                                          ackTooltip ??=
+                                              'Thiếu customer_id của phân công đã chấp nhận';
+                                        }
+                                      } catch (e) {
+                                        AppLogger.w(
+                                          '[ActionLogCard] alert_ack permission check failed: $e',
+                                        );
+                                        hasAlertAck = false;
+                                        ackTooltip ??= 'Lỗi kiểm tra quyền';
+                                      }
+
+                                      return ElevatedButton.icon(
+                                        onPressed: (disabled || !hasAlertAck)
+                                            ? null
+                                            : () async {
+                                                try {
+                                                  Navigator.of(context).pop();
+                                                } catch (_) {}
+                                                Navigator.push(
+                                                  context,
+                                                  MaterialPageRoute(
+                                                    builder: (_) =>
+                                                        ProposeScreen(
+                                                          logEntry: data,
+                                                        ),
                                                   ),
-                                                ),
-                                              );
-                                            },
-                                      icon: const Icon(
-                                        Icons.edit_outlined,
-                                        size: 18,
-                                      ),
-                                      label: const Text('Đề xuất sửa đổi'),
-                                      style: ElevatedButton.styleFrom(
-                                        backgroundColor: disabled
-                                            ? Colors.grey.shade300
-                                            : Colors.blue.shade600,
-                                        foregroundColor: disabled
-                                            ? Colors.grey.shade600
-                                            : Colors.white,
-                                        elevation: 0,
-                                        padding: const EdgeInsets.symmetric(
-                                          vertical: 12,
+                                                );
+                                              },
+                                        icon: const Icon(
+                                          Icons.edit_outlined,
+                                          size: 18,
                                         ),
-                                        shape: RoundedRectangleBorder(
-                                          borderRadius: BorderRadius.circular(
-                                            12,
+                                        label: const Text('Đề xuất sửa đổi'),
+                                        style: ElevatedButton.styleFrom(
+                                          backgroundColor: disabled
+                                              ? Colors.grey.shade300
+                                              : Colors.blue.shade600,
+                                          foregroundColor: disabled
+                                              ? Colors.grey.shade600
+                                              : Colors.white,
+                                          elevation: 0,
+                                          padding: const EdgeInsets.symmetric(
+                                            vertical: 12,
+                                          ),
+                                          shape: RoundedRectangleBorder(
+                                            borderRadius: BorderRadius.circular(
+                                              12,
+                                            ),
                                           ),
                                         ),
-                                      ),
-                                    );
-                                  },
+                                      );
+                                    },
+                                  ),
                                 ),
-                              ),
 
-                              const SizedBox(width: 12),
-                              Expanded(
-                                child: ElevatedButton.icon(
-                                  onPressed: () {
-                                    final eventLog = EventLog(
-                                      eventId: data.eventId,
-                                      eventType: data.eventType,
-                                      detectedAt: data.detectedAt,
-                                      eventDescription: data.eventDescription,
-                                      confidenceScore: data.confidenceScore,
-                                      status: data.status,
-                                      detectionData: data.detectionData,
-                                      aiAnalysisResult: data.aiAnalysisResult,
-                                      contextData: data.contextData,
-                                      boundingBoxes: data.boundingBoxes,
-                                      confirmStatus: data.confirmStatus,
-                                      createdAt: data.createdAt,
-                                      cameraId: data.cameraId,
-                                    );
-                                    _showImagesModal(context, eventLog);
-                                  },
-                                  icon: const Icon(
-                                    Icons.image_outlined,
-                                    size: 18,
-                                  ),
-                                  label: const Text('Xem ảnh'),
-                                  style: ElevatedButton.styleFrom(
-                                    backgroundColor: Colors.grey.shade100,
-                                    foregroundColor: Colors.grey.shade700,
-                                    elevation: 0,
-                                    padding: const EdgeInsets.symmetric(
-                                      vertical: 12,
+                                const SizedBox(width: 12),
+                                Expanded(
+                                  child: ElevatedButton.icon(
+                                    onPressed: () {
+                                      final eventLog = EventLog(
+                                        eventId: data.eventId,
+                                        eventType: data.eventType,
+                                        detectedAt: data.detectedAt,
+                                        eventDescription: data.eventDescription,
+                                        confidenceScore: data.confidenceScore,
+                                        status: data.status,
+                                        detectionData: data.detectionData,
+                                        aiAnalysisResult: data.aiAnalysisResult,
+                                        contextData: data.contextData,
+                                        boundingBoxes: data.boundingBoxes,
+                                        confirmStatus: data.confirmStatus,
+                                        createdAt: data.createdAt,
+                                        cameraId: data.cameraId,
+                                      );
+                                      _showImagesModal(context, eventLog);
+                                    },
+                                    icon: const Icon(
+                                      Icons.image_outlined,
+                                      size: 18,
                                     ),
-                                    shape: RoundedRectangleBorder(
-                                      borderRadius: BorderRadius.circular(12),
-                                      side: BorderSide(
-                                        color: Colors.grey.shade300,
+                                    label: const Text('Xem ảnh'),
+                                    style: ElevatedButton.styleFrom(
+                                      backgroundColor: Colors.grey.shade100,
+                                      foregroundColor: Colors.grey.shade700,
+                                      elevation: 0,
+                                      padding: const EdgeInsets.symmetric(
+                                        vertical: 12,
+                                      ),
+                                      shape: RoundedRectangleBorder(
+                                        borderRadius: BorderRadius.circular(12),
+                                        side: BorderSide(
+                                          color: Colors.grey.shade300,
+                                        ),
                                       ),
                                     ),
                                   ),
                                 ),
-                              ),
-                            ],
-                          ),
-                        );
-                      },
-                    ),
+                              ],
+                            ),
+                          );
+                        },
+                      ),
 
                     // Content
                     // if (_shouldHideAlarmButtons)
@@ -2108,7 +2166,7 @@ class ActionLogCard extends StatelessWidget {
                       ),
 
                     Padding(
-                      padding: const EdgeInsets.all(20),
+                      padding: const EdgeInsets.all(12),
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [

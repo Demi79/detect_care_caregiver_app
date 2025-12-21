@@ -1132,11 +1132,6 @@ class _AlertEventCardState extends State<AlertEventCard>
                     }
 
                     try {
-                      AppEvents.instance.notifyEventsChanged();
-                    } catch (_) {}
-
-                    // Close the in-app alert popup immediately after successful cancel
-                    try {
                       if (mounted) {
                         if (widget.onDismiss != null) {
                           widget.onDismiss!();
