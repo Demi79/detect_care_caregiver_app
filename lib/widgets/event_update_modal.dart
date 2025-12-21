@@ -1263,7 +1263,7 @@ Future<void> showEventUpdateModalForEvent({
       }
     },
     loadEventImageUrls: (evt) =>
-        loadEventImageUrls(evt as EventLog).then((l) => l),
+        loadEventImageUrls(evt as EventLog, bypassCache: true).then((l) => l),
     buildEventLogForImages: () => imageSourceEvent ?? event,
     showImagesModal: (ctx, evt) =>
         showActionLogImagesModal(context: ctx, event: evt as EventLog),

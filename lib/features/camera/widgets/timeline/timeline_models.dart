@@ -47,6 +47,7 @@ class CameraTimelineClip {
   // Backwards-compatible accessors used throughout the codebase.
   String get id => timelineItemId;
   String get timelineEntryId => timelineItemId;
+  String get selectionKey => '${timelineItemId}|${startTime.toIso8601String()}';
 
   String get timeLabel => formatHmsVn(startTime);
 

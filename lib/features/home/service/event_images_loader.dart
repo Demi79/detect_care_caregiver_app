@@ -16,7 +16,10 @@ class ImageSource {
 
 final _snapshotUrlCache = <String, String>{};
 
-Future<List<ImageSource>> loadEventImageUrls(EventLog log) async {
+Future<List<ImageSource>> loadEventImageUrls(
+  EventLog log, {
+  bool bypassCache = false,
+}) async {
   AppLogger.d(
     '[EventImageLoader] ========== loadEventImageUrls called ==========',
   );
@@ -37,7 +40,7 @@ Future<List<ImageSource>> loadEventImageUrls(EventLog log) async {
       : log.eventId;
 
   final cachedPaths = await cacheService.getEventImages(cacheKey);
-  if (cachedPaths.isNotEmpty) {
+  if (cachedPaths.isNotEmpty && !bypassCache) {
     AppLogger.d(
       '[EventImageLoader] Using ${cachedPaths.length} cached images for $cacheKey',
     );

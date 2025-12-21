@@ -201,6 +201,9 @@ Future<void> buildEventImagesModal({
   Future<void> Function(BuildContext, EventLog)? onOpenCamera,
   VoidCallback? onEdit,
   bool showEditButton = true,
+  bool showAlarmButton = false,
+  bool showEmergencyCallButton = true,
+  bool allowRecordingLookup = false,
   String title = 'Hình ảnh',
   String Function(bool enabled)? editTooltipBuilder,
   Widget Function(
@@ -213,20 +216,94 @@ Future<void> buildEventImagesModal({
   alarmSectionBuilder,
 }) {
   final resolveEditTooltip = editTooltipBuilder ?? (_) => 'Cập nhật sự kiện';
-  AppLogger.d('\n[ImageModal] Đang tải ảnh cho sự kiện ${event.eventId}...');
-  final future = loadEventImageUrls(event).then((imageSources) {
-    AppLogger.d('[ImageModal] Tìm thấy ${imageSources.length} ảnh:');
+  // AppLogger.d('\n[ImageModal] Đang tải ảnh cho sự kiện ${event.eventId}...');
+  var eventForUse = event;
+  final future = (() async {
+    try {
+      final det = eventForUse.detectionData ?? {};
+      final ctx = eventForUse.contextData ?? {};
+      String? snapshotId;
+      try {
+        snapshotId =
+            (det['snapshot_id'] ??
+                    det['snapshotId'] ??
+                    ctx['snapshot_id'] ??
+                    ctx['snapshotId'])
+                ?.toString();
+      } catch (_) {
+        snapshotId = null;
+      }
+
+      final eventIdKnown = eventForUse.eventId.trim().isNotEmpty;
+      if (!eventIdKnown && snapshotId != null && snapshotId.isNotEmpty) {
+        try {
+          final resolver = EventsRemoteDataSource();
+          final found = await resolver.listEvents(
+            limit: 1,
+            extraQuery: {'snapshot_id': snapshotId},
+          );
+          if (found.isNotEmpty) {
+            final resolved = EventLog.fromJson(found.first);
+            // AppLogger.d(
+            //   '[ImageModal] Resolved event by snapshot $snapshotId -> ${resolved.eventId}',
+            // );
+            eventForUse = resolved;
+          }
+        } catch (e) {
+          // AppLogger.d('[ImageModal] Snapshot->event lookup failed: $e');
+        }
+      }
+      // Also attempt to resolve by recording_id when snapshot resolution
+      // didn't provide a richer event. Some events reference recordings.
+      try {
+        final det = eventForUse.detectionData ?? {};
+        final ctx = eventForUse.contextData ?? {};
+        final recordingId =
+            (det['recording_id'] ??
+                    det['recordingId'] ??
+                    ctx['recording_id'] ??
+                    ctx['recordingId'])
+                ?.toString();
+        if (allowRecordingLookup &&
+            (eventForUse.eventId.isEmpty ||
+                (eventForUse.status ?? '').toString().trim().toLowerCase() ==
+                    'unknown') &&
+            recordingId != null &&
+            recordingId.isNotEmpty) {
+          try {
+            final resolver = EventsRemoteDataSource();
+            final found = await resolver.listEvents(
+              limit: 1,
+              extraQuery: {'recording_id': recordingId},
+            );
+            if (found.isNotEmpty) {
+              final resolved = EventLog.fromJson(found.first);
+              // AppLogger.d(
+              //   '[ImageModal] Resolved event by recording $recordingId -> ${resolved.eventId}',
+              // );
+              eventForUse = resolved;
+            }
+          } catch (e) {
+            // AppLogger.d('[ImageModal] recording->event lookup failed: $e');
+          }
+        }
+      } catch (_) {}
+    } catch (_) {}
+
+    final imageSources = await loadEventImageUrls(eventForUse);
+    // AppLogger.d('[ImageModal] Tìm thấy ${imageSources.length} ảnh:');
     for (var source in imageSources) {
-      AppLogger.d(' - ${source.path}');
+      // AppLogger.d(' - ${source.path}');
     }
     return imageSources;
-  });
+  })();
 
   return showDialog(
     context: pageContext,
     builder: (dialogCtx) {
       int? selectedIndex;
       bool isAlarmWorking = false;
+      bool isEmergencyCalling = false;
 
       return StatefulBuilder(
         builder: (context, setDialogState) => Dialog(
@@ -235,8 +312,8 @@ Future<void> buildEventImagesModal({
             borderRadius: BorderRadius.circular(16),
           ),
           child: Container(
-            width: MediaQuery.of(pageContext).size.width * 0.9,
-            height: MediaQuery.of(pageContext).size.height * 0.7,
+            width: MediaQuery.of(context).size.width * 0.9,
+            height: MediaQuery.of(context).size.height * 0.7,
             padding: const EdgeInsets.all(20),
             child: Column(
               children: [
@@ -269,7 +346,7 @@ Future<void> buildEventImagesModal({
                       IconButton(
                         onPressed: () {
                           final navContext = pageContext;
-                          final eventData = event;
+                          final eventData = eventForUse;
                           Navigator.of(dialogCtx).pop();
                           Future.delayed(const Duration(milliseconds: 250), () {
                             onOpenCamera(navContext, eventData);
@@ -461,6 +538,315 @@ Future<void> buildEventImagesModal({
                     },
                   ),
                 ),
+
+                if (alarmSectionBuilder == null &&
+                    (showAlarmButton || showEmergencyCallButton)) ...[
+                  const SizedBox(height: 20),
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 4),
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        if (showAlarmButton)
+                          ValueListenableBuilder<bool>(
+                            valueListenable: ActiveAlarmNotifier.instance,
+                            builder: (context, alarmActive, _) {
+                              final disabled =
+                                  isAlarmWorking || eventForUse.eventId.isEmpty;
+                              final label = alarmActive
+                                  ? 'TẮT BÁO ĐỘNG'
+                                  : 'KÍCH HOẠT BÁO ĐỘNG';
+                              final iconData = alarmActive
+                                  ? Icons.notifications_off_rounded
+                                  : Icons.notifications_active_rounded;
+                              final bgColor = alarmActive
+                                  ? Colors.grey.shade200
+                                  : Colors.red.shade50;
+                              final fgColor = alarmActive
+                                  ? Colors.grey.shade800
+                                  : Colors.red.shade700;
+                              final borderColor = alarmActive
+                                  ? Colors.grey.shade400
+                                  : Colors.red.shade200;
+
+                              return SizedBox(
+                                width: double.infinity,
+                                height: 48,
+                                child: ElevatedButton(
+                                  onPressed: disabled
+                                      ? null
+                                      : () async {
+                                          final confirmed = await showDialog<bool>(
+                                            context: dialogCtx,
+                                            builder: (ctx) => AlertDialog(
+                                              backgroundColor: const Color(
+                                                0xFFF8FAFC,
+                                              ),
+                                              title: Text(
+                                                alarmActive
+                                                    ? 'Hủy báo động'
+                                                    : 'Gửi báo động?',
+                                              ),
+                                              content: Text(
+                                                alarmActive
+                                                    ? 'Bạn có chắc muốn hủy báo động?'
+                                                    : 'Bạn muốn kích hoạt báo động cho sự kiện này?',
+                                              ),
+                                              actions: [
+                                                TextButton(
+                                                  onPressed: () => Navigator.of(
+                                                    ctx,
+                                                  ).pop(false),
+                                                  child: const Text('Hủy'),
+                                                ),
+                                                ElevatedButton(
+                                                  onPressed: () => Navigator.of(
+                                                    ctx,
+                                                  ).pop(true),
+                                                  child: Text(
+                                                    alarmActive
+                                                        ? 'Đồng ý'
+                                                        : 'Gửi',
+                                                  ),
+                                                ),
+                                              ],
+                                            ),
+                                          );
+                                          if (confirmed != true) return;
+
+                                          setDialogState(
+                                            () => isAlarmWorking = true,
+                                          );
+                                          try {
+                                            final userId =
+                                                await AuthStorage.getUserId();
+                                            final rootCtx =
+                                                NavigatorKey
+                                                    .navigatorKey
+                                                    .currentState
+                                                    ?.overlay
+                                                    ?.context ??
+                                                pageContext;
+
+                                            if (userId == null ||
+                                                userId.isEmpty) {
+                                              if (!rootCtx.mounted) return;
+                                              ScaffoldMessenger.of(
+                                                rootCtx,
+                                              ).showSnackBar(
+                                                const SnackBar(
+                                                  content: Text(
+                                                    'Không xác thực được người dùng.',
+                                                  ),
+                                                  backgroundColor:
+                                                      Colors.redAccent,
+                                                ),
+                                              );
+                                              return;
+                                            }
+
+                                            if (alarmActive) {
+                                              await EventsRemoteDataSource()
+                                                  .cancelEvent(
+                                                    eventId:
+                                                        eventForUse.eventId,
+                                                  );
+                                              await AlarmRemoteDataSource()
+                                                  .cancelAlarm(
+                                                    eventId:
+                                                        eventForUse.eventId,
+                                                    userId: userId,
+                                                    cameraId:
+                                                        eventForUse.cameraId,
+                                                  );
+                                              ActiveAlarmNotifier.instance
+                                                  .update(false);
+                                              if (rootCtx.mounted) {
+                                                ScaffoldMessenger.of(
+                                                  rootCtx,
+                                                ).showSnackBar(
+                                                  const SnackBar(
+                                                    content: Text(
+                                                      'Đã hủy báo động.',
+                                                    ),
+                                                  ),
+                                                );
+                                              }
+                                            } else {
+                                              await AlarmRemoteDataSource()
+                                                  .setAlarm(
+                                                    eventId:
+                                                        eventForUse.eventId,
+                                                    userId: userId,
+                                                    cameraId:
+                                                        eventForUse.cameraId,
+                                                    enabled: true,
+                                                  );
+                                              ActiveAlarmNotifier.instance
+                                                  .update(true);
+                                              if (rootCtx.mounted) {
+                                                ScaffoldMessenger.of(
+                                                  rootCtx,
+                                                ).showSnackBar(
+                                                  const SnackBar(
+                                                    content: Text(
+                                                      'Đã kích hoạt báo động',
+                                                    ),
+                                                  ),
+                                                );
+                                              }
+                                            }
+                                          } catch (e) {
+                                            final rootCtx =
+                                                NavigatorKey
+                                                    .navigatorKey
+                                                    .currentState
+                                                    ?.overlay
+                                                    ?.context ??
+                                                pageContext;
+                                            if (rootCtx.mounted) {
+                                              ScaffoldMessenger.of(
+                                                rootCtx,
+                                              ).showSnackBar(
+                                                SnackBar(
+                                                  content: Text(
+                                                    alarmActive
+                                                        ? 'Hủy báo động thất bại: $e'
+                                                        : 'Kích hoạt báo động thất bại: $e',
+                                                  ),
+                                                  backgroundColor:
+                                                      Colors.red.shade600,
+                                                ),
+                                              );
+                                            }
+                                          } finally {
+                                            if (context.mounted) {
+                                              setDialogState(
+                                                () => isAlarmWorking = false,
+                                              );
+                                            }
+                                          }
+                                        },
+                                  style: ElevatedButton.styleFrom(
+                                    backgroundColor: bgColor,
+                                    foregroundColor: fgColor,
+                                    elevation: 0,
+                                    side: BorderSide(
+                                      color: borderColor,
+                                      width: 1.5,
+                                    ),
+                                    shape: RoundedRectangleBorder(
+                                      borderRadius: BorderRadius.circular(12),
+                                    ),
+                                  ),
+                                  child: isAlarmWorking
+                                      ? SizedBox(
+                                          width: 20,
+                                          height: 20,
+                                          child: CircularProgressIndicator(
+                                            strokeWidth: 2.5,
+                                            valueColor:
+                                                AlwaysStoppedAnimation<Color>(
+                                                  fgColor,
+                                                ),
+                                          ),
+                                        )
+                                      : Row(
+                                          mainAxisAlignment:
+                                              MainAxisAlignment.center,
+                                          children: [
+                                            Icon(iconData, size: 22),
+                                            const SizedBox(width: 8),
+                                            Text(
+                                              label,
+                                              style: const TextStyle(
+                                                fontWeight: FontWeight.bold,
+                                                fontSize: 12,
+                                                letterSpacing: 0.5,
+                                              ),
+                                            ),
+                                          ],
+                                        ),
+                                ),
+                              );
+                            },
+                          ),
+                        if (showAlarmButton && showEmergencyCallButton)
+                          const SizedBox(height: 12),
+                        if (showEmergencyCallButton)
+                          SizedBox(
+                            width: double.infinity,
+                            height: 48,
+                            child: ElevatedButton(
+                              onPressed: isEmergencyCalling
+                                  ? null
+                                  : () async {
+                                      setDialogState(
+                                        () => isEmergencyCalling = true,
+                                      );
+                                      try {
+                                        Navigator.of(dialogCtx).pop();
+                                        if (!pageContext.mounted) return;
+                                        await EmergencyCallHelper.initiateEmergencyCall(
+                                          context,
+                                        );
+                                      } finally {
+                                        // Dialog is closed; best-effort only.
+                                        if (dialogCtx.mounted) {
+                                          setDialogState(
+                                            () => isEmergencyCalling = false,
+                                          );
+                                        }
+                                      }
+                                    },
+                              style: ElevatedButton.styleFrom(
+                                backgroundColor: const Color(0xFF00ACC1),
+                                foregroundColor: Colors.white,
+                                elevation: 2,
+                                shadowColor: const Color(
+                                  0xFF00ACC1,
+                                ).withOpacity(0.4),
+                                shape: RoundedRectangleBorder(
+                                  borderRadius: BorderRadius.circular(12),
+                                ),
+                              ),
+                              child: isEmergencyCalling
+                                  ? const SizedBox(
+                                      width: 20,
+                                      height: 20,
+                                      child: CircularProgressIndicator(
+                                        strokeWidth: 2.5,
+                                        valueColor:
+                                            AlwaysStoppedAnimation<Color>(
+                                              Colors.white,
+                                            ),
+                                      ),
+                                    )
+                                  : Row(
+                                      mainAxisAlignment:
+                                          MainAxisAlignment.center,
+                                      children: const [
+                                        Icon(
+                                          Icons.phone_in_talk_rounded,
+                                          size: 22,
+                                        ),
+                                        SizedBox(width: 8),
+                                        Text(
+                                          'GỌI KHẨN CẤP',
+                                          style: TextStyle(
+                                            fontWeight: FontWeight.bold,
+                                            fontSize: 12,
+                                            letterSpacing: 0.5,
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                            ),
+                          ),
+                      ],
+                    ),
+                  ),
+                ],
               ],
             ),
           ),

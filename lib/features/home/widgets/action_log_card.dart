@@ -9,6 +9,7 @@ import 'package:detect_care_caregiver_app/features/assignments/data/assignments_
 import 'package:detect_care_caregiver_app/features/auth/data/auth_storage.dart';
 import 'package:detect_care_caregiver_app/features/camera/data/camera_api.dart';
 import 'package:detect_care_caregiver_app/features/camera/models/camera_entry.dart';
+import 'package:detect_care_caregiver_app/features/emergency/emergency_call_helper.dart';
 import 'package:detect_care_caregiver_app/features/events/data/events_remote_data_source.dart';
 import 'package:detect_care_caregiver_app/features/events/screens/propose_screen.dart';
 import 'package:detect_care_caregiver_app/features/home/repository/event_repository.dart';
@@ -804,7 +805,7 @@ class ActionLogCard extends StatelessWidget {
         ),
         _SeverityActionItem(
           icon: Icons.edit_outlined,
-          label: 'Cập nhật sự kiện',
+          label: 'Đề xuất sự kiện',
           subtitle: hasEditPermission ? null : editDisabledReason,
           enabled: hasEditPermission,
           onPressed: () => _showUpdateModal(context),
@@ -2132,7 +2133,6 @@ class ActionLogCard extends StatelessWidget {
                               statusColor,
                               Icons.flag_outlined,
                             ),
-
                             _kvRow(
                               'Sự kiện',
                               be.BackendEnums.eventTypeToVietnamese(
@@ -2147,12 +2147,12 @@ class ActionLogCard extends StatelessWidget {
                               typeColor,
                               Icons.category_outlined,
                             ),
-                            _kvRow(
-                              'Mã sự kiện',
-                              _shortId(data.eventId),
-                              Colors.grey.shade600,
-                              Icons.fingerprint_outlined,
-                            ),
+                            // _kvRow(
+                            //   'Mã sự kiện',
+                            //   _shortId(data.eventId),
+                            //   Colors.grey.shade600,
+                            //   Icons.fingerprint_outlined,
+                            // ),
                             _kvRow(
                               'Thời gian tạo',
                               _formatDateTime(data.createdAt),

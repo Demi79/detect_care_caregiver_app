@@ -591,7 +591,7 @@ class _HomeScreenState extends State<HomeScreen>
         case 0:
           return const LiveCameraHomeScreen();
         case 1:
-          return const AssignmentsScreen();
+          return const CaregiverSettingsScreen();
         case 2:
           return const PatientProfileScreen(embedInParent: true);
         case 3:

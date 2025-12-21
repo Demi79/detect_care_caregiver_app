@@ -84,14 +84,20 @@ class CameraTimelineList extends StatelessWidget {
                 physics: const BouncingScrollPhysics(),
                 itemBuilder: (context, index) {
                   final entry = entries[index];
+                  final sel = selectedTimelineEntryId?.trim();
+                  final clipKey = entry.clip?.selectionKey;
+                  final normalizedClipKey = clipKey?.trim();
                   final isSelected =
-                      entry.clip?.timelineEntryId == selectedTimelineEntryId;
+                      normalizedClipKey != null && normalizedClipKey == sel;
                   return CameraTimelineRow(
+                    key: ValueKey(
+                      normalizedClipKey ?? entry.time.toIso8601String(),
+                    ),
                     entry: entry,
                     isSelected: isSelected,
                     camera: camera,
                     onClipTap: entry.clip != null
-                        ? () => onSelectClip(entry.clip!.timelineEntryId)
+                      ? () => onSelectClip(entry.clip!.selectionKey)
                         : null,
                   );
                 },

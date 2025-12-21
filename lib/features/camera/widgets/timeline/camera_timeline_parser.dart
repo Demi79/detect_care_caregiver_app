@@ -11,7 +11,7 @@ List<CameraTimelineEntry> buildEntries(List<CameraTimelineClip> clips) {
 
 List<CameraTimelineClip> parseRecordingClips(dynamic payload) {
   final items = _extractItems(payload);
-  const colors = Colors.primaries;
+  final colors = Colors.primaries;
   final clips = <CameraTimelineClip>[];
   for (var i = 0; i < items.length; i++) {
     final item = items[i];
@@ -72,7 +72,7 @@ List<CameraTimelineClip> parseRecordingClips(dynamic payload) {
         downloadUrl: downloadUrl,
         thumbnailUrl: thumbnailUrl,
         eventType: eventType,
-        metadata: meta,
+        metadata: meta ?? Map<String, dynamic>.from(item),
       ),
     );
   }
@@ -91,6 +91,7 @@ List<CameraTimelineClip> parseSnapshotClips(dynamic payload) {
     final captured = _parseDate(timeValue);
     if (captured == null) continue;
     final accent = colors[(i * 3) % colors.length];
+    final thumbnailUrl = _extractThumbnailUrl(item);
     String? evtId;
     try {
       evtId =
@@ -116,6 +117,7 @@ List<CameraTimelineClip> parseSnapshotClips(dynamic payload) {
         startTime: captured,
         duration: const Duration(seconds: 5),
         accent: accent,
+        thumbnailUrl: thumbnailUrl,
         metadata: Map<String, dynamic>.from(item),
       ),
     );
@@ -152,6 +154,7 @@ List<CameraTimelineClip> parseEventClips(dynamic payload) {
     final clamped = rawDuration.clamp(5, 600).toInt();
     final duration = Duration(seconds: clamped);
     final accent = colors[i % colors.length];
+    final thumbnailUrl = _extractThumbnailUrl(item);
     clips.add(
       CameraTimelineClip(
         kind: TimelineItemKind.event,
@@ -163,11 +166,64 @@ List<CameraTimelineClip> parseEventClips(dynamic payload) {
         duration: duration,
         accent: accent,
         eventType: item['event_type']?.toString() ?? item['type']?.toString(),
+        thumbnailUrl: thumbnailUrl,
         metadata: Map<String, dynamic>.from(item),
       ),
     );
   }
   return clips;
+}
+
+String? _extractThumbnailUrl(Map<String, dynamic> item) {
+  final candidates = [
+    item['thumbnail_url'],
+    item['thumbnailUrl'],
+    item['snapshot_url'],
+    item['snapshotUrl'],
+    item['image_url'],
+    item['imageUrl'],
+    item['url'],
+  ];
+  for (final candidate in candidates) {
+    final value = candidate?.toString().trim();
+    if (value != null && value.isNotEmpty) {
+      return value;
+    }
+  }
+  final files = item['files'];
+  if (files is List) {
+    final fromFiles = _extractFromFiles(files);
+    if (fromFiles != null && fromFiles.isNotEmpty) return fromFiles;
+  }
+  final snapshotImages = item['snapshot_images'];
+  if (snapshotImages is List) {
+    final fromImages = _extractFromFiles(snapshotImages);
+    if (fromImages != null && fromImages.isNotEmpty) return fromImages;
+  }
+  final snapshot = item['snapshot'];
+  if (snapshot is Map) {
+    final nested = _extractThumbnailUrl(snapshot.cast<String, dynamic>());
+    if (nested != null && nested.trim().isNotEmpty) return nested.trim();
+  }
+  final snapshots = item['snapshots'];
+  if (snapshots is Map) {
+    final nested = _extractThumbnailUrl(snapshots.cast<String, dynamic>());
+    if (nested != null && nested.trim().isNotEmpty) return nested.trim();
+  }
+  return null;
+}
+
+String? _extractFromFiles(List<dynamic> files) {
+  for (final entry in files) {
+    if (entry is Map) {
+      final value = entry['cloud_url'] ?? entry['image_url'] ?? entry['url'];
+      final url = value?.toString().trim();
+      if (url != null && url.isNotEmpty) {
+        return url;
+      }
+    }
+  }
+  return null;
 }
 
 List<Map<String, dynamic>> _extractItems(dynamic payload) {
@@ -180,7 +236,7 @@ List<Map<String, dynamic>> _extractItems(dynamic payload) {
   if (payload is Map) {
     final map = Map<String, dynamic>.from(payload);
     // First try top-level list keys (including 'records' which some backends use)
-    for (final key in ['items', 'recordings', 'records', 'results']) {
+    for (final key in ['items', 'recordings', 'records', 'results', 'events']) {
       final value = map[key];
       if (value is List) {
         return value
@@ -192,8 +248,21 @@ List<Map<String, dynamic>> _extractItems(dynamic payload) {
 
     // Some responses wrap the list under a `data` object, e.g. { data: { records: [...] } }
     final data = map['data'];
+    // If data is already a list (common envelope: { data: [ ... ] })
+    if (data is List) {
+      return data
+          .whereType<Map>()
+          .map((e) => Map<String, dynamic>.from(e))
+          .toList();
+    }
     if (data is Map) {
-      for (final key in ['items', 'recordings', 'records', 'results']) {
+      for (final key in [
+        'items',
+        'recordings',
+        'records',
+        'results',
+        'events',
+      ]) {
         final value = data[key];
         if (value is List) {
           return value

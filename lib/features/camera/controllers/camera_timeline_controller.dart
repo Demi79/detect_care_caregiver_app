@@ -13,6 +13,7 @@ import 'package:flutter/scheduler.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 class CameraTimelineController extends ChangeNotifier {
+  static const String _kTimelineTimezone = 'Asia/Ho_Chi_Minh';
   final CameraTimelineApi api;
   final String cameraId;
   DateTime selectedDay;
@@ -209,22 +210,34 @@ class CameraTimelineController extends ChangeNotifier {
     errorMessage = null;
     _notify();
     try {
-      final dateStr = selectedDay.toIso8601String().split('T').first;
+      final dateStr = _formatLocalDate(selectedDay);
       // Debug: log which camera/date/mode we're loading to help diagnose API issues
       AppLogger.api(
-        '📡 [CameraTimeline] Loading timeline for cameraId=$cameraId date=$dateStr mode=$selectedModeIndex',
+        '📡 [CameraTimeline] Loading timeline for cameraId=$cameraId date=$dateStr tz=$_kTimelineTimezone mode=$selectedModeIndex',
       );
       late final List<CameraTimelineClip> parsed;
       if (selectedModeIndex == 0) {
-        final data = await api.listEvents(cameraId, date: dateStr);
+        final data = await api.listEvents(
+          cameraId,
+          date: dateStr,
+          tz: _kTimelineTimezone,
+        );
         _logPayload('listEvents', data);
         parsed = parseEventClips(data);
       } else if (selectedModeIndex == 2) {
-        final data = await api.listSnapshots(cameraId, date: dateStr);
+        final data = await api.listSnapshots(
+          cameraId,
+          date: dateStr,
+          tz: _kTimelineTimezone,
+        );
         _logPayload('listSnapshots', data);
         parsed = parseSnapshotClips(data);
       } else {
-        final data = await api.listRecordings(cameraId, date: dateStr);
+        final data = await api.listRecordings(
+          cameraId,
+          date: dateStr,
+          tz: _kTimelineTimezone,
+        );
         _logPayload('listRecordings', data);
         parsed = parseRecordingClips(data);
       }
@@ -245,15 +258,11 @@ class CameraTimelineController extends ChangeNotifier {
       final prevSelected = selectedTimelineEntryId;
       clips = deduped;
       entries = buildEntries(clips);
-      final firstId = clips.isNotEmpty ? clips.first.timelineEntryId : null;
-      selectedTimelineEntryId =
-          (prevSelected != null &&
-              clips.any(
-                (c) =>
-                    c.timelineEntryId == prevSelected || c.id == prevSelected,
-              ))
-          ? prevSelected
-          : firstId;
+      final firstKey = clips.isNotEmpty ? clips.first.selectionKey : null;
+      final resolvedPrev = prevSelected == null
+          ? null
+          : _resolveSelectionKey(prevSelected, clips);
+      selectedTimelineEntryId = resolvedPrev ?? firstKey;
 
       // Clear resolved event; we'll re-resolve for current selection below.
       selectedEventId = null;
@@ -463,23 +472,26 @@ class CameraTimelineController extends ChangeNotifier {
 
   void selectClip(String timelineEntryId) {
     final token = ++_selectionToken;
+    timelineEntryId = timelineEntryId.trim();
     AppLogger.api(
       '📌 [Timeline] selectClip requested token=$token timelineEntryId=$timelineEntryId '
       'prevSelected=${selectedTimelineEntryId ?? "null"} prevEvent=${selectedEventId ?? "null"}',
     );
-    selectedTimelineEntryId = timelineEntryId;
+    final clip = _findClipBySelection(timelineEntryId);
+    final resolvedKey = clip?.selectionKey ?? timelineEntryId;
+    selectedTimelineEntryId = resolvedKey;
     selectedEventId = null;
     _notify();
 
-    CameraTimelineClip? clip;
-    final idx = clips.indexWhere(
-      (c) => c.timelineEntryId == timelineEntryId || c.id == timelineEntryId,
-    );
-    if (idx == -1) {
-      clip = null;
-    } else {
-      clip = clips[idx];
-    }
+    // CameraTimelineClip? clip;
+    // final idx = clips.indexWhere(
+    //   (c) => c.timelineEntryId == timelineEntryId || c.id == timelineEntryId,
+    // );
+    // if (idx == -1) {
+    //   clip = null;
+    // } else {
+    //   clip = clips[idx];
+    // }
 
     if (clip == null) {
       AppLogger.api(
@@ -614,6 +626,33 @@ class CameraTimelineController extends ChangeNotifier {
     }
   }
 
+  String? _resolveSelectionKey(
+    String selection,
+    List<CameraTimelineClip> list,
+  ) {
+    final normalized = selection.trim();
+    for (final clip in list) {
+      if (clip.selectionKey == normalized ||
+          clip.timelineEntryId == normalized ||
+          clip.id == normalized) {
+        return clip.selectionKey;
+      }
+    }
+    return null;
+  }
+
+  CameraTimelineClip? _findClipBySelection(String selection) {
+    final normalized = selection.trim();
+    for (final clip in clips) {
+      if (clip.selectionKey == normalized ||
+          clip.timelineEntryId == normalized ||
+          clip.id == normalized) {
+        return clip;
+      }
+    }
+    return null;
+  }
+
   void adjustZoom(double delta) {
     zoomLevel = (zoomLevel + delta).clamp(0.0, 1.0).toDouble();
     _notify();
@@ -621,6 +660,11 @@ class CameraTimelineController extends ChangeNotifier {
 
   void _notify() {
     if (!_disposed) notifyListeners();
+  }
+
+  String _formatLocalDate(DateTime date) {
+    final localDate = DateTime(date.year, date.month, date.day);
+    return localDate.toIso8601String().split('T').first;
   }
 
   /// Returns the maximum selectable day (today, local date).

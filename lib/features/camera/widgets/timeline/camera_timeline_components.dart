@@ -469,6 +469,7 @@ class CameraTimelineClipCard extends StatelessWidget {
         pageContext: context,
         event: event,
         title: 'Hình ảnh sự kiện',
+        allowRecordingLookup: clip.kind != TimelineItemKind.recording,
         onEdit: () => _showUpdateModal(context, event),
         editTooltipBuilder: (_) => 'Đề xuất sự kiện',
       );
