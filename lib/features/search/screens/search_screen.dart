@@ -1,9 +1,12 @@
+import 'dart:async';
+
 import 'package:detect_care_caregiver_app/core/network/api_client.dart';
 import 'package:detect_care_caregiver_app/core/theme/app_theme.dart';
 import 'package:detect_care_caregiver_app/features/auth/data/auth_storage.dart';
 import 'package:detect_care_caregiver_app/features/activity_logs/data/activity_logs_remote_data_source.dart';
 import 'package:detect_care_caregiver_app/features/activity_logs/models/activity_log.dart'
     as AL;
+import 'package:detect_care_caregiver_app/features/home/screens/event_detail_screen.dart';
 import 'package:detect_care_caregiver_app/features/home/models/log_entry.dart';
 import 'package:detect_care_caregiver_app/features/home/repository/event_repository.dart';
 import 'package:detect_care_caregiver_app/features/home/service/event_service.dart';
@@ -25,6 +28,7 @@ class _SearchScreenState extends State<SearchScreen> {
     EventService(ApiClient(tokenProvider: AuthStorage.getAccessToken)),
   );
 
+  Timer? _debounce;
   List<LogEntry> _searchResults = [];
   List<String> _searchHistory = [];
   bool _isSearching = false;
@@ -42,7 +46,10 @@ class _SearchScreenState extends State<SearchScreen> {
     'Bình thường',
   ];
 
-  final List<String> _searchTypeOptions = ['Sự kiện', 'Nhật ký'];
+  final List<String> _searchTypeOptions = [
+    'Sự kiện',
+    // 'Nhật ký',
+  ];
 
   @override
   void initState() {
@@ -52,6 +59,7 @@ class _SearchScreenState extends State<SearchScreen> {
 
   @override
   void dispose() {
+    _debounce?.cancel();
     _searchController.dispose();
     super.dispose();
   }
@@ -79,7 +87,8 @@ class _SearchScreenState extends State<SearchScreen> {
   // _clearSearchHistory was removed because it's not referenced from the UI.
 
   Future<void> _performSearch(String query) async {
-    if (query.trim().isEmpty) {
+    final normalized = query.trim();
+    if (normalized.isEmpty) {
       setState(() {
         _searchResults = [];
         _isSearching = false;
@@ -90,14 +99,14 @@ class _SearchScreenState extends State<SearchScreen> {
     setState(() => _isSearching = true);
 
     try {
-      await _saveSearchHistory(query);
+      await _saveSearchHistory(normalized);
       switch (_selectedSearchType) {
         case 'Sự kiện':
-          await _searchEvents(query);
+          await _searchEvents(normalized);
           break;
-        case 'Nhật ký':
-          await _searchActivityLogs(query);
-          break;
+        // case 'Nhật ký':
+        //   await _searchActivityLogs(normalized);
+        //   break;
       }
     } catch (e) {
       if (mounted) {
@@ -131,7 +140,7 @@ class _SearchScreenState extends State<SearchScreen> {
           .toList();
     }
 
-    if (mounted) {
+    if (mounted && _searchController.text.trim() == query) {
       setState(() {
         _searchResults = filteredResults;
         _isSearching = false;
@@ -143,6 +152,7 @@ class _SearchScreenState extends State<SearchScreen> {
   }
 
   Future<void> _searchActivityLogs(String query) async {
+    // "Nhật ký": tìm trong activity logs của user và map sang LogEntry để hiển thị.
     setState(() => _isSearching = true);
     try {
       final userId = await AuthStorage.getUserId();
@@ -173,7 +183,7 @@ class _SearchScreenState extends State<SearchScreen> {
         );
       }).toList();
 
-      if (mounted) {
+      if (mounted && _searchController.text.trim() == query) {
         setState(() {
           _searchResults = mapped;
           _isSearching = false;
@@ -194,15 +204,15 @@ class _SearchScreenState extends State<SearchScreen> {
 
   String _formatTime(DateTime time) {
     final formatter = DateFormat('HH:mm dd/MM/yyyy ');
-    return formatter.format(time);
+    return formatter.format(time.toLocal());
   }
 
   String _getSmartHintText() {
     switch (_selectedSearchType) {
       case 'Sự kiện':
         return 'Tìm kiếm sự kiện, cảnh báo, hoạt động...';
-      case 'Nhật ký':
-        return 'Tìm kiếm nhật ký hoạt động...';
+      // case 'Nhật ký':
+      //   return 'Tìm kiếm nhật ký hoạt động...';
       default:
         return 'Nhập từ khóa tìm kiếm...';
     }
@@ -252,10 +262,17 @@ class _SearchScreenState extends State<SearchScreen> {
         autofocus: true,
         onChanged: (value) {
           setState(() {});
-          if (value.length >= 2) {
-            _performSearch(value);
+          _debounce?.cancel();
+          if (value.trim().length >= 2) {
+            _debounce = Timer(const Duration(milliseconds: 350), () {
+              if (!mounted) return;
+              _performSearch(value);
+            });
           } else {
-            setState(() => _searchResults = []);
+            setState(() {
+              _searchResults = [];
+              _isSearching = false;
+            });
           }
         },
         decoration: InputDecoration(
@@ -720,11 +737,7 @@ class _SearchScreenState extends State<SearchScreen> {
   Widget _buildQuickActions(LogEntry result) {
     return PopupMenuButton<String>(
       color: const Color(0xFFF8FAFC),
-      onSelected: (action) {
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(SnackBar(content: Text('Thực hiện: $action')));
-      },
+      onSelected: (action) => _handleQuickAction(action, result),
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
       itemBuilder: (context) => [
         const PopupMenuItem(value: 'Xem chi tiết', child: Text('Xem chi tiết')),
@@ -735,6 +748,34 @@ class _SearchScreenState extends State<SearchScreen> {
         color: Color(0xFF64748B),
         size: 20,
       ),
+    );
+  }
+
+  void _handleQuickAction(String action, LogEntry result) {
+    if (action != 'Xem chi tiết') {
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('Thực hiện: $action')));
+      return;
+    }
+
+    if (_selectedSearchType != 'Sự kiện') {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Nhật ký không có màn chi tiết.')),
+      );
+      return;
+    }
+
+    final eventId = result.eventId.trim();
+    if (eventId.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Không tìm thấy mã sự kiện.')),
+      );
+      return;
+    }
+
+    Navigator.of(context).push(
+      MaterialPageRoute(builder: (_) => EventDetailScreen(eventId: eventId)),
     );
   }
 
