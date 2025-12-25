@@ -51,6 +51,7 @@ abstract class ApiProvider {
 
 class ApiClient implements ApiProvider {
   static Future<void> Function()? onUnauthenticated;
+  static Future<void> Function()? onTooManyRequests;
 
   final http.Client _client;
   final TokenProvider? _tokenProvider;
@@ -154,6 +155,16 @@ class ApiClient implements ApiProvider {
     navigateToLoginAndClearStack();
   }
 
+  Future<void> _handleTooManyRequests() async {
+    if (onTooManyRequests != null) {
+      try {
+        await onTooManyRequests!();
+      } catch (e) {
+        debugPrint('ApiClient.onTooManyRequests handler failed: $e');
+      }
+    }
+  }
+
   dynamic decodeResponseBody(http.Response res) {
     final body = res.body;
     if (body.trim().isEmpty) return null;
@@ -187,6 +198,7 @@ class ApiClient implements ApiProvider {
     sw.stop();
     _logResponse('GET', uri, res, sw.elapsed);
     if (res.statusCode == 401) await _handleUnauthorized();
+    if (res.statusCode == 429) await _handleTooManyRequests();
     return res;
   }
 
@@ -206,6 +218,7 @@ class ApiClient implements ApiProvider {
     sw.stop();
     _logResponse('POST', uri, res, sw.elapsed);
     if (res.statusCode == 401) await _handleUnauthorized();
+    if (res.statusCode == 429) await _handleTooManyRequests();
     return res;
   }
 
@@ -225,6 +238,7 @@ class ApiClient implements ApiProvider {
     sw.stop();
     _logResponse('PUT', uri, res, sw.elapsed);
     if (res.statusCode == 401) await _handleUnauthorized();
+    if (res.statusCode == 429) await _handleTooManyRequests();
     return res;
   }
 
@@ -244,6 +258,7 @@ class ApiClient implements ApiProvider {
     sw.stop();
     _logResponse('PATCH', uri, res, sw.elapsed);
     if (res.statusCode == 401) await _handleUnauthorized();
+    if (res.statusCode == 429) await _handleTooManyRequests();
     return res;
   }
 
@@ -263,6 +278,7 @@ class ApiClient implements ApiProvider {
     sw.stop();
     _logResponse('DELETE', uri, res, sw.elapsed);
     if (res.statusCode == 401) await _handleUnauthorized();
+    if (res.statusCode == 429) await _handleTooManyRequests();
     return res;
   }
 
@@ -307,6 +323,9 @@ class ApiClient implements ApiProvider {
 
     if (res.statusCode == 401) {
       await _handleUnauthorized();
+    }
+    if (res.statusCode == 429) {
+      await _handleTooManyRequests();
     }
 
     return res;

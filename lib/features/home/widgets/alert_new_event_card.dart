@@ -13,6 +13,7 @@ import 'package:detect_care_caregiver_app/features/camera/models/camera_entry.da
 import 'package:detect_care_caregiver_app/features/camera/screens/live_camera_screen.dart';
 import 'package:detect_care_caregiver_app/features/events/screens/propose_screen.dart';
 import 'package:detect_care_caregiver_app/features/home/models/event_log.dart';
+import 'package:detect_care_caregiver_app/features/home/models/log_entry.dart';
 import 'package:detect_care_caregiver_app/features/home/repository/event_repository.dart';
 import 'package:detect_care_caregiver_app/features/home/service/event_images_loader.dart';
 import 'package:detect_care_caregiver_app/features/home/service/event_service.dart';
@@ -23,6 +24,7 @@ import 'package:detect_care_caregiver_app/services/audio_service.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:detect_care_caregiver_app/features/emergency/emergency_call_helper.dart';
+import 'package:detect_care_caregiver_app/features/home/service/event_lifecycle_service.dart';
 import 'package:detect_care_caregiver_app/features/events/data/events_remote_data_source.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../../../core/utils/backend_enums.dart' as be;
@@ -47,6 +49,7 @@ class AlertEventCard extends StatefulWidget {
   final VoidCallback? onMarkHandled;
   final VoidCallback? onViewDetails;
   final VoidCallback? onDismiss;
+  final LogEntry? event;
 
   const AlertEventCard({
     super.key,
@@ -69,6 +72,7 @@ class AlertEventCard extends StatefulWidget {
     this.onMarkHandled,
     this.onViewDetails,
     this.onDismiss,
+    this.event,
   });
 
   @override
@@ -95,8 +99,12 @@ class _AlertEventCardState extends State<AlertEventCard>
   int? _snoozeRemaining;
   bool _isCancelling = false;
   bool _isEmergencyCalling = false;
+  bool _isResolving = false;
   bool _isImagesLoading = false;
   bool _imagesPrefetched = false;
+  bool _alarmResolved = false;
+  EventLog? _liveEvent;
+  StreamSubscription<Map<String, dynamic>>? _eventUpdatedSub;
   Future<List<ImageSource>>? _prefetchFuture;
 
   @override
@@ -178,6 +186,42 @@ class _AlertEventCardState extends State<AlertEventCard>
       _isImagesLoading = false;
       _imagesPrefetched = true;
     }
+
+    try {
+      _eventUpdatedSub = AppEvents.instance.eventUpdated.listen((
+        payload,
+      ) async {
+        try {
+          final id = payload is Map
+              ? (payload['id'] ?? payload['eventId'] ?? payload['event_id'])
+              : null;
+          if (id == null || id.toString() != widget.eventId) return;
+
+          // If payload contains lifecycle, use it to adjust local state quickly
+          final ls = payload is Map
+              ? (payload['lifecycle_state'] ??
+                    payload['lifecycleState'] ??
+                    payload['lifecycle'])
+              : null;
+          if (ls != null) {
+            final upper = ls.toString().toUpperCase();
+            if (upper == 'RESOLVED' ||
+                upper == 'CANCELED' ||
+                upper == 'CANCELLED') {
+              if (mounted) setState(() => _alarmResolved = true);
+            } else if (upper == 'ALARM_ACTIVATED') {
+              if (mounted) setState(() => _alarmResolved = false);
+            }
+          }
+
+          try {
+            final svc = EventService.withDefaultClient();
+            final latest = await svc.fetchLogDetail(widget.eventId);
+            if (mounted) setState(() => _liveEvent = latest);
+          } catch (_) {}
+        } catch (_) {}
+      });
+    } catch (_) {}
   }
 
   @override
@@ -194,6 +238,9 @@ class _AlertEventCardState extends State<AlertEventCard>
     } catch (_) {}
     try {
       _badgeController.dispose();
+    } catch (_) {}
+    try {
+      _eventUpdatedSub?.cancel();
     } catch (_) {}
     super.dispose();
   }
@@ -276,6 +323,19 @@ class _AlertEventCardState extends State<AlertEventCard>
       } catch (_) {}
       try {
         await EmergencyCallHelper.initiateEmergencyCall(context);
+        try {
+          await EventLifecycleService.withDefaultClient().updateLifecycleFlags(
+            eventId: widget.eventId,
+            hasEmergencyCall: true,
+          );
+          AppLogger.api('Set hasEmergencyCall=true for ${widget.eventId}');
+        } catch (e, st) {
+          AppLogger.e(
+            'Failed to set hasEmergencyCall for ${widget.eventId}: $e',
+            e,
+            st,
+          );
+        }
       } catch (e, st) {
         AppLogger.e('Emergency call failed: $e', e, st);
         try {
@@ -302,6 +362,19 @@ class _AlertEventCardState extends State<AlertEventCard>
       } catch (_) {}
       try {
         await EmergencyCallHelper.initiateEmergencyCall(ctx);
+        try {
+          await EventLifecycleService.withDefaultClient().updateLifecycleFlags(
+            eventId: widget.eventId,
+            hasEmergencyCall: true,
+          );
+          AppLogger.api('Set hasEmergencyCall=true for ${widget.eventId}');
+        } catch (e, st) {
+          AppLogger.e(
+            'Failed to set hasEmergencyCall for ${widget.eventId}: $e',
+            e,
+            st,
+          );
+        }
       } catch (e, st) {
         AppLogger.e('Emergency call failed: $e', e, st);
         try {
@@ -354,6 +427,50 @@ class _AlertEventCardState extends State<AlertEventCard>
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text('Không thể cập nhật trạng thái: $e')),
       );
+    }
+  }
+
+  Future<void> _handleResolveAlarm() async {
+    if (_isResolving) return;
+    setState(() => _isResolving = true);
+
+    try {
+      HapticFeedback.heavyImpact();
+      final ds = EventsRemoteDataSource();
+      await ds.updateEventLifecycle(
+        eventId: widget.eventId,
+        lifecycleState: 'RESOLVED',
+        notes: 'Resolved from UI',
+      );
+
+      try {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Đã hủy báo động'),
+            backgroundColor: Colors.green,
+            behavior: SnackBarBehavior.floating,
+            duration: Duration(milliseconds: 1400),
+          ),
+        );
+      } catch (_) {}
+      if (mounted) setState(() => _alarmResolved = true);
+
+      try {
+        AppEvents.instance.notifyEventsChanged();
+      } catch (_) {}
+    } catch (e) {
+      AppLogger.e('Resolve alarm failed: $e');
+      try {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Hủy báo động thất bại: $e'),
+            backgroundColor: Colors.red.shade600,
+            behavior: SnackBarBehavior.floating,
+          ),
+        );
+      } catch (_) {}
+    } finally {
+      if (mounted) setState(() => _isResolving = false);
     }
   }
 
@@ -763,6 +880,8 @@ class _AlertEventCardState extends State<AlertEventCard>
   }
 
   Widget _buildContent() {
+    final source = (widget.createdAt ?? widget.timestamp).toLocal();
+
     return Padding(
       padding: const EdgeInsets.all(16),
       child: Column(
@@ -775,6 +894,12 @@ class _AlertEventCardState extends State<AlertEventCard>
               color: Color(0xFF4A5568),
               height: 1.4,
             ),
+          ),
+          const SizedBox(height: 12),
+
+          _buildInfoRow(
+            'Thời gian',
+            '${source.day}/${source.month}/${source.year} ${source.hour.toString().padLeft(2, '0')}:${source.minute.toString().padLeft(2, '0')}',
           ),
           const SizedBox(height: 12),
 
@@ -825,8 +950,6 @@ class _AlertEventCardState extends State<AlertEventCard>
   }
 
   Widget _buildExpandedContent() {
-    final source = (widget.createdAt ?? widget.timestamp).toLocal();
-
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 16),
       child: Column(
@@ -834,15 +957,6 @@ class _AlertEventCardState extends State<AlertEventCard>
         children: [
           const Divider(height: 1),
           const SizedBox(height: 12),
-
-          // _buildInfoRow('Mã sự kiện', widget.eventId),
-          // const SizedBox(height: 8),
-          _buildInfoRow(
-            'Thời gian',
-            '${source.day}/${source.month}/${source.year} ${source.hour.toString().padLeft(2, '0')}:${source.minute.toString().padLeft(2, '0')}',
-          ),
-
-          const SizedBox(height: 8),
 
           _buildInfoRow(
             'Loại',
@@ -934,6 +1048,12 @@ class _AlertEventCardState extends State<AlertEventCard>
   }
 
   Widget _buildActionButtons() {
+    final EventLog _ev =
+        _liveEvent ??
+        (widget.event is EventLog
+            ? widget.event as EventLog
+            : _buildEventLogForImages());
+    final decision = _ev.getAlertActionDecision();
     if (widget.isHandled) {
       return Container(
         padding: const EdgeInsets.all(16),
@@ -997,14 +1117,86 @@ class _AlertEventCardState extends State<AlertEventCard>
                     )
                   : const Icon(Icons.image_outlined),
               label: Text(_isImagesLoading ? 'Đang tải ảnh…' : 'Xem ảnh'),
-              style: TextButton.styleFrom(
-                foregroundColor: _getSeverityColor(),
-                padding: const EdgeInsets.symmetric(vertical: 12),
+              style: ButtonStyle(
+                foregroundColor: MaterialStateProperty.resolveWith<Color?>(
+                  (states) => states.contains(MaterialState.disabled)
+                      ? Colors.grey.shade400
+                      : _getSeverityColor(),
+                ),
+                padding: MaterialStateProperty.all(
+                  const EdgeInsets.symmetric(vertical: 12),
+                ),
+                overlayColor: MaterialStateProperty.all(
+                  _getSeverityColor().withOpacity(0.08),
+                ),
               ),
             ),
           ),
 
           const SizedBox(height: 8),
+
+          // If event lifecycle is ALARM_ACTIVATED, show 'Hủy báo động' button
+          if (((_ev.lifecycleState ?? '').toString().toUpperCase() ==
+                  'ALARM_ACTIVATED') &&
+              !_alarmResolved) ...[
+            SizedBox(
+              width: double.infinity,
+              child: ElevatedButton.icon(
+                onPressed: _isResolving ? null : _handleResolveAlarm,
+                icon: _isResolving
+                    ? SizedBox(
+                        width: 16,
+                        height: 16,
+                        child: CircularProgressIndicator(
+                          strokeWidth: 2,
+                          valueColor: AlwaysStoppedAnimation<Color>(
+                            Colors.white,
+                          ),
+                        ),
+                      )
+                    : const Icon(
+                        Icons.cancel_presentation_outlined,
+                        color: Colors.white,
+                      ),
+                label: _isResolving
+                    ? const Text('Đang hủy...')
+                    : const Text(
+                        'HỦY BÁO ĐỘNG',
+                        style: TextStyle(
+                          fontWeight: FontWeight.bold,
+                          color: Colors.white,
+                          fontSize: 13,
+                        ),
+                      ),
+                style: ButtonStyle(
+                  backgroundColor: MaterialStateProperty.resolveWith<Color?>((
+                    states,
+                  ) {
+                    if (states.contains(MaterialState.disabled)) {
+                      return Colors.deepOrange.withOpacity(0.45);
+                    }
+                    return Colors.deepOrange;
+                  }),
+                  foregroundColor: MaterialStateProperty.all<Color>(
+                    Colors.white,
+                  ),
+                  padding: MaterialStateProperty.all(
+                    const EdgeInsets.symmetric(vertical: 12),
+                  ),
+                  shape: MaterialStateProperty.all(
+                    RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                  ),
+                  elevation: MaterialStateProperty.resolveWith<double?>(
+                    (states) => states.contains(MaterialState.disabled) ? 0 : 2,
+                  ),
+                ),
+              ),
+            ),
+
+            const SizedBox(height: 8),
+          ],
 
           // Nút Báo động
           // SizedBox(
@@ -1062,7 +1254,9 @@ class _AlertEventCardState extends State<AlertEventCard>
           SizedBox(
             width: double.infinity,
             child: ElevatedButton.icon(
-              onPressed: _handleEmergencyCall,
+              onPressed: (decision.disableCall || _isEmergencyCalling)
+                  ? null
+                  : _handleEmergencyCall,
               icon: const Icon(Icons.phone, color: Colors.white),
               label: const Text(
                 'GỌI KHẨN CẤP',
@@ -1072,13 +1266,27 @@ class _AlertEventCardState extends State<AlertEventCard>
                   fontSize: 13,
                 ),
               ),
-              style: ElevatedButton.styleFrom(
-                backgroundColor: const Color(0xFFE53E3E),
-                padding: const EdgeInsets.symmetric(vertical: 12),
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(8),
+              style: ButtonStyle(
+                backgroundColor: MaterialStateProperty.resolveWith<Color?>((
+                  states,
+                ) {
+                  if (states.contains(MaterialState.disabled)) {
+                    return const Color(0xFFE53E3E).withOpacity(0.45);
+                  }
+                  return const Color(0xFFE53E3E);
+                }),
+                foregroundColor: MaterialStateProperty.all<Color>(Colors.white),
+                padding: MaterialStateProperty.all(
+                  const EdgeInsets.symmetric(vertical: 12),
                 ),
-                elevation: 2,
+                shape: MaterialStateProperty.all(
+                  RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                ),
+                elevation: MaterialStateProperty.resolveWith<double?>(
+                  (states) => states.contains(MaterialState.disabled) ? 0 : 2,
+                ),
               ),
             ),
           ),
@@ -1089,81 +1297,101 @@ class _AlertEventCardState extends State<AlertEventCard>
           SizedBox(
             width: double.infinity,
             child: OutlinedButton.icon(
-              onPressed: () async {
-                final confirm = await showDialog<bool>(
-                  context: context,
-                  builder: (ctx) => AlertDialog(
-                    title: const Text('Xác nhận hủy cảnh báo'),
-                    content: const Text(
-                      'Bạn có chắc chắn rằng cảnh báo này là giả và muốn hủy bỏ?',
-                    ),
-                    actions: [
-                      TextButton(
-                        onPressed: () => Navigator.of(ctx).pop(false),
-                        child: const Text('Không'),
-                      ),
-                      ElevatedButton(
-                        onPressed: () => Navigator.of(ctx).pop(true),
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: Colors.redAccent,
-                        ),
-                        child: const Text('Xác nhận'),
-                      ),
-                    ],
-                  ),
-                );
-                if (confirm == true) {
-                  HapticFeedback.heavyImpact();
-                  setState(() => _isCancelling = true);
-                  try {
-                    final ds = EventsRemoteDataSource();
-                    await ds.cancelEvent(eventId: widget.eventId);
-
-                    // Show success message
-                    if (mounted && context.mounted) {
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        const SnackBar(
-                          content: Text('Cảnh báo đã được hủy thành công.'),
-                          backgroundColor: Colors.green,
-                          behavior: SnackBarBehavior.floating,
-                          duration: Duration(milliseconds: 1500),
+              onPressed: (decision.disableCancel || _isCancelling)
+                  ? null
+                  : () async {
+                      final confirm = await showDialog<bool>(
+                        context: context,
+                        builder: (ctx) => AlertDialog(
+                          title: const Text('Xác nhận hủy cảnh báo'),
+                          content: const Text(
+                            'Bạn có chắc chắn rằng cảnh báo này là giả và muốn hủy bỏ?',
+                          ),
+                          actions: [
+                            TextButton(
+                              onPressed: () => Navigator.of(ctx).pop(false),
+                              child: const Text('Không'),
+                            ),
+                            ElevatedButton(
+                              onPressed: () => Navigator.of(ctx).pop(true),
+                              style: ElevatedButton.styleFrom(
+                                backgroundColor: Colors.redAccent,
+                              ),
+                              child: const Text('Xác nhận'),
+                            ),
+                          ],
                         ),
                       );
-                    }
+                      if (confirm == true) {
+                        HapticFeedback.heavyImpact();
+                        setState(() => _isCancelling = true);
+                        try {
+                          final ds = EventsRemoteDataSource();
+                          await ds.cancelEvent(eventId: widget.eventId);
 
-                    try {
-                      if (mounted) {
-                        if (widget.onDismiss != null) {
-                          widget.onDismiss!();
-                        } else {
-                          Navigator.of(context, rootNavigator: true).maybePop();
+                          // Show success message
+                          if (mounted && context.mounted) {
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              const SnackBar(
+                                content: Text(
+                                  'Cảnh báo đã được hủy thành công.',
+                                ),
+                                backgroundColor: Colors.green,
+                                behavior: SnackBarBehavior.floating,
+                                duration: Duration(milliseconds: 1500),
+                              ),
+                            );
+                          }
+
+                          try {
+                            if (mounted) {
+                              if (widget.onDismiss != null) {
+                                widget.onDismiss!();
+                              } else {
+                                Navigator.of(
+                                  context,
+                                  rootNavigator: true,
+                                ).maybePop();
+                              }
+                            }
+                          } catch (_) {}
+                        } catch (e) {
+                          AppLogger.e('Cancel event failed: $e');
+                          if (mounted && context.mounted) {
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              SnackBar(
+                                content: Text('Hủy cảnh báo thất bại: $e'),
+                                backgroundColor: Colors.red.shade600,
+                                behavior: SnackBarBehavior.floating,
+                              ),
+                            );
+                          }
+                        } finally {
+                          if (mounted) setState(() => _isCancelling = false);
                         }
                       }
-                    } catch (_) {}
-                  } catch (e) {
-                    AppLogger.e('Cancel event failed: $e');
-                    if (mounted && context.mounted) {
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        SnackBar(
-                          content: Text('Hủy cảnh báo thất bại: $e'),
-                          backgroundColor: Colors.red.shade600,
-                          behavior: SnackBarBehavior.floating,
-                        ),
-                      );
-                    }
-                  } finally {
-                    if (mounted) setState(() => _isCancelling = false);
-                  }
-                }
-              },
+                    },
               icon: const Icon(Icons.cancel_outlined),
               label: _isCancelling
                   ? const Text('Đang hủy...')
                   : const Text('Hủy cảnh báo'),
-              style: OutlinedButton.styleFrom(
-                foregroundColor: Colors.redAccent,
-                side: const BorderSide(color: Colors.redAccent, width: 1.2),
-                padding: const EdgeInsets.symmetric(vertical: 12),
+              style: ButtonStyle(
+                foregroundColor: MaterialStateProperty.resolveWith<Color?>(
+                  (states) => states.contains(MaterialState.disabled)
+                      ? Colors.grey.shade500
+                      : Colors.redAccent,
+                ),
+                side: MaterialStateProperty.resolveWith<BorderSide?>(
+                  (states) => states.contains(MaterialState.disabled)
+                      ? BorderSide(color: Colors.grey.shade300, width: 1.2)
+                      : const BorderSide(color: Colors.redAccent, width: 1.2),
+                ),
+                padding: MaterialStateProperty.all(
+                  const EdgeInsets.symmetric(vertical: 12),
+                ),
+                overlayColor: MaterialStateProperty.all(
+                  Colors.redAccent.withOpacity(0.06),
+                ),
               ),
             ),
           ),
@@ -1203,6 +1431,13 @@ class _AlertEventCardState extends State<AlertEventCard>
       status: widget.isHandled ? 'handled' : 'new',
       imageUrls: widget.imageUrls,
       cameraId: cameraId,
+      hasEmergencyCall: false,
+      hasAlarmActivated: false,
+      lastEmergencyCallSource: null,
+      lastAlarmActivatedSource: null,
+      lastEmergencyCallAt: null,
+      lastAlarmActivatedAt: null,
+      isAlarmTimeoutExpired: false,
     );
   }
 

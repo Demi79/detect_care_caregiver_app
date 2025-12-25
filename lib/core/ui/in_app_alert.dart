@@ -299,6 +299,7 @@ class InAppAlert {
                   child: Material(
                     color: Colors.transparent,
                     child: AlertEventCard(
+                      event: e,
                       eventId: e.eventId,
                       eventType: e.eventType,
                       // patientName: "Bệnh nhân XYZ",

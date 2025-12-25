@@ -32,6 +32,20 @@ class EventLog implements LogEntry {
   final String? lifecycleState;
   @override
   final String? createBy;
+  @override
+  final bool? hasEmergencyCall;
+  @override
+  final bool? hasAlarmActivated;
+  @override
+  final String? lastEmergencyCallSource;
+  @override
+  final String? lastAlarmActivatedSource;
+  @override
+  final DateTime? lastEmergencyCallAt;
+  @override
+  final DateTime? lastAlarmActivatedAt;
+  @override
+  final bool? isAlarmTimeoutExpired;
   final String? updatedBy;
   final List<String> imageUrls;
 
@@ -69,6 +83,13 @@ class EventLog implements LogEntry {
     this.cameraId,
     this.createBy,
     this.updatedBy,
+    this.hasEmergencyCall,
+    this.hasAlarmActivated,
+    this.lastEmergencyCallSource,
+    this.lastAlarmActivatedSource,
+    this.lastEmergencyCallAt,
+    this.lastAlarmActivatedAt,
+    this.isAlarmTimeoutExpired,
   });
 
   factory EventLog.fromJson(Map<String, dynamic> json) {
@@ -345,6 +366,143 @@ class EventLog implements LogEntry {
           s(detMap['camera_id']) ??
           s(ctxMap['camera_id']),
       updatedBy: s(first(json, ['updated_by', 'updatedBy'])),
+      hasEmergencyCall:
+          (first(json, [
+                'has_emergency_call',
+                'hasEmergencyCall',
+                'emergency_call',
+              ]) !=
+              null)
+          ? (first(json, [
+                      'has_emergency_call',
+                      'hasEmergencyCall',
+                      'emergency_call',
+                    ])
+                    is bool
+                ? first(json, [
+                        'has_emergency_call',
+                        'hasEmergencyCall',
+                        'emergency_call',
+                      ])
+                      as bool
+                : (first(json, [
+                            'has_emergency_call',
+                            'hasEmergencyCall',
+                            'emergency_call',
+                          ])
+                          is num
+                      ? (first(json, [
+                                  'has_emergency_call',
+                                  'hasEmergencyCall',
+                                  'emergency_call',
+                                ])
+                                as num) !=
+                            0
+                      : (first(json, [
+                              'has_emergency_call',
+                              'hasEmergencyCall',
+                              'emergency_call',
+                            ]).toString().trim().toLowerCase() ==
+                            'true')))
+          : false,
+      hasAlarmActivated:
+          (first(json, [
+                'has_alarm_activated',
+                'hasAlarmActivated',
+                'alarm_activated',
+              ]) !=
+              null)
+          ? (first(json, [
+                      'has_alarm_activated',
+                      'hasAlarmActivated',
+                      'alarm_activated',
+                    ])
+                    is bool
+                ? first(json, [
+                        'has_alarm_activated',
+                        'hasAlarmActivated',
+                        'alarm_activated',
+                      ])
+                      as bool
+                : (first(json, [
+                            'has_alarm_activated',
+                            'hasAlarmActivated',
+                            'alarm_activated',
+                          ])
+                          is num
+                      ? (first(json, [
+                                  'has_alarm_activated',
+                                  'hasAlarmActivated',
+                                  'alarm_activated',
+                                ])
+                                as num) !=
+                            0
+                      : (first(json, [
+                              'has_alarm_activated',
+                              'hasAlarmActivated',
+                              'alarm_activated',
+                            ]).toString().trim().toLowerCase() ==
+                            'true')))
+          : false,
+      lastEmergencyCallSource: s(
+        first(json, [
+          'last_emergency_call_source',
+          'lastEmergencyCallSource',
+          'emergency_call_source',
+        ]),
+      ),
+      lastAlarmActivatedSource: s(
+        first(json, [
+          'last_alarm_activated_source',
+          'lastAlarmActivatedSource',
+          'alarm_activated_source',
+        ]),
+      ),
+      lastEmergencyCallAt: dt(
+        first(json, ['last_emergency_call_at', 'lastEmergencyCallAt']),
+      ),
+      lastAlarmActivatedAt: dt(
+        first(json, ['last_alarm_activated_at', 'lastAlarmActivatedAt']),
+      ),
+      isAlarmTimeoutExpired:
+          (first(json, [
+                'isAlarmTimeoutExpired',
+                'is_alarm_timeout_expired',
+                'alarm_timeout_expired',
+              ]) !=
+              null)
+          ? (first(json, [
+                      'isAlarmTimeoutExpired',
+                      'is_alarm_timeout_expired',
+                      'alarm_timeout_expired',
+                    ])
+                    is bool
+                ? first(json, [
+                        'isAlarmTimeoutExpired',
+                        'is_alarm_timeout_expired',
+                        'alarm_timeout_expired',
+                      ])
+                      as bool
+                : (first(json, [
+                            'isAlarmTimeoutExpired',
+                            'is_alarm_timeout_expired',
+                            'alarm_timeout_expired',
+                          ])
+                          is num
+                      ? (first(json, [
+                                  'isAlarmTimeoutExpired',
+                                  'is_alarm_timeout_expired',
+                                  'alarm_timeout_expired',
+                                ])
+                                as num) !=
+                            0
+                      : (first(json, [
+                              'isAlarmTimeoutExpired',
+                              'is_alarm_timeout_expired',
+                              'alarm_timeout_expired',
+                            ]).toString().trim().toLowerCase() ==
+                            'true')))
+          : false,
     );
   }
 
@@ -376,6 +534,18 @@ class EventLog implements LogEntry {
       if (createBy != null) 'create_by': createBy,
       if (updatedBy != null) 'updated_by': updatedBy,
       if (lifecycleState != null) 'lifecycle_state': lifecycleState,
+      if (hasEmergencyCall != null) 'has_emergency_call': hasEmergencyCall,
+      if (hasAlarmActivated != null) 'has_alarm_activated': hasAlarmActivated,
+      if (lastEmergencyCallSource != null)
+        'last_emergency_call_source': lastEmergencyCallSource,
+      if (lastAlarmActivatedSource != null)
+        'last_alarm_activated_source': lastAlarmActivatedSource,
+      if (lastEmergencyCallAt != null)
+        'last_emergency_call_at': lastEmergencyCallAt!.toIso8601String(),
+      if (lastAlarmActivatedAt != null)
+        'last_alarm_activated_at': lastAlarmActivatedAt!.toIso8601String(),
+      if (isAlarmTimeoutExpired != null)
+        'is_alarm_timeout_expired': isAlarmTimeoutExpired,
     };
   }
 
@@ -411,6 +581,13 @@ class EventLog implements LogEntry {
     String? cameraId,
     String? createBy,
     String? updatedBy,
+    bool? hasEmergencyCall,
+    bool? hasAlarmActivated,
+    String? lastEmergencyCallSource,
+    String? lastAlarmActivatedSource,
+    DateTime? lastEmergencyCallAt,
+    DateTime? lastAlarmActivatedAt,
+    bool? isAlarmTimeoutExpired,
   }) => EventLog(
     eventId: eventId,
     status: status ?? this.status,
@@ -431,5 +608,117 @@ class EventLog implements LogEntry {
     cameraId: cameraId ?? this.cameraId,
     createBy: createBy ?? this.createBy,
     updatedBy: updatedBy ?? this.updatedBy,
+    hasEmergencyCall: hasEmergencyCall ?? this.hasEmergencyCall,
+    hasAlarmActivated: hasAlarmActivated ?? this.hasAlarmActivated,
+    lastEmergencyCallSource:
+        lastEmergencyCallSource ?? this.lastEmergencyCallSource,
+    lastAlarmActivatedSource:
+        lastAlarmActivatedSource ?? this.lastAlarmActivatedSource,
+    lastEmergencyCallAt: lastEmergencyCallAt ?? this.lastEmergencyCallAt,
+    lastAlarmActivatedAt: lastAlarmActivatedAt ?? this.lastAlarmActivatedAt,
+    isAlarmTimeoutExpired: isAlarmTimeoutExpired ?? this.isAlarmTimeoutExpired,
   );
+}
+
+extension EventLogEmergencyHelpers on EventLog {
+  bool get _hasEmergencyCall => hasEmergencyCall ?? false;
+  bool get _hasAlarmActivated => hasAlarmActivated ?? false;
+  String? get _lastEmergencySource => lastEmergencyCallSource;
+  String? get _lastAlarmSource => lastAlarmActivatedSource;
+  bool get _isAlarmTimeoutExpired => isAlarmTimeoutExpired ?? false;
+
+  AlertActionDecision getAlertActionDecision() {
+    final emSrc = (_lastEmergencySource ?? '').toString().toUpperCase();
+    final alSrc = (_lastAlarmSource ?? '').toString().toUpperCase();
+
+    // 1) Caregiver CALL (highest priority)
+    if (_hasEmergencyCall && emSrc == 'CAREGIVER') {
+      return AlertActionDecision(
+        mode: AlertActionMode.caregiverCall,
+        disableCall: true,
+        disableAlarm: true,
+        disableCancel: true,
+      );
+    }
+
+    // 2) Customer CALL (user-initiated by customer)
+    if (_hasEmergencyCall && emSrc == 'CUSTOMER') {
+      return AlertActionDecision(
+        mode: AlertActionMode.customerCall,
+        disableCall: true,
+        disableAlarm: false,
+        disableCancel: true,
+      );
+    }
+
+    // 3) System AUTO CALL
+    if (_hasEmergencyCall && emSrc == 'SYSTEM') {
+      return AlertActionDecision(
+        mode: AlertActionMode.systemCall,
+        disableCall: true,
+        disableAlarm: false,
+        disableCancel: false,
+      );
+    }
+
+    // 4) System AUTO ALARM (only disables alarm if timeout not expired)
+    if (_hasAlarmActivated && alSrc == 'SYSTEM' && !_isAlarmTimeoutExpired) {
+      return AlertActionDecision(
+        mode: AlertActionMode.systemAlarm,
+        disableCall: false,
+        disableAlarm: true,
+        disableCancel: false,
+      );
+    }
+
+    // 5) User ALARM (Customer or Caregiver) -> disables alarm and cancel
+    if (_hasAlarmActivated && (alSrc == 'CUSTOMER' || alSrc == 'CAREGIVER')) {
+      return AlertActionDecision(
+        mode: AlertActionMode.userAlarm,
+        disableCall: false,
+        disableAlarm: true,
+        disableCancel: true,
+      );
+    }
+
+    // 6) Fallbacks: if unknown emergency source but emergency present, behave like customer call
+    if (_hasEmergencyCall) {
+      return AlertActionDecision(
+        mode: AlertActionMode.customerCall,
+        disableCall: true,
+        disableAlarm: false,
+        disableCancel: true,
+      );
+    }
+
+    // Default: nothing disabled
+    return AlertActionDecision(mode: AlertActionMode.none);
+  }
+
+  bool get isCallDisabled => getAlertActionDecision().disableCall;
+  bool get isAlarmDisabled => getAlertActionDecision().disableAlarm;
+  bool get isCancelDisabled => getAlertActionDecision().disableCancel;
+}
+
+enum AlertActionMode {
+  none,
+  systemCall,
+  customerCall,
+  caregiverCall,
+  systemAlarm,
+  userAlarm,
+}
+
+class AlertActionDecision {
+  final AlertActionMode mode;
+  final bool disableCall;
+  final bool disableAlarm;
+  final bool disableCancel;
+
+  const AlertActionDecision({
+    this.mode = AlertActionMode.none,
+    this.disableCall = false,
+    this.disableAlarm = false,
+    this.disableCancel = false,
+  });
 }

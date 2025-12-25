@@ -14,6 +14,13 @@ class LogEntry {
   final Map<String, dynamic> boundingBoxes;
   final String? lifecycleState;
   final String? createBy;
+  final bool? hasEmergencyCall;
+  final bool? hasAlarmActivated;
+  final String? lastEmergencyCallSource;
+  final String? lastAlarmActivatedSource;
+  final DateTime? lastEmergencyCallAt;
+  final DateTime? lastAlarmActivatedAt;
+  final bool? isAlarmTimeoutExpired;
 
   final bool confirmStatus;
 
@@ -33,6 +40,13 @@ class LogEntry {
     this.boundingBoxes = const {},
     this.lifecycleState,
     this.createBy,
+    this.hasEmergencyCall,
+    this.hasAlarmActivated,
+    this.lastEmergencyCallSource,
+    this.lastAlarmActivatedSource,
+    this.lastEmergencyCallAt,
+    this.lastAlarmActivatedAt,
+    this.isAlarmTimeoutExpired,
     required this.confirmStatus,
   });
 }

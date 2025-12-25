@@ -1,3 +1,4 @@
+import 'package:detect_care_caregiver_app/widgets/alarm_bubble.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
@@ -336,6 +337,36 @@ Future<void> main() async {
 
   _setupApiClientUnauthenticatedHandler();
   _setupOnAssignmentLostHandler();
+  _setupApiClientTooManyRequestsHandler();
+}
+
+void _setupApiClientTooManyRequestsHandler() {
+  try {
+    ApiClient.onTooManyRequests = () async {
+      try {
+        final navigator = NavigatorKey.navigatorKey.currentState;
+        if (navigator == null) return;
+        final ctx = navigator.context;
+
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          try {
+            ScaffoldMessenger.of(ctx).showSnackBar(
+              const SnackBar(
+                content: Text(
+                  'Hệ thống đang quá tải, vui lòng thử lại sau vài giây',
+                ),
+                duration: Duration(seconds: 2),
+              ),
+            );
+          } catch (_) {}
+        });
+      } catch (e) {
+        print('onTooManyRequests handler failed: $e');
+      }
+    };
+  } catch (e) {
+    print('Failed to register onTooManyRequests handler: $e');
+  }
 }
 
 /// ------------------------- GLOBAL NAVIGATOR & APP ------------------------- ///
@@ -382,7 +413,7 @@ class _MyAppState extends State<MyApp> {
         GlobalCupertinoLocalizations.delegate,
       ],
       supportedLocales: const [Locale('vi', 'VN'), Locale('en', 'US')],
-      home: const AuthGate(),
+      home: Stack(children: const [AuthGate(), AlarmBubbleOverlay()]),
       routes: {
         '/settings': (_) => const SettingsScreen(),
         '/waiting': (_) => const PendingAssignmentsScreen(),
