@@ -1,12 +1,13 @@
 import 'package:detect_care_caregiver_app/core/network/api_client.dart';
 import 'package:detect_care_caregiver_app/features/auth/data/auth_storage.dart';
+import 'package:detect_care_caregiver_app/core/utils/logger.dart';
 import 'package:detect_care_caregiver_app/features/patient/models/medical_info.dart';
 import 'package:detect_care_caregiver_app/features/patient/models/sleep_checkin.dart';
 
 import 'package:flutter/foundation.dart';
 
 class MedicalInfoRemoteDataSource {
-  Future<MedicalInfoResponse> createMedicalInfo(
+  Future<MedicalInfoResponse> edicalIedicalInfoF(
     String customerId, {
     required PatientInfo patient,
     required PatientRecord record,
@@ -127,6 +128,9 @@ class MedicalInfoRemoteDataSource {
     if (habits != null && habits.isNotEmpty) {
       body['habits'] = habits.map((e) => e.toJson()).toList();
     }
+    AppLogger.api(
+      '[MedicalInfoRemoteDataSource] PUT /patients/$customerId/medical-info payload: $body',
+    );
     final res = await _api.put(
       '/patients/$customerId/medical-info',
       body: body,
@@ -156,9 +160,23 @@ class MedicalInfoRemoteDataSource {
     }
 
     // Extract data from response using helper
+    try {
+      final dynamic decoded = _api.decodeResponseBody(res);
+      AppLogger.api(
+        '[MedicalInfoRemoteDataSource] response status=${res.statusCode} decoded=${decoded.runtimeType}',
+      );
+    } catch (e) {
+      AppLogger.w(
+        '[MedicalInfoRemoteDataSource] failed to decode response: $e',
+      );
+      print(
+        '[MedicalInfoRemoteDataSource.upsertMedicalInfo] raw body: ${res.body}',
+      );
+    }
+
     final dynamic data = _api.extractDataFromResponse(res);
     if (data is Map<String, dynamic>) return MedicalInfoResponse.fromJson(data);
-    print(
+    AppLogger.w(
       '[MedicalInfoRemoteDataSource.upsertMedicalInfo] unexpected data type: ${data.runtimeType}',
     );
     return MedicalInfoResponse.fromJson(<String, dynamic>{});

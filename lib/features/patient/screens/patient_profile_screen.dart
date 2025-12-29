@@ -9,6 +9,7 @@ import 'package:detect_care_caregiver_app/core/utils/backend_enums.dart';
 import 'package:detect_care_caregiver_app/core/utils/error_handler.dart';
 import 'package:detect_care_caregiver_app/core/utils/logger.dart';
 import 'package:detect_care_caregiver_app/features/patient/data/medical_info_remote_data_source.dart';
+import 'package:detect_care_caregiver_app/features/emergency/call_action_service.dart';
 import 'package:detect_care_caregiver_app/features/assignments/data/assignments_remote_data_source.dart';
 import 'package:detect_care_caregiver_app/features/auth/data/auth_storage.dart';
 import 'package:detect_care_caregiver_app/core/providers/permissions_provider.dart';
@@ -171,6 +172,31 @@ class _PatientProfileScreenState extends State<PatientProfileScreen> {
       });
     } finally {
       if (mounted) setState(() => _loading = false);
+    }
+  }
+
+  String _normalizePhone(String raw) {
+    if (raw == null) return '';
+    var s = raw.trim();
+    // remove spaces, parentheses and dashes
+    s = s.replaceAll(RegExp(r'[\s\-\(\)]'), '');
+    // If starts with +84 -> replace with 0
+    if (s.startsWith('+84')) return '0' + s.substring(3);
+    // If starts with 84 (no plus) -> replace with 0
+    if (s.startsWith('84') && s.length > 2) return '0' + s.substring(2);
+    return s;
+  }
+
+  Future<void> _dialNumber(String raw) async {
+    try {
+      await attemptCall(context: context, rawPhone: raw, actionLabel: 'Gọi');
+    } catch (e) {
+      AppLogger.w('[PatientProfile] dial failed: $e');
+      if (mounted) {
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(const SnackBar(content: Text('Lỗi khi gọi điện')));
+      }
     }
   }
 
@@ -503,6 +529,68 @@ class _PatientProfileScreenState extends State<PatientProfileScreen> {
               'Bệnh mãn tính',
               patient!.chronicDiseases!.join(', '),
             ),
+          ],
+          // Emergency contacts
+          if (_data?.contacts != null && _data!.contacts.isNotEmpty) ...[
+            const SizedBox(height: 8),
+            const Divider(height: 1),
+            const SizedBox(height: 8),
+            const Text(
+              'Liên hệ khẩn cấp',
+              style: TextStyle(
+                fontSize: 16,
+                fontWeight: FontWeight.w600,
+                color: Color(0xFF1E293B),
+              ),
+            ),
+            const SizedBox(height: 8),
+            ..._data!.contacts.map((c) {
+              return Column(
+                children: [
+                  Row(
+                    children: [
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              c.name,
+                              style: const TextStyle(
+                                fontSize: 15,
+                                fontWeight: FontWeight.w600,
+                                color: Color(0xFF1E293B),
+                              ),
+                            ),
+                            const SizedBox(height: 2),
+                            Row(
+                              children: [
+                                Expanded(
+                                  child: Text(
+                                    '${c.relation} • ${_normalizePhone(c.phone)}',
+                                    style: TextStyle(
+                                      fontSize: 14,
+                                      color: Colors.grey[700],
+                                    ),
+                                  ),
+                                ),
+                                IconButton(
+                                  onPressed: () => _dialNumber(c.phone),
+                                  icon: const Icon(Icons.phone),
+                                  color: Colors.redAccent,
+                                  iconSize: 18,
+                                  tooltip: 'Gọi',
+                                ),
+                              ],
+                            ),
+                          ],
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 6),
+                ],
+              );
+            }).toList(),
           ],
         ],
       ),

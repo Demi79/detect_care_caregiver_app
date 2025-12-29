@@ -1,5 +1,7 @@
 import 'package:detect_care_caregiver_app/core/network/api_client.dart';
 import 'package:detect_care_caregiver_app/features/auth/data/auth_storage.dart';
+import 'package:detect_care_caregiver_app/features/assignments/data/assignments_remote_data_source.dart';
+import 'package:detect_care_caregiver_app/core/utils/logger.dart';
 
 class PatientUpsertDto {
   final String? name;
@@ -29,6 +31,7 @@ class MedicalRecordUpsertDto {
 
 class HabitItemDto {
   final String? habitType;
+  final String? habitId;
   final String? habitName;
   final String? description;
   final String? sleepStart;
@@ -41,6 +44,7 @@ class HabitItemDto {
   final dynamic notes;
   final bool? isActive;
   HabitItemDto({
+    this.habitId,
     this.habitType,
     this.habitName,
     this.description,
@@ -55,6 +59,7 @@ class HabitItemDto {
     this.isActive,
   });
   Map<String, dynamic> toJson() => {
+    if (habitId != null) 'habit_id': habitId,
     if (habitType != null) 'habit_type': habitType,
     if (habitName != null) 'habit_name': habitName,
     if (description != null) 'description': description,
@@ -68,6 +73,33 @@ class HabitItemDto {
     if (notes != null) 'notes': notes,
     if (isActive != null) 'is_active': isActive,
   };
+
+  factory HabitItemDto.fromJson(Map<String, dynamic> json) {
+    String? asString(dynamic v) =>
+        (v is String && v.isNotEmpty) ? v : (v != null ? v.toString() : null);
+    int? asInt(dynamic v) =>
+        (v is num) ? v.toInt() : (v is String ? int.tryParse(v) : null);
+    List<String>? asStringList(dynamic v) {
+      if (v is List) return v.map((e) => e.toString()).toList();
+      return null;
+    }
+
+    return HabitItemDto(
+      habitId: asString(json['habit_id'] ?? json['id']),
+      habitType: asString(json['habit_type']),
+      habitName: asString(json['habit_name'] ?? json['name']),
+      description: asString(json['description']),
+      sleepStart: asString(json['sleep_start']),
+      sleepEnd: asString(json['sleep_end']),
+      typicalTime: asString(json['typical_time']),
+      durationMinutes: asInt(json['duration_minutes']),
+      frequency: asString(json['frequency']),
+      daysOfWeek: asStringList(json['days_of_week']),
+      location: asString(json['location']),
+      notes: json['notes'],
+      isActive: json['is_active'] == true || json['is_active'] == 1,
+    );
+  }
 }
 
 class MedicalInfoUpsertDto {
@@ -128,9 +160,26 @@ class MedicalInfoUpsertService {
   }
 
   Future<bool> updateMedicalInfo(
-    String userId,
+    String? customerId,
     MedicalInfoUpsertDto dto,
   ) async {
+    if (customerId == null || customerId.isEmpty) {
+      try {
+        final ds = AssignmentsRemoteDataSource();
+        final list = await ds.listPending(status: 'accepted');
+        if (list.isNotEmpty) customerId = list.first.customerId;
+      } catch (e) {
+        AppLogger.w(
+          '[MedicalInfoUpsertService] failed to resolve customerId: $e',
+        );
+      }
+    }
+    if (customerId == null || customerId.isEmpty) {
+      AppLogger.w(
+        '[MedicalInfoUpsertService] no customerId available, aborting update',
+      );
+      return false;
+    }
     // final url = '$baseUrl/users/$userId/medical-info';
     final token = await AuthStorage.getAccessToken();
     final headers = {
@@ -148,11 +197,146 @@ class MedicalInfoUpsertService {
 
     final api = ApiClient();
     final extraHeaders = Map<String, String>.from(headers);
+    AppLogger.api(
+      '[MedicalInfoUpsertService] PUT /patients/$customerId/medical-info payload: $payload',
+    );
     final res = await api.put(
-      '/patients/$userId/medical-info',
+      '/patients/$customerId/medical-info',
       body: payload,
       extraHeaders: extraHeaders,
     );
+    try {
+      final dynamic decoded = api.decodeResponseBody(res);
+      AppLogger.api(
+        '[MedicalInfoUpsertService] response status=${res.statusCode} decoded=${decoded.runtimeType} payloadPreview=${decoded is Map || decoded is List ? (decoded is Map ? decoded.keys.toList() : (decoded as List).take(3).toList()) : decoded}',
+      );
+    } catch (e) {
+      AppLogger.w('[MedicalInfoUpsertService] failed to decode response: $e');
+      AppLogger.api(
+        '[MedicalInfoUpsertService] raw response status=${res.statusCode} body=${res.body}',
+      );
+    }
     return res.statusCode == 200;
+  }
+
+  Future<bool> deleteHabit(String? customerId, String habitId) async {
+    if (customerId == null || customerId.isEmpty) {
+      try {
+        final ds = AssignmentsRemoteDataSource();
+        final list = await ds.listPending(status: 'accepted');
+        if (list.isNotEmpty) customerId = list.first.customerId;
+      } catch (e) {
+        AppLogger.w(
+          '[MedicalInfoUpsertService] failed to resolve customerId for delete: $e',
+        );
+      }
+    }
+    if (customerId == null || customerId.isEmpty) {
+      AppLogger.w(
+        '[MedicalInfoUpsertService] no customerId available, aborting delete',
+      );
+      return false;
+    }
+
+    final token = await AuthStorage.getAccessToken();
+    final headers = {
+      'Content-Type': 'application/json',
+      if (token != null && token.isNotEmpty) 'Authorization': 'Bearer $token',
+    };
+    final api = ApiClient();
+    AppLogger.api(
+      '[MedicalInfoUpsertService] DELETE /patients/$customerId/habits/$habitId',
+    );
+    final res = await api.delete(
+      '/patients/$customerId/habits/$habitId',
+      extraHeaders: Map<String, String>.from(headers),
+    );
+    AppLogger.api(
+      '[MedicalInfoUpsertService] delete response status=${res.statusCode}',
+    );
+    if (res.statusCode == 200 || res.statusCode == 204) return true;
+    try {
+      final decoded = api.decodeResponseBody(res);
+      AppLogger.w('[MedicalInfoUpsertService] delete failed decoded=$decoded');
+    } catch (e) {
+      AppLogger.w(
+        '[MedicalInfoUpsertService] delete failed and could not decode response: $e',
+      );
+    }
+    return false;
+  }
+
+  Future<HabitItemDto?> createHabit(
+    String? customerId,
+    HabitItemDto dto,
+  ) async {
+    if (customerId == null || customerId.isEmpty) {
+      try {
+        final ds = AssignmentsRemoteDataSource();
+        final list = await ds.listPending(status: 'accepted');
+        if (list.isNotEmpty) customerId = list.first.customerId;
+      } catch (e) {
+        AppLogger.w(
+          '[MedicalInfoUpsertService] failed to resolve customerId for create: $e',
+        );
+      }
+    }
+    if (customerId == null || customerId.isEmpty) {
+      AppLogger.w(
+        '[MedicalInfoUpsertService] no customerId available, aborting create',
+      );
+      return null;
+    }
+
+    final token = await AuthStorage.getAccessToken();
+    final headers = {
+      'Content-Type': 'application/json',
+      if (token != null && token.isNotEmpty) 'Authorization': 'Bearer $token',
+    };
+
+    final api = ApiClient();
+    final body = dto.toJson();
+    AppLogger.api(
+      '[MedicalInfoUpsertService] POST /patients/$customerId/habits payload: $body',
+    );
+    final res = await api.post(
+      '/patients/$customerId/habits',
+      body: body,
+      extraHeaders: Map<String, String>.from(headers),
+    );
+    AppLogger.api(
+      '[MedicalInfoUpsertService] create habit response status=${res.statusCode}',
+    );
+    if (res.statusCode != 200 && res.statusCode != 201) {
+      try {
+        final decoded = api.decodeResponseBody(res);
+        AppLogger.w(
+          '[MedicalInfoUpsertService] create failed decoded=$decoded',
+        );
+      } catch (e) {
+        AppLogger.w(
+          '[MedicalInfoUpsertService] create failed and could not decode response: $e',
+        );
+      }
+      return null;
+    }
+
+    try {
+      final decoded = api.decodeResponseBody(res);
+      final data = api.extractDataFromResponse(res);
+      if (data is Map<String, dynamic>) {
+        return HabitItemDto.fromJson(data);
+      }
+      if (data is List && data.isNotEmpty && data.first is Map) {
+        return HabitItemDto.fromJson(
+          (data.first as Map).cast<String, dynamic>(),
+        );
+      }
+    } catch (e) {
+      AppLogger.w(
+        '[MedicalInfoUpsertService] failed to parse create response: $e',
+      );
+    }
+    return null;
   }
 }
