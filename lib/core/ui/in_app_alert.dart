@@ -22,6 +22,7 @@ import 'package:detect_care_caregiver_app/features/auth/data/auth_storage.dart';
 class InAppAlert {
   static int _showingCount = 0;
   static DateTime? _lastShownMinute;
+  static final Set<String> _activeEventIds = <String>{};
 
   static Future<void> show(LogEntry e) async {
     print('🧩 [InAppAlert] Request to show popup for event ${e.eventId}');
@@ -29,6 +30,14 @@ class InAppAlert {
     print(' - isForeground: ${AppLifecycle.isForeground}');
 
     await Future.delayed(const Duration(milliseconds: 300));
+
+    try {
+      final id = e.eventId?.toString() ?? '';
+      if (id.isNotEmpty && _activeEventIds.contains(id)) {
+        print('❌ Popup suppressed: event ${id} is already showing');
+        return;
+      }
+    } catch (_) {}
 
     final currentUserId = await AuthStorage.getUserId();
 
@@ -47,6 +56,33 @@ class InAppAlert {
       if (actor != null && actor.isNotEmpty && currentUserId != null) {
         if (actor == currentUserId || actor.contains(currentUserId)) {
           print('❌ Popup suppressed: self-triggered by actor');
+          return;
+        }
+      }
+    } catch (_) {}
+
+    try {
+      String? updatedBy;
+      try {
+        updatedBy = (e as dynamic).updatedBy?.toString();
+      } catch (_) {
+        updatedBy = null;
+      }
+      final updFromContext = e.contextData?['updated_by']?.toString();
+      final updFromDetection = e.detectionData?['updated_by']?.toString();
+      if (currentUserId != null) {
+        if ((updatedBy != null &&
+                updatedBy.isNotEmpty &&
+                updatedBy == currentUserId) ||
+            (updFromContext != null &&
+                updFromContext.isNotEmpty &&
+                updFromContext == currentUserId) ||
+            (updFromDetection != null &&
+                updFromDetection.isNotEmpty &&
+                updFromDetection == currentUserId)) {
+          print(
+            '❌ Popup suppressed: self-triggered by updated_by=$currentUserId',
+          );
           return;
         }
       }
@@ -88,6 +124,11 @@ class InAppAlert {
         'ℹ️ ${_showingCount} popup(s) đang hiển thị; show event mới để đè lên (không dismiss event cũ)',
       );
     }
+
+    try {
+      final id = e.eventId?.toString() ?? '';
+      if (id.isNotEmpty) _activeEventIds.add(id);
+    } catch (_) {}
 
     _showingCount++;
     _lastShownMinute = eventMinute;
@@ -191,7 +232,14 @@ class InAppAlert {
             final svc = EventService.withDefaultClient();
             final latest = await svc.fetchLogDetail(e.eventId);
             final ls = (latest.lifecycleState ?? '').toString().toUpperCase();
-            if (ls == 'CANCELED' || ls == 'CANCELLED') {
+            final lsUpper = ls.toString().toUpperCase();
+            if (lsUpper == 'RESOLVED') {
+              AppLogger.d(
+                '[InAppAlert] lifecycle=RESOLVED — keep popup open for ${e.eventId}',
+              );
+              return;
+            }
+            if (lsUpper == 'CANCELED' || lsUpper == 'CANCELLED') {
               remoteCanceledDetected = true;
               final customerId = await resolveCustomerId();
               final updatedBy = (latest as dynamic).updatedBy?.toString() ?? '';
@@ -242,8 +290,14 @@ class InAppAlert {
                 : null;
             if (ls == null) return;
 
-            if (ls.toString().toUpperCase() == 'CANCELED' ||
-                ls.toString().toUpperCase() == 'CANCELLED') {
+            final lsUpper = ls.toString().toUpperCase();
+            if (lsUpper == 'RESOLVED') {
+              AppLogger.d(
+                '[InAppAlert] eventUpdated lifecycle=RESOLVED — ignoring for dismiss (id=${e.eventId})',
+              );
+              return;
+            }
+            if (lsUpper == 'CANCELED' || lsUpper == 'CANCELLED') {
               remoteCanceledDetected = true;
               final updatedByVal = payload is Map
                   ? (payload['updated_by'] ?? payload['updatedBy'])
@@ -538,6 +592,10 @@ class InAppAlert {
         },
       );
     } finally {
+      try {
+        final id = e.eventId?.toString() ?? '';
+        if (id.isNotEmpty) _activeEventIds.remove(id);
+      } catch (_) {}
       // Always stop any in-app audio when the alert closes.
       try {
         AudioService.instance.stop();

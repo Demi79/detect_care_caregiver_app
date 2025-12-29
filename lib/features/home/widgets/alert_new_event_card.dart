@@ -103,6 +103,8 @@ class _AlertEventCardState extends State<AlertEventCard>
   bool _isImagesLoading = false;
   bool _imagesPrefetched = false;
   bool _alarmResolved = false;
+  bool _localEmergencyCalled = false;
+
   EventLog? _liveEvent;
   StreamSubscription<Map<String, dynamic>>? _eventUpdatedSub;
   Future<List<ImageSource>>? _prefetchFuture;
@@ -279,6 +281,29 @@ class _AlertEventCardState extends State<AlertEventCard>
     }
   }
 
+  bool isCustomerVerified() {
+    try {
+      final ev =
+          _liveEvent ??
+          (widget.event is EventLog ? widget.event as EventLog : null);
+      if (ev == null) return false;
+      final hasEmergency = ev.hasEmergencyCall == true;
+      final lastEmergencySource = (ev.lastEmergencyCallSource ?? '')
+          .toString()
+          .toUpperCase();
+      final hasAlarm = ev.hasAlarmActivated == true;
+      final lastAlarmSource = (ev.lastAlarmActivatedSource ?? '')
+          .toString()
+          .toUpperCase();
+
+      if (hasEmergency && lastEmergencySource == 'CUSTOMER') return true;
+      if (hasAlarm && lastAlarmSource == 'CUSTOMER') return true;
+      return false;
+    } catch (_) {
+      return false;
+    }
+  }
+
   String _getTimeAgo() {
     final now = DateTime.now();
     final raw = widget.createdAt ?? widget.timestamp;
@@ -314,15 +339,22 @@ class _AlertEventCardState extends State<AlertEventCard>
 
   Future<void> _handleEmergencyCall() async {
     if (_isEmergencyCalling) return;
-    _isEmergencyCalling = true;
+
+    setState(() {
+      _isEmergencyCalling = true;
+      _localEmergencyCalled = true;
+    });
 
     try {
       HapticFeedback.heavyImpact();
+
       try {
         widget.onEmergencyCall?.call();
       } catch (_) {}
+
       try {
         await EmergencyCallHelper.initiateEmergencyCall(context);
+
         try {
           await EventLifecycleService.withDefaultClient().updateLifecycleFlags(
             eventId: widget.eventId,
@@ -338,6 +370,13 @@ class _AlertEventCardState extends State<AlertEventCard>
         }
       } catch (e, st) {
         AppLogger.e('Emergency call failed: $e', e, st);
+
+        if (mounted) {
+          setState(() {
+            _localEmergencyCalled = false;
+          });
+        }
+
         try {
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(
@@ -347,7 +386,11 @@ class _AlertEventCardState extends State<AlertEventCard>
         } catch (_) {}
       }
     } finally {
-      _isEmergencyCalling = false;
+      if (mounted) {
+        setState(() {
+          _isEmergencyCalling = false;
+        });
+      }
     }
   }
 
@@ -456,8 +499,12 @@ class _AlertEventCardState extends State<AlertEventCard>
       if (mounted) setState(() => _alarmResolved = true);
 
       try {
-        AppEvents.instance.notifyEventsChanged();
-      } catch (_) {}
+        final svc = EventService.withDefaultClient();
+        final latest = await svc.fetchLogDetail(widget.eventId);
+        if (mounted) setState(() => _liveEvent = latest);
+      } catch (e) {
+        AppLogger.e('Failed to fetch latest event after resolve: $e');
+      }
     } catch (e) {
       AppLogger.e('Resolve alarm failed: $e');
       try {
@@ -561,6 +608,11 @@ class _AlertEventCardState extends State<AlertEventCard>
     } catch (_) {}
   }
 
+  String _severityText() {
+    if (widget.severity == 'critical') return 'Nguy hiểm';
+    return 'Cảnh báo';
+  }
+
   @override
   Widget build(BuildContext context) {
     return SlideTransition(
@@ -572,48 +624,119 @@ class _AlertEventCardState extends State<AlertEventCard>
           builder: (context, child) {
             return Transform.scale(
               scale: _pulseAnimation.value,
-              child: Container(
-                margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-                decoration: BoxDecoration(
-                  borderRadius: BorderRadius.circular(16),
-                  boxShadow: [
-                    BoxShadow(
-                      color: _getSeverityColor().withValues(alpha: 0.3),
-                      blurRadius: _isCritical() ? 20 : 8,
-                      offset: const Offset(0, 4),
+              child: Padding(
+                padding: const EdgeInsets.fromLTRB(10, 38, 16, 8),
+                child: Stack(
+                  clipBehavior: Clip.none,
+                  children: [
+                    // Card chính
+                    Container(
+                      decoration: BoxDecoration(
+                        borderRadius: BorderRadius.circular(16),
+                        boxShadow: [
+                          BoxShadow(
+                            color: _getSeverityColor().withValues(alpha: 0.3),
+                            blurRadius: _isCritical() ? 20 : 8,
+                            offset: const Offset(0, 4),
+                          ),
+                        ],
+                      ),
+                      child: Container(
+                        decoration: BoxDecoration(
+                          color: Colors.white,
+                          borderRadius: BorderRadius.circular(16),
+                          border: Border.all(
+                            color: _getSeverityColor().withValues(alpha: 0.45),
+                            width: widget.isHandled ? 1 : 2,
+                          ),
+                          boxShadow: const [
+                            BoxShadow(
+                              color: Color(0x1A000000),
+                              blurRadius: 18,
+                              offset: Offset(0, 8),
+                            ),
+                          ],
+                        ),
+                        child: Column(
+                          mainAxisSize: MainAxisSize.min,
+                          crossAxisAlignment: CrossAxisAlignment.stretch,
+                          children: [
+                            _buildHeader(),
+                            _buildContent(),
+                            if (_isExpanded) _buildExpandedContent(),
+                            _buildActionButtons(),
+                          ],
+                        ),
+                      ),
+                    ),
+
+                    // Positioned buttons
+                    Positioned(
+                      top: 4,
+                      right: 8,
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          // Mute button
+                          Container(
+                            width: 24,
+                            height: 24,
+                            decoration: BoxDecoration(
+                              color: Colors.white,
+                              shape: BoxShape.circle,
+                              boxShadow: [
+                                BoxShadow(
+                                  color: Colors.black.withOpacity(0.15),
+                                  blurRadius: 2,
+                                  offset: const Offset(0, 1),
+                                ),
+                              ],
+                            ),
+                            child: IconButton(
+                              onPressed: _toggleMute,
+                              icon: Icon(
+                                _isMuted ? Icons.volume_off : Icons.volume_up,
+                                size: 12,
+                                color: Colors.black87,
+                              ),
+                              padding: EdgeInsets.zero,
+                              constraints: const BoxConstraints(),
+                              iconSize: 12,
+                            ),
+                          ),
+                          const SizedBox(width: 6),
+                          // Close button
+                          if (widget.onDismiss != null)
+                            Container(
+                              width: 24,
+                              height: 24,
+                              decoration: BoxDecoration(
+                                color: Colors.white,
+                                shape: BoxShape.circle,
+                                boxShadow: [
+                                  BoxShadow(
+                                    color: Colors.black.withOpacity(0.15),
+                                    blurRadius: 2,
+                                    offset: const Offset(0, 1),
+                                  ),
+                                ],
+                              ),
+                              child: IconButton(
+                                onPressed: widget.onDismiss,
+                                icon: const Icon(
+                                  Icons.close,
+                                  size: 12,
+                                  color: Colors.black87,
+                                ),
+                                padding: EdgeInsets.zero,
+                                constraints: const BoxConstraints(),
+                                iconSize: 12,
+                              ),
+                            ),
+                        ],
+                      ),
                     ),
                   ],
-                ),
-                child: Container(
-                  margin: const EdgeInsets.symmetric(
-                    horizontal: 0,
-                    vertical: 0,
-                  ),
-                  decoration: BoxDecoration(
-                    color: Colors.white,
-                    borderRadius: BorderRadius.circular(16),
-                    border: Border.all(
-                      color: _getSeverityColor().withValues(alpha: 0.45),
-                      width: widget.isHandled ? 1 : 2,
-                    ),
-                    boxShadow: const [
-                      BoxShadow(
-                        color: Color(0x1A000000),
-                        blurRadius: 18,
-                        offset: Offset(0, 8),
-                      ),
-                    ],
-                  ),
-                  child: Column(
-                    mainAxisSize: MainAxisSize.min,
-                    crossAxisAlignment: CrossAxisAlignment.stretch,
-                    children: [
-                      _buildHeader(),
-                      _buildContent(),
-                      if (_isExpanded) _buildExpandedContent(),
-                      _buildActionButtons(),
-                    ],
-                  ),
                 ),
               ),
             );
@@ -623,15 +746,8 @@ class _AlertEventCardState extends State<AlertEventCard>
     );
   }
 
-  String _severityText() {
-    // Display only two labels: 'Nguy hiểm' for critical/danger, 'Cảnh báo' otherwise
-    if (widget.severity == 'critical') return 'Nguy hiểm';
-    return 'Cảnh báo';
-  }
-
   Widget _buildHeader() {
     return Container(
-      padding: const EdgeInsets.fromLTRB(16, 24, 16, 16),
       decoration: BoxDecoration(
         color: _getSeverityColor().withValues(alpha: 0.08),
         borderRadius: const BorderRadius.vertical(top: Radius.circular(16)),
@@ -642,238 +758,161 @@ class _AlertEventCardState extends State<AlertEventCard>
           ),
         ),
       ),
-      child: Stack(
-        clipBehavior: Clip.none,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Row(
-            children: [
-              Container(
-                padding: const EdgeInsets.all(8),
-                decoration: BoxDecoration(
-                  color: _getSeverityColor(),
-                  shape: BoxShape.circle,
+          // Main header content
+          Padding(
+            padding: const EdgeInsets.fromLTRB(16, 16, 16, 0),
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Container(
+                  padding: const EdgeInsets.all(8),
+                  decoration: BoxDecoration(
+                    color: _getSeverityColor(),
+                    shape: BoxShape.circle,
+                  ),
+                  child: Icon(_getEventIcon(), color: Colors.white, size: 20),
                 ),
-                child: Icon(_getEventIcon(), color: Colors.white, size: 20),
-              ),
-              const SizedBox(width: 12),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Wrap(
-                      crossAxisAlignment: WrapCrossAlignment.center,
-                      spacing: 8,
-                      runSpacing: 4,
-                      children: [
-                        Text(
-                          be.BackendEnums.eventTypeToVietnamese(
-                            widget.eventType.toLowerCase(),
-                          ),
-                          style: TextStyle(
-                            fontSize: 14,
-                            fontWeight: FontWeight.w700,
-                            color: _getSeverityColor(),
-                            letterSpacing: .5,
-                          ),
-                        ),
-                        Container(
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: 8,
-                            vertical: 2,
-                          ),
-                          decoration: BoxDecoration(
-                            color: _getSeverityColor(),
-                            borderRadius: BorderRadius.circular(8),
-                          ),
-                          child: Text(
-                            _severityText(),
-                            style: const TextStyle(
-                              fontSize: 10,
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      // Event type và severity badge
+                      Wrap(
+                        crossAxisAlignment: WrapCrossAlignment.center,
+                        spacing: 8,
+                        runSpacing: 4,
+                        children: [
+                          Text(
+                            be.BackendEnums.eventTypeToVietnamese(
+                              widget.eventType.toLowerCase(),
+                            ),
+                            style: TextStyle(
+                              fontSize: 14,
                               fontWeight: FontWeight.w700,
-                              color: Colors.white,
+                              color: _getSeverityColor(),
+                              letterSpacing: .5,
+                            ),
+                          ),
+                          Container(
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 8,
+                              vertical: 2,
+                            ),
+                            decoration: BoxDecoration(
+                              color: _getSeverityColor(),
+                              borderRadius: BorderRadius.circular(8),
+                            ),
+                            child: Text(
+                              _severityText(),
+                              style: const TextStyle(
+                                fontSize: 10,
+                                fontWeight: FontWeight.w700,
+                                color: Colors.white,
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 4),
+                      // Patient name
+                      if (widget.patientName?.trim().isNotEmpty == true)
+                        Padding(
+                          padding: const EdgeInsets.only(right: 80),
+                          child: Text(
+                            widget.patientName!,
+                            overflow: TextOverflow.ellipsis,
+                            maxLines: 1,
+                            style: const TextStyle(
+                              fontSize: 16,
+                              fontWeight: FontWeight.w600,
+                              color: Color(0xFF2D3748),
                             ),
                           ),
                         ),
-                      ],
-                    ),
-                    const SizedBox(height: 4),
-                    if (widget.patientName?.trim().isNotEmpty == true)
-                      Text(
-                        widget.patientName!,
-                        overflow: TextOverflow.ellipsis,
-                        style: const TextStyle(
-                          fontSize: 16,
-                          fontWeight: FontWeight.w600,
-                          color: Color(0xFF2D3748),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+          ),
+
+          // Status và Time row
+          Padding(
+            padding: EdgeInsets.fromLTRB(
+              16,
+              8,
+              16,
+              isCustomerVerified() ? 0 : 16,
+            ),
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                const SizedBox.shrink(),
+                Column(
+                  crossAxisAlignment: CrossAxisAlignment.end,
+                  children: [
+                    if (widget.isHandled)
+                      Container(
+                        margin: const EdgeInsets.only(bottom: 4),
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 8,
+                          vertical: 4,
+                        ),
+                        decoration: BoxDecoration(
+                          color: const Color(0xFF48BB78),
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                        child: const Text(
+                          'ĐÃ XỬ LÝ',
+                          style: TextStyle(
+                            fontSize: 10,
+                            fontWeight: FontWeight.bold,
+                            color: Colors.white,
+                          ),
                         ),
                       ),
+                    Text(
+                      _getTimeAgo(),
+                      style: const TextStyle(
+                        fontSize: 12,
+                        color: Color(0xFF718096),
+                      ),
+                    ),
                   ],
                 ),
-              ),
-              const SizedBox(width: 8),
-              Column(
-                crossAxisAlignment: CrossAxisAlignment.end,
-                children: [
-                  if (widget.isHandled)
-                    Container(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 8,
-                        vertical: 4,
-                      ),
-                      decoration: BoxDecoration(
-                        color: const Color(0xFF48BB78),
-                        borderRadius: BorderRadius.circular(12),
-                      ),
-                      child: const Text(
-                        'ĐÃ XỬ LÝ',
-                        style: TextStyle(
-                          fontSize: 10,
-                          fontWeight: FontWeight.bold,
-                          color: Colors.white,
-                        ),
-                      ),
-                    ),
-                  const SizedBox(height: 4),
-                  Text(
-                    _getTimeAgo(),
-                    style: const TextStyle(
-                      fontSize: 12,
-                      color: Color(0xFF718096),
-                    ),
-                  ),
-                ],
-              ),
-            ],
+              ],
+            ),
           ),
 
-          if (widget.onDismiss != null)
-            Positioned(
-              top: -30,
-              right: -20,
-              child: Material(
-                color: Colors.transparent,
-                child: IconButton(
-                  onPressed: widget.onDismiss,
-                  icon: const Icon(
-                    Icons.close,
-                    size: 20,
-                    color: Colors.black54,
-                  ),
-                  padding: const EdgeInsets.all(6),
-                  constraints: const BoxConstraints(
-                    minWidth: 32,
-                    minHeight: 32,
-                  ),
-                  style: IconButton.styleFrom(
-                    backgroundColor: Colors.white,
-                    elevation: 1,
-                    shadowColor: Colors.black26,
-                  ),
-                ),
-              ),
-            ),
-          // Mute / Snooze controls
-          Positioned(
-            top: -30,
-            right: 24,
-            child: Material(
-              color: Colors.transparent,
+          if (isCustomerVerified()) ...[
+            const SizedBox(height: 8),
+            Container(
+              width: double.infinity,
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
+              decoration: BoxDecoration(color: Colors.orange.withOpacity(0.10)),
               child: Row(
-                children: [
-                  IconButton(
-                    onPressed: _toggleMute,
-                    icon: Icon(
-                      _isMuted ? Icons.volume_off : Icons.volume_up,
-                      size: 20,
-                      color: Colors.black54,
-                    ),
-                    padding: const EdgeInsets.all(6),
-                    constraints: const BoxConstraints(
-                      minWidth: 32,
-                      minHeight: 32,
-                    ),
-                    style: IconButton.styleFrom(
-                      backgroundColor: Colors.white,
-                      elevation: 1,
-                      shadowColor: Colors.black26,
+                children: const [
+                  Icon(Icons.verified, size: 12, color: Colors.orange),
+                  SizedBox(width: 6),
+                  Expanded(
+                    child: Text(
+                      'Sự kiện đã được khách hàng xác thực',
+                      style: TextStyle(
+                        fontSize: 11,
+                        fontWeight: FontWeight.w600,
+                        color: Color(0xFF92400E),
+                        height: 1.1,
+                      ),
                     ),
                   ),
-
-                  // Snooze with duration selection and countdown badge
-                  // SizedBox(
-                  //   width: 48,
-                  //   height: 48,
-                  //   child: Stack(
-                  //     clipBehavior: Clip.none,
-                  //     children: [
-                  //       Positioned.fill(
-                  //         child: Center(
-                  //           child: PopupMenuButton<int>(
-                  //             icon: Icon(
-                  //               Icons.snooze,
-                  //               size: 20,
-                  //               color: _isSnoozed
-                  //                   ? Colors.deepOrange
-                  //                   : Colors.black54,
-                  //             ),
-                  //             onSelected: (secs) => _snoozeNow(secs),
-                  //             itemBuilder: (ctx) => [
-                  //               const PopupMenuItem<int>(
-                  //                 value: 30,
-                  //                 child: Text(L10nVi.snooze30s),
-                  //               ),
-                  //               const PopupMenuItem<int>(
-                  //                 value: 60,
-                  //                 child: Text(L10nVi.snooze1m),
-                  //               ),
-                  //               const PopupMenuItem<int>(
-                  //                 value: 300,
-                  //                 child: Text(L10nVi.snooze5m),
-                  //               ),
-                  //             ],
-                  //           ),
-                  //         ),
-                  //       ),
-                  //       if (_isSnoozed && _snoozeRemaining != null)
-                  //         Positioned(
-                  //           top: -8,
-                  //           right: -8,
-                  //           child: ScaleTransition(
-                  //             scale: _badgeScaleAnimation,
-                  //             child: Container(
-                  //               padding: const EdgeInsets.symmetric(
-                  //                 horizontal: 8,
-                  //                 vertical: 4,
-                  //               ),
-                  //               decoration: BoxDecoration(
-                  //                 color: Colors.deepOrange,
-                  //                 borderRadius: BorderRadius.circular(14),
-                  //                 boxShadow: const [
-                  //                   BoxShadow(
-                  //                     color: Colors.black26,
-                  //                     blurRadius: 4,
-                  //                     offset: Offset(0, 2),
-                  //                   ),
-                  //                 ],
-                  //               ),
-                  //               child: Text(
-                  //                 _formatRemaining(_snoozeRemaining!),
-                  //                 style: const TextStyle(
-                  //                   color: Colors.white,
-                  //                   fontSize: 11,
-                  //                   fontWeight: FontWeight.w700,
-                  //                 ),
-                  //               ),
-                  //             ),
-                  //           ),
-                  //         ),
-                  //     ],
-                  //   ),
-                  // ),
                 ],
               ),
             ),
-          ),
+          ],
         ],
       ),
     );
@@ -1048,12 +1087,24 @@ class _AlertEventCardState extends State<AlertEventCard>
   }
 
   Widget _buildActionButtons() {
-    final EventLog _ev =
+    final EventLog baseEv =
         _liveEvent ??
         (widget.event is EventLog
             ? widget.event as EventLog
             : _buildEventLogForImages());
+
+    final EventLog _ev = baseEv.copyWith(
+      hasEmergencyCall:
+          _localEmergencyCalled || (baseEv.hasEmergencyCall ?? false),
+      lastEmergencyCallSource: _localEmergencyCalled
+          ? 'CAREGIVER'
+          : baseEv.lastEmergencyCallSource,
+    );
+
     final decision = _ev.getAlertActionDecision();
+    final bool isCancelDisabled = decision.disableCancel;
+    final bool showCancelling = _isCancelling && !isCancelDisabled;
+
     if (widget.isHandled) {
       return Container(
         padding: const EdgeInsets.all(16),
@@ -1083,6 +1134,13 @@ class _AlertEventCardState extends State<AlertEventCard>
       );
     }
 
+    final evLifecycle = (_ev.lifecycleState ?? '').toString().toUpperCase();
+    final hasAlarmFlag = _ev.hasAlarmActivated ?? false;
+
+    AppLogger.d(
+      '[ResolveButton] lifecycle=$evLifecycle hasAlarm=$hasAlarmFlag alarmResolved=$_alarmResolved',
+    );
+
     return Container(
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
@@ -1097,7 +1155,7 @@ class _AlertEventCardState extends State<AlertEventCard>
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          // Nút xem ảnh
+          // ===== Xem ảnh =====
           SizedBox(
             width: double.infinity,
             child: TextButton.icon(
@@ -1135,14 +1193,14 @@ class _AlertEventCardState extends State<AlertEventCard>
 
           const SizedBox(height: 8),
 
-          // If event lifecycle is ALARM_ACTIVATED, show 'Hủy báo động' button
-          if (((_ev.lifecycleState ?? '').toString().toUpperCase() ==
-                  'ALARM_ACTIVATED') &&
+          // ===== HỦY BÁO ĐỘNG (chỉ khi đang ALARM_ACTIVATED) =====
+          if ((evLifecycle == 'ALARM_ACTIVATED' || hasAlarmFlag) &&
               !_alarmResolved) ...[
             SizedBox(
               width: double.infinity,
               child: ElevatedButton.icon(
                 onPressed: _isResolving ? null : _handleResolveAlarm,
+
                 icon: _isResolving
                     ? SizedBox(
                         width: 16,
@@ -1194,63 +1252,10 @@ class _AlertEventCardState extends State<AlertEventCard>
                 ),
               ),
             ),
-
             const SizedBox(height: 8),
           ],
 
-          // Nút Báo động
-          // SizedBox(
-          //   width: double.infinity,
-          //   child: ElevatedButton.icon(
-          //     onPressed: () async {
-          //       final messenger = ScaffoldMessenger.of(context);
-          //       HapticFeedback.mediumImpact();
-          //       try {
-          //         messenger.showSnackBar(
-          //           const SnackBar(content: Text('Đang kích hoạt báo động...')),
-          //         );
-
-          //         await EventsRemoteDataSource().updateEventLifecycle(
-          //           eventId: widget.eventId,
-          //           lifecycleState: 'ALARM_ACTIVATED',
-          //           notes: 'Activated from app',
-          //         );
-
-          //         messenger.showSnackBar(
-          //           const SnackBar(content: Text('Đã kích hoạt báo động')),
-          //         );
-          //       } catch (e) {
-          //         messenger.showSnackBar(
-          //           SnackBar(content: Text('Kích hoạt báo động thất bại: $e')),
-          //         );
-          //       }
-          //     },
-          //     icon: const Icon(
-          //       Icons.warning_amber_rounded,
-          //       color: Colors.white,
-          //     ),
-          //     label: const Text(
-          //       'BÁO ĐỘNG',
-          //       style: TextStyle(
-          //         fontWeight: FontWeight.bold,
-          //         color: Colors.white,
-          //         fontSize: 13,
-          //       ),
-          //     ),
-          //     style: ElevatedButton.styleFrom(
-          //       backgroundColor: Colors.deepOrange,
-          //       padding: const EdgeInsets.symmetric(vertical: 12),
-          //       shape: RoundedRectangleBorder(
-          //         borderRadius: BorderRadius.circular(8),
-          //       ),
-          //       elevation: 2,
-          //     ),
-          //   ),
-          // ),
-
-          // const SizedBox(height: 8),
-
-          // Nút Gọi khẩn cấp
+          // ===== GỌI KHẨN CẤP =====
           SizedBox(
             width: double.infinity,
             child: ElevatedButton.icon(
@@ -1293,11 +1298,11 @@ class _AlertEventCardState extends State<AlertEventCard>
 
           const SizedBox(height: 8),
 
-          // Nút Hủy bỏ cảnh báo (popup xác nhận)
+          // ===== HỦY CẢNH BÁO GIẢ =====
           SizedBox(
             width: double.infinity,
             child: OutlinedButton.icon(
-              onPressed: (decision.disableCancel || _isCancelling)
+              onPressed: (isCancelDisabled || _isCancelling)
                   ? null
                   : () async {
                       final confirm = await showDialog<bool>(
@@ -1329,7 +1334,6 @@ class _AlertEventCardState extends State<AlertEventCard>
                           final ds = EventsRemoteDataSource();
                           await ds.cancelEvent(eventId: widget.eventId);
 
-                          // Show success message
                           if (mounted && context.mounted) {
                             ScaffoldMessenger.of(context).showSnackBar(
                               const SnackBar(
@@ -1343,18 +1347,16 @@ class _AlertEventCardState extends State<AlertEventCard>
                             );
                           }
 
-                          try {
-                            if (mounted) {
-                              if (widget.onDismiss != null) {
-                                widget.onDismiss!();
-                              } else {
-                                Navigator.of(
-                                  context,
-                                  rootNavigator: true,
-                                ).maybePop();
-                              }
+                          if (mounted) {
+                            if (widget.onDismiss != null) {
+                              widget.onDismiss!();
+                            } else {
+                              Navigator.of(
+                                context,
+                                rootNavigator: true,
+                              ).maybePop();
                             }
-                          } catch (_) {}
+                          }
                         } catch (e) {
                           AppLogger.e('Cancel event failed: $e');
                           if (mounted && context.mounted) {
@@ -1371,8 +1373,21 @@ class _AlertEventCardState extends State<AlertEventCard>
                         }
                       }
                     },
-              icon: const Icon(Icons.cancel_outlined),
-              label: _isCancelling
+              icon: showCancelling
+                  ? SizedBox(
+                      width: 16,
+                      height: 16,
+                      child: CircularProgressIndicator(
+                        strokeWidth: 2,
+                        valueColor: AlwaysStoppedAnimation<Color>(
+                          isCancelDisabled
+                              ? Colors.grey.shade300
+                              : Colors.redAccent,
+                        ),
+                      ),
+                    )
+                  : const Icon(Icons.cancel_outlined),
+              label: showCancelling
                   ? const Text('Đang hủy...')
                   : const Text('Hủy cảnh báo'),
               style: ButtonStyle(
