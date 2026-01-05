@@ -20,6 +20,7 @@ import 'package:detect_care_caregiver_app/features/camera/widgets/features_panel
 import 'package:detect_care_caregiver_app/features/camera/widgets/status_chip.dart';
 import 'package:detect_care_caregiver_app/features/emergency/emergency_call_helper.dart';
 import 'package:detect_care_caregiver_app/features/events/data/events_remote_data_source.dart';
+import 'package:detect_care_caregiver_app/core/events/app_events.dart';
 import 'package:detect_care_caregiver_app/features/home/models/event_log.dart';
 import 'package:detect_care_caregiver_app/features/home/service/event_service.dart';
 import 'package:provider/provider.dart';
@@ -680,33 +681,117 @@ class _LiveCameraScreenState extends State<LiveCameraScreen>
         const SnackBar(content: Text('Đang hủy báo động...')),
       );
 
-      // Cancel mapped event if it exists
+      // If we have a mapped event id, mark that event as RESOLVED (don't
+      // permanently cancel it) so the UI and audits reflect an acknowledged
+      // alarm. Also attempt to notify external alarm controller.
       if (eventId != null && eventId.isNotEmpty) {
-        await EventsRemoteDataSource().cancelEvent(eventId: eventId);
-      }
-
-      try {
-        final userId = await AuthStorage.getUserId();
-        if (userId != null &&
-            userId.isNotEmpty &&
-            eventId != null &&
-            eventId.isNotEmpty) {
-          await AlarmRemoteDataSource().cancelAlarm(
+        try {
+          await EventsRemoteDataSource().updateEventLifecycle(
             eventId: eventId,
-            userId: userId,
-            cameraId: null,
+            lifecycleState: 'RESOLVED',
+            notes: 'RESOLVED via camera overlay',
           );
+        } catch (e) {
+          AppLogger.e('Failed to resolve mapped event $eventId: $e');
         }
-      } catch (e) {
-        AppLogger.e('External cancel alarm failed: $e');
+
+        try {
+          final userId = await AuthStorage.getUserId();
+          if (userId != null && userId.isNotEmpty) {
+            await AlarmRemoteDataSource().cancelAlarm(
+              eventId: eventId,
+              userId: userId,
+              cameraId: null,
+            );
+          }
+        } catch (e) {
+          AppLogger.e('External cancel alarm failed: $e');
+        }
+
+        if (mounted) {
+          ScaffoldMessenger.of(
+            context,
+          ).showSnackBar(const SnackBar(content: Text('Đã hủy báo động.')));
+        }
+        ActiveAlarmNotifier.instance.update(false);
+        try {
+          AppEvents.instance.notifyTableChanged('event_detections');
+        } catch (_) {}
+        return;
       }
 
-      if (mounted) {
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(const SnackBar(content: Text('Đã hủy báo động.')));
+      // No mapped event id — try to find active alarms (like AlarmBubbleOverlay)
+      // and resolve them.
+      try {
+        final to = DateTime.now().toUtc();
+        final from = to.subtract(const Duration(minutes: 30));
+        final params = <String, dynamic>{
+          'lifecycle_state': 'ALARM_ACTIVATED',
+          'from': from.toIso8601String(),
+          'to': to.toIso8601String(),
+          'limit': 20,
+        };
+        final rows = await EventsRemoteDataSource().listEvents(
+          extraQuery: params,
+        );
+        final ids = rows
+            .map((r) => (r['id'] ?? r['event_id'] ?? r['eventId'])?.toString())
+            .whereType<String>()
+            .toSet()
+            .toList();
+
+        if (ids.isEmpty) {
+          AppLogger.d('[Camera] No active alarm events found to cancel');
+          if (mounted)
+            context.showCameraMessage(
+              'Không tìm thấy báo động đang hoạt động.',
+            );
+          ActiveAlarmNotifier.instance.update(false);
+          try {
+            AppEvents.instance.notifyTableChanged('event_detections');
+          } catch (_) {}
+          return;
+        }
+
+        // Resolve each found alarm and attempt to notify external alarm controller.
+        for (final id in ids) {
+          try {
+            await EventsRemoteDataSource().updateEventLifecycle(
+              eventId: id,
+              lifecycleState: 'RESOLVED',
+              notes: 'RESOLVED via camera overlay',
+            );
+          } catch (e) {
+            AppLogger.e('Failed to resolve event $id: $e');
+          }
+
+          try {
+            final userId = await AuthStorage.getUserId();
+            if (userId != null && userId.isNotEmpty) {
+              await AlarmRemoteDataSource().cancelAlarm(
+                eventId: id,
+                userId: userId,
+                cameraId: null,
+              );
+            }
+          } catch (e) {
+            AppLogger.e('External cancel alarm failed for $id: $e');
+          }
+        }
+
+        AppLogger.d('[Camera] Resolved ${ids.length} alarm events: $ids');
+        if (mounted)
+          ScaffoldMessenger.of(
+            context,
+          ).showSnackBar(const SnackBar(content: Text('Đã hủy báo động.')));
+        ActiveAlarmNotifier.instance.update(false);
+        try {
+          AppEvents.instance.notifyTableChanged('event_detections');
+        } catch (_) {}
+      } catch (e, st) {
+        AppLogger.e('Failed to discover/resolve active alarms: $e', e, st);
+        if (mounted) context.showCameraMessage('Hủy báo động thất bại.');
       }
-      ActiveAlarmNotifier.instance.update(false);
     } catch (e, st) {
       AppLogger.e('Failed to cancel mapped event alarm: $e', e, st);
       if (mounted) context.showCameraMessage('Hủy báo động thất bại.');
@@ -1600,35 +1685,37 @@ class _LiveCameraScreenState extends State<LiveCameraScreen>
     return ValueListenableBuilder<bool>(
       valueListenable: ActiveAlarmNotifier.instance,
       builder: (context, alarmActive, _) {
-        final mainGradient = alarmActive
-            ? const [Color(0xFFB0BEC5), Color(0xFF78909C)]
-            : const [Color(0xFFFF7043), Color(0xFFEF4444)];
-        final mainLabel = alarmActive
-            ? (_cancelingAlarm ? 'Đang hủy...' : 'HỦY CHỤP ẢNH')
-            : (_alarming ? 'Đang...' : 'CHỤP ẢNH');
-        final mainIcon = alarmActive
-            ? Icons.close_rounded
-            : Icons.warning_amber_rounded;
-        final onMainTap = alarmActive ? _onCancelAlarm : _onCaptureManualEvent;
-        final mainLoading = alarmActive ? _cancelingAlarm : _alarming;
+        // Common button definitions
+        final captureLabel = _alarming ? 'Đang...' : 'CHỤP ẢNH';
+        final captureIcon = Icons.warning_amber_rounded;
+        final captureLoading = _alarming;
 
+        // Icon-only (compact) layout: show emergency then cancel/capture beside it
         if (iconOnly) {
           return Row(
             mainAxisAlignment: MainAxisAlignment.center,
             mainAxisSize: MainAxisSize.min,
             children: [
               _buildIconButton(
-                icon: mainIcon,
-                tooltip: mainLabel,
-                onTap: mainLoading ? null : () => unawaited(onMainTap()),
-              ),
-              const SizedBox(width: 8),
-              _buildIconButton(
                 icon: Icons.phone_in_talk,
                 tooltip: 'Gọi khẩn cấp',
                 onTap: _emergencyCalling
                     ? null
                     : () => unawaited(_handleEmergencyCall()),
+              ),
+              const SizedBox(width: 8),
+              _buildIconButton(
+                icon: alarmActive
+                    ? Icons.close_rounded
+                    : Icons.add_alert_rounded,
+                tooltip: alarmActive ? 'Hủy báo động' : 'Tạo sự kiện thủ công',
+                onTap: alarmActive
+                    ? (_cancelingAlarm
+                          ? null
+                          : () => unawaited(_onCancelAlarm()))
+                    : (_alarming
+                          ? null
+                          : () => unawaited(_onCaptureManualEvent())),
               ),
               if (widget.mappedEventId?.isNotEmpty == true && !alarmActive) ...[
                 const SizedBox(width: 8),
@@ -1644,6 +1731,58 @@ class _LiveCameraScreenState extends State<LiveCameraScreen>
           );
         }
 
+        // Full (non-icon) layout: when an alarm is active, show Emergency + Cancel
+        // on the top row and move Capture to its own full-width row below.
+        if (alarmActive) {
+          return Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Row(
+                children: [
+                  Expanded(
+                    child: _buildGradientActionButton(
+                      icon: Icons.phone_in_talk,
+                      label: _emergencyCalling ? 'Đang...' : 'GỌI KHẨN CẤP',
+                      colors: const [Color(0xFF26C6DA), Color(0xFF00ACC1)],
+                      onTap: _handleEmergencyCall,
+                      loading: _emergencyCalling,
+                      iconOnly: iconOnly,
+                    ),
+                  ),
+                  spacing,
+                  Expanded(
+                    child: _buildGradientActionButton(
+                      icon: Icons.close_rounded,
+                      label: _cancelingAlarm ? 'Đang hủy...' : 'HỦY BÁO ĐỘNG',
+                      colors: const [Color(0xFFB0BEC5), Color(0xFF78909C)],
+                      onTap: _onCancelAlarm,
+                      loading: _cancelingAlarm,
+                      iconOnly: iconOnly,
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 10),
+              Row(
+                children: [
+                  Expanded(
+                    child: _buildGradientActionButton(
+                      icon: captureIcon,
+                      label: captureLabel,
+                      colors: const [Color(0xFFFF7043), Color(0xFFEF4444)],
+                      onTap: _onCaptureManualEvent,
+                      loading: captureLoading,
+                      iconOnly: false,
+                    ),
+                  ),
+                ],
+              ),
+            ],
+          );
+        }
+
+        // Default (no active alarm): original layout (Capture + Emergency),
+        // with optional Activate Alarm below when mappedEventId exists.
         return Column(
           mainAxisSize: MainAxisSize.min,
           children: [
@@ -1651,11 +1790,11 @@ class _LiveCameraScreenState extends State<LiveCameraScreen>
               children: [
                 Expanded(
                   child: _buildGradientActionButton(
-                    icon: Icons.warning_amber_rounded,
-                    label: mainLabel,
-                    colors: mainGradient,
-                    onTap: onMainTap,
-                    loading: mainLoading,
+                    icon: captureIcon,
+                    label: captureLabel,
+                    colors: const [Color(0xFFFF7043), Color(0xFFEF4444)],
+                    onTap: _onCaptureManualEvent,
+                    loading: captureLoading,
                     iconOnly: iconOnly,
                   ),
                 ),
@@ -1672,7 +1811,7 @@ class _LiveCameraScreenState extends State<LiveCameraScreen>
                 ),
               ],
             ),
-            // Activate alarm button (always show when mappedEventId exists)
+            // Activate alarm button (show when mappedEventId exists)
             if (widget.mappedEventId?.isNotEmpty == true && !alarmActive) ...[
               const SizedBox(height: 10),
               _buildGradientActionButton(

@@ -98,6 +98,7 @@ class _AlertEventCardState extends State<AlertEventCard>
   Timer? _snoozeTicker;
   int? _snoozeRemaining;
   bool _isCancelling = false;
+  bool _cancelSent = false;
   bool _isEmergencyCalling = false;
   bool _isResolving = false;
   bool _isImagesLoading = false;
@@ -1101,9 +1102,12 @@ class _AlertEventCardState extends State<AlertEventCard>
           : baseEv.lastEmergencyCallSource,
     );
 
-    final decision = _ev.getAlertActionDecision();
-    final bool isCancelDisabled = decision.disableCancel;
-    final bool showCancelling = _isCancelling && !isCancelDisabled;
+    // Temporarily disable advanced decision logic; keep simple fallbacks
+    // final decision = _ev.getAlertActionDecision();
+    // final bool isCancelDisabled = decision.disableCancel;
+    // final bool showCancelling = _isCancelling && !isCancelDisabled;
+    final bool isCancelDisabled = false;
+    final bool showCancelling = _isCancelling;
 
     if (widget.isHandled) {
       return Container(
@@ -1134,8 +1138,46 @@ class _AlertEventCardState extends State<AlertEventCard>
       );
     }
 
-    final evLifecycle = (_ev.lifecycleState ?? '').toString().toUpperCase();
+    String canonicalLifecycle(String? s) {
+      if (s == null) return '';
+      final trimmed = s.toString().trim();
+      if (trimmed.isEmpty) return '';
+      if (trimmed.contains('_') ||
+          trimmed.contains('-') ||
+          trimmed.contains(' ')) {
+        return trimmed
+            .replaceAll('-', '_')
+            .replaceAll(RegExp(r'\s+'), '_')
+            .toUpperCase();
+      }
+      final withUnderscores = trimmed.replaceAllMapped(
+        RegExp(r'([a-z0-9])([A-Z])'),
+        (m) => '${m[1]}_${m[2]}',
+      );
+      return withUnderscores.toUpperCase();
+    }
+
+    final evLifecycle = canonicalLifecycle(_ev.lifecycleState);
     final hasAlarmFlag = _ev.hasAlarmActivated ?? false;
+
+    // Determine whether to show the resolve (cancel alarm) button.
+    // Show only when lifecycle explicitly reports ALARM_ACTIVATED, or when
+    // there is no lifecycle string but the alarm flag is set on the event.
+    final terminalStates = [
+      'CANCELED',
+      'NOTIFIED',
+      'AUTOCALLED',
+      'ACKNOWLEDGED',
+      'EMERGENCY_RESPONSE_RECEIVED',
+      'RESOLVED',
+      'EMERGENCY_ESCALATION_FAILED',
+    ];
+    final bool isAlarmActiveExplicit = evLifecycle == 'ALARM_ACTIVATED';
+    final bool isAlarmActiveImplicit = evLifecycle.isEmpty && hasAlarmFlag;
+    final bool shouldShowResolveButton =
+        !_alarmResolved &&
+        !terminalStates.contains(evLifecycle) &&
+        (isAlarmActiveExplicit || isAlarmActiveImplicit);
 
     AppLogger.d(
       '[ResolveButton] lifecycle=$evLifecycle hasAlarm=$hasAlarmFlag alarmResolved=$_alarmResolved',
@@ -1194,8 +1236,10 @@ class _AlertEventCardState extends State<AlertEventCard>
           const SizedBox(height: 8),
 
           // ===== HỦY BÁO ĐỘNG (chỉ khi đang ALARM_ACTIVATED) =====
-          if ((evLifecycle == 'ALARM_ACTIVATED' || hasAlarmFlag) &&
-              !_alarmResolved) ...[
+          // Hide the button for terminal/failed escalation states
+          // (CANCELED, NOTIFIED, AUTOCALLED, ACKNOWLEDGED,
+          //  EMERGENCY_RESPONSE_RECEIVED, RESOLVED, EMERGENCY_ESCALATION_FAILED)
+          if (shouldShowResolveButton) ...[
             SizedBox(
               width: double.infinity,
               child: ElevatedButton.icon(
@@ -1259,7 +1303,17 @@ class _AlertEventCardState extends State<AlertEventCard>
           SizedBox(
             width: double.infinity,
             child: ElevatedButton.icon(
-              onPressed: (decision.disableCall || _isEmergencyCalling)
+              onPressed:
+                  // Disable call when lifecycle indicates auto-call/handled/response received,
+                  // or when EventLog helper indicates call should be disabled.
+                  ([
+                        'AUTOCALLED',
+                        'CANCELED',
+                        'EMERGENCY_RESPONSE_RECEIVED',
+                      ].contains(evLifecycle) ||
+                      _isEmergencyCalling ||
+                      _cancelSent ||
+                      _ev.isCallDisabled)
                   ? null
                   : _handleEmergencyCall,
               icon: const Icon(Icons.phone, color: Colors.white),
@@ -1299,113 +1353,234 @@ class _AlertEventCardState extends State<AlertEventCard>
           const SizedBox(height: 8),
 
           // ===== HỦY CẢNH BÁO GIẢ =====
-          SizedBox(
-            width: double.infinity,
-            child: OutlinedButton.icon(
-              onPressed: (isCancelDisabled || _isCancelling)
-                  ? null
-                  : () async {
-                      final confirm = await showDialog<bool>(
-                        context: context,
-                        builder: (ctx) => AlertDialog(
-                          title: const Text('Xác nhận hủy cảnh báo'),
-                          content: const Text(
-                            'Bạn có chắc chắn rằng cảnh báo này là giả và muốn hủy bỏ?',
-                          ),
-                          actions: [
-                            TextButton(
-                              onPressed: () => Navigator.of(ctx).pop(false),
-                              child: const Text('Không'),
+          ClipRRect(
+            borderRadius: BorderRadius.circular(48),
+            child: SizedBox(
+              width: double.infinity,
+              child: OutlinedButton(
+                // Disable if already sent or currently cancelling
+                onPressed: (_isCancelling || _cancelSent)
+                    ? null
+                    : () async {
+                        // Single combined confirmation dialog
+                        final confirm = await showDialog<bool>(
+                          context: context,
+                          builder: (ctx) => AlertDialog(
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(16),
                             ),
-                            ElevatedButton(
-                              onPressed: () => Navigator.of(ctx).pop(true),
-                              style: ElevatedButton.styleFrom(
-                                backgroundColor: Colors.redAccent,
+                            title: const Text(
+                              'Gửi yêu cầu hủy cảnh báo',
+                              style: TextStyle(
+                                fontSize: 20,
+                                fontWeight: FontWeight.w600,
                               ),
-                              child: const Text('Xác nhận'),
+                              textAlign: TextAlign.center,
                             ),
-                          ],
-                        ),
-                      );
-                      if (confirm == true) {
-                        HapticFeedback.heavyImpact();
-                        setState(() => _isCancelling = true);
-                        try {
-                          final ds = EventsRemoteDataSource();
-                          await ds.cancelEvent(eventId: widget.eventId);
-
-                          if (mounted && context.mounted) {
-                            ScaffoldMessenger.of(context).showSnackBar(
-                              const SnackBar(
-                                content: Text(
-                                  'Cảnh báo đã được hủy thành công.',
+                            content: const Text(
+                              'Bạn sắp gửi yêu cầu hủy cảnh báo tới khách hàng để duyệt. Thao tác này không thể hoàn tác và không thể gửi lại.',
+                              style: TextStyle(fontSize: 15, height: 1.5),
+                              textAlign: TextAlign.center,
+                            ),
+                            actionsAlignment: MainAxisAlignment.center,
+                            actionsPadding: const EdgeInsets.fromLTRB(
+                              16,
+                              0,
+                              16,
+                              16,
+                            ),
+                            actions: [
+                              TextButton(
+                                onPressed: () => Navigator.of(ctx).pop(false),
+                                style: TextButton.styleFrom(
+                                  padding: const EdgeInsets.symmetric(
+                                    horizontal: 24,
+                                    vertical: 12,
+                                  ),
+                                  shape: RoundedRectangleBorder(
+                                    borderRadius: BorderRadius.circular(18),
+                                  ),
                                 ),
-                                backgroundColor: Colors.green,
-                                behavior: SnackBarBehavior.floating,
-                                duration: Duration(milliseconds: 1500),
+                                child: const Text(
+                                  'Hủy',
+                                  style: TextStyle(fontSize: 15),
+                                ),
                               ),
-                            );
-                          }
+                              const SizedBox(width: 12),
+                              ElevatedButton(
+                                onPressed: () => Navigator.of(ctx).pop(true),
+                                style: ElevatedButton.styleFrom(
+                                  backgroundColor: Colors.redAccent,
+                                  foregroundColor: Colors.white,
+                                  elevation: 0,
+                                  padding: const EdgeInsets.symmetric(
+                                    horizontal: 24,
+                                    vertical: 12,
+                                  ),
+                                  shape: RoundedRectangleBorder(
+                                    borderRadius: BorderRadius.circular(18),
+                                  ),
+                                ),
+                                child: const Text(
+                                  'Xác nhận gửi',
+                                  style: TextStyle(
+                                    fontSize: 15,
+                                    fontWeight: FontWeight.w600,
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ),
+                        );
 
-                          if (mounted) {
-                            if (widget.onDismiss != null) {
-                              widget.onDismiss!();
-                            } else {
-                              Navigator.of(
-                                context,
-                                rootNavigator: true,
-                              ).maybePop();
-                            }
-                          }
-                        } catch (e) {
-                          AppLogger.e('Cancel event failed: $e');
-                          if (mounted && context.mounted) {
-                            ScaffoldMessenger.of(context).showSnackBar(
-                              SnackBar(
-                                content: Text('Hủy cảnh báo thất bại: $e'),
-                                backgroundColor: Colors.red.shade600,
-                                behavior: SnackBarBehavior.floating,
-                              ),
+                        if (confirm == true) {
+                          HapticFeedback.heavyImpact();
+                          setState(() => _isCancelling = true);
+                          try {
+                            final ds = EventsRemoteDataSource();
+                            await ds.proposeDelete(
+                              eventId: widget.eventId,
+                              reason: 'Sự kiện không chính xác',
                             );
+
+                            if (mounted && context.mounted) {
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                SnackBar(
+                                  content: const Row(
+                                    children: [
+                                      Icon(
+                                        Icons.check_circle,
+                                        color: Colors.white,
+                                      ),
+                                      SizedBox(width: 12),
+                                      Expanded(
+                                        child: Text(
+                                          'Sự kiện đã được gửi đến khách hàng để duyệt',
+                                          style: TextStyle(fontSize: 14),
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                  backgroundColor: Colors.green.shade600,
+                                  behavior: SnackBarBehavior.floating,
+                                  duration: const Duration(milliseconds: 2500),
+                                  shape: RoundedRectangleBorder(
+                                    borderRadius: BorderRadius.circular(8),
+                                  ),
+                                  margin: const EdgeInsets.all(16),
+                                ),
+                              );
+                            }
+
+                            // Mark as sent so user cannot send another request
+                            if (mounted) {
+                              setState(() {
+                                _cancelSent = true;
+                              });
+                            }
+                          } catch (e) {
+                            AppLogger.e('Propose delete failed: $e');
+                            if (mounted && context.mounted) {
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                SnackBar(
+                                  content: Row(
+                                    children: [
+                                      const Icon(
+                                        Icons.error,
+                                        color: Colors.white,
+                                      ),
+                                      const SizedBox(width: 12),
+                                      Expanded(
+                                        child: Text(
+                                          'Gửi yêu cầu thất bại: $e',
+                                          style: const TextStyle(fontSize: 14),
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                  backgroundColor: Colors.red.shade600,
+                                  behavior: SnackBarBehavior.floating,
+                                  shape: RoundedRectangleBorder(
+                                    borderRadius: BorderRadius.circular(8),
+                                  ),
+                                  margin: const EdgeInsets.all(16),
+                                ),
+                              );
+                            }
+                          } finally {
+                            if (mounted) setState(() => _isCancelling = false);
                           }
-                        } finally {
-                          if (mounted) setState(() => _isCancelling = false);
                         }
-                      }
-                    },
-              icon: showCancelling
-                  ? SizedBox(
-                      width: 16,
-                      height: 16,
-                      child: CircularProgressIndicator(
-                        strokeWidth: 2,
-                        valueColor: AlwaysStoppedAnimation<Color>(
-                          isCancelDisabled
-                              ? Colors.grey.shade300
-                              : Colors.redAccent,
+                      },
+                style: ButtonStyle(
+                  backgroundColor: MaterialStateProperty.all<Color>(
+                    Colors.white,
+                  ),
+                  foregroundColor: MaterialStateProperty.resolveWith<Color?>(
+                    (states) => states.contains(MaterialState.disabled)
+                        ? Colors.grey.shade500
+                        : Colors.redAccent,
+                  ),
+                  side: MaterialStateProperty.resolveWith<BorderSide?>(
+                    (states) => states.contains(MaterialState.disabled)
+                        ? BorderSide(color: Colors.grey.shade300, width: 1.2)
+                        : const BorderSide(color: Colors.redAccent, width: 1.2),
+                  ),
+                  padding: MaterialStateProperty.all(
+                    const EdgeInsets.symmetric(vertical: 12, horizontal: 16),
+                  ),
+                  overlayColor: MaterialStateProperty.all(
+                    Colors.redAccent.withOpacity(0.06),
+                  ),
+                  shape: MaterialStateProperty.all(
+                    RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(48),
+                    ),
+                  ),
+                  minimumSize: MaterialStateProperty.all(
+                    const Size.fromHeight(48),
+                  ),
+                ),
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    if (_isCancelling)
+                      SizedBox(
+                        width: 18,
+                        height: 18,
+                        child: CircularProgressIndicator(
+                          strokeWidth: 2.5,
+                          valueColor: AlwaysStoppedAnimation<Color>(
+                            _isCancelling || _cancelSent
+                                ? Colors.grey.shade400
+                                : Colors.redAccent,
+                          ),
                         ),
+                      )
+                    else
+                      Icon(
+                        _cancelSent
+                            ? Icons.check_circle_outline
+                            : Icons.cancel_outlined,
+                        size: 20,
                       ),
-                    )
-                  : const Icon(Icons.cancel_outlined),
-              label: showCancelling
-                  ? const Text('Đang hủy...')
-                  : const Text('Hủy cảnh báo'),
-              style: ButtonStyle(
-                foregroundColor: MaterialStateProperty.resolveWith<Color?>(
-                  (states) => states.contains(MaterialState.disabled)
-                      ? Colors.grey.shade500
-                      : Colors.redAccent,
-                ),
-                side: MaterialStateProperty.resolveWith<BorderSide?>(
-                  (states) => states.contains(MaterialState.disabled)
-                      ? BorderSide(color: Colors.grey.shade300, width: 1.2)
-                      : const BorderSide(color: Colors.redAccent, width: 1.2),
-                ),
-                padding: MaterialStateProperty.all(
-                  const EdgeInsets.symmetric(vertical: 12),
-                ),
-                overlayColor: MaterialStateProperty.all(
-                  Colors.redAccent.withOpacity(0.06),
+                    const SizedBox(width: 10),
+                    Text(
+                      _isCancelling
+                          ? 'Đang gửi...'
+                          : _cancelSent
+                          ? (_ev.confirmationState == 'REJECTED_BY_CUSTOMER'
+                                ? 'Đã bị từ chối'
+                                : 'Đã gửi yêu cầu')
+                          : 'Hủy cảnh báo',
+                      style: const TextStyle(
+                        fontSize: 15,
+                        fontWeight: FontWeight.w600,
+                        letterSpacing: 0.2,
+                      ),
+                    ),
+                  ],
                 ),
               ),
             ),
@@ -1478,7 +1653,9 @@ class _AlertEventCardState extends State<AlertEventCard>
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
                   ElevatedButton.icon(
-                    onPressed: () => _initiateEmergencyCall(context),
+                    onPressed: _cancelSent
+                        ? null
+                        : () => _initiateEmergencyCall(context),
                     icon: const Icon(Icons.call),
                     label: const Text('Gọi khẩn cấp'),
                     style: ElevatedButton.styleFrom(
