@@ -2,12 +2,15 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 
-import 'package:detect_care_caregiver_app/features/alarm/services/active_alarm_notifier.dart';
-import 'package:detect_care_caregiver_app/features/events/data/events_remote_data_source.dart';
 import 'package:detect_care_caregiver_app/core/events/app_events.dart';
 import 'package:detect_care_caregiver_app/core/utils/logger.dart';
+import 'package:detect_care_caregiver_app/features/alarm/data/alarm_status.dart';
+import 'package:detect_care_caregiver_app/features/alarm/services/active_alarm_notifier.dart';
+import 'package:detect_care_caregiver_app/features/alarm/services/alarm_status_service.dart';
+import 'package:detect_care_caregiver_app/features/home/models/event_log.dart';
+import 'package:detect_care_caregiver_app/features/home/service/event_service.dart';
+import 'package:detect_care_caregiver_app/features/home/widgets/alert_new_event_card.dart';
 
-/// (lifecycle_state == 'ALARM_ACTIVATED') detected within the last 30 minutes.
 class AlarmBubbleOverlay extends StatefulWidget {
   const AlarmBubbleOverlay({super.key});
 
@@ -17,9 +20,10 @@ class AlarmBubbleOverlay extends StatefulWidget {
 
 class _AlarmBubbleOverlayState extends State<AlarmBubbleOverlay>
     with SingleTickerProviderStateMixin {
-  final EventsRemoteDataSource _ds = EventsRemoteDataSource();
-  final Duration _pollInterval = const Duration(seconds: 30);
-  Timer? _pollTimer;
+  final AlarmStatusService _alarmStatusService = AlarmStatusService.instance;
+  AlarmStatus? _lastStatus;
+  StreamSubscription? _tableChangedSub;
+  VoidCallback? _statusListener;
   bool _visible = false;
   List<String> _alarmEventIds = [];
   Offset _position = const Offset(20, 220);
@@ -32,108 +36,200 @@ class _AlarmBubbleOverlayState extends State<AlarmBubbleOverlay>
   @override
   void initState() {
     super.initState();
-    _startPolling();
-    AppEvents.instance.tableChanged.listen((table) {
+    _statusListener = () {
+      _applyStatus(_alarmStatusService.statusNotifier.value);
+    };
+
+    _alarmStatusService.startPolling(interval: const Duration(seconds: 10));
+    _alarmStatusService.statusNotifier.addListener(_statusListener!);
+    _applyStatus(_alarmStatusService.statusNotifier.value);
+
+    _tableChangedSub = AppEvents.instance.tableChanged.listen((table) {
       if (table != 'event_detections') return;
-      _fetchAlarms();
+      _alarmStatusService.refreshStatus();
     });
   }
 
   @override
   void dispose() {
-    _pollTimer?.cancel();
+    _tableChangedSub?.cancel();
+    if (_statusListener != null) {
+      _alarmStatusService.statusNotifier.removeListener(_statusListener!);
+    }
     _pulseController.dispose();
     super.dispose();
   }
 
-  void _startPolling() {
-    // Immediate fetch, then periodic
-    _fetchAlarms();
-    _pollTimer = Timer.periodic(_pollInterval, (_) => _fetchAlarms());
-  }
+  void _applyStatus(AlarmStatus? status) {
+    _lastStatus = status;
 
-  Future<void> _fetchAlarms() async {
-    try {
-      final to = DateTime.now().toUtc();
-      final from = to.subtract(const Duration(minutes: 30));
-      final params = <String, dynamic>{
-        'lifecycle_state': 'ALARM_ACTIVATED',
-        'from': from.toIso8601String(),
-        'to': to.toIso8601String(),
-        'limit': 10,
-      };
-      final rows = await _ds.listEvents(extraQuery: params);
-      final ids = rows
-          .map(
-            (r) =>
-                (r['id'] ??
-                        r['event_id'] ??
-                        r['eventId'] ??
-                        r['eventId']?.toString())
-                    ?.toString(),
-          )
-          .whereType<String>()
-          .toSet()
-          .toList();
-
-      if (mounted) {
-        setState(() {
-          _alarmEventIds = ids;
-          _visible = ids.isNotEmpty;
-        });
+    final ids = <String>[];
+    if (status != null) {
+      ids.addAll(status.activeAlarms);
+      final fromStatus = status.eventId;
+      if (fromStatus != null && fromStatus.isNotEmpty) {
+        if (!ids.contains(fromStatus)) ids.add(fromStatus);
       }
-      ActiveAlarmNotifier.instance.update(ids.isNotEmpty);
-    } catch (e) {
-      // ignore errors silently to avoid noisy logs; we can add debug prints if needed
     }
+
+    final shouldShow = status?.isPlaying == true;
+
+    if (mounted) {
+      setState(() {
+        _alarmEventIds = ids;
+        _visible = shouldShow;
+      });
+    }
+
+    ActiveAlarmNotifier.instance.update(shouldShow);
   }
 
-  Future<void> _acknowledgeAlarms() async {
-    if (_alarmEventIds.isEmpty) return;
+  Future<void> _openAlertCard() async {
     final messenger = ScaffoldMessenger.of(context);
-    try {
-      for (final id in _alarmEventIds) {
-        try {
-          await _ds.updateEventLifecycle(
-            eventId: id,
-            lifecycleState: 'RESOLVED',
-            notes: 'RESOLVED via alarm bubble',
-          );
-        } catch (e) {
-          // continue acknowledging others but surface a message later
-          AppLogger.e(
-            'AlarmBubble: xác nhận tắt báo động thất bại cho $id: $e',
-          );
-        }
-      }
+    final eventId = _alarmEventIds.isNotEmpty
+        ? _alarmEventIds.first
+        : _lastStatus?.eventId;
 
+    if (eventId == null || eventId.isEmpty) {
       messenger.showSnackBar(
         const SnackBar(
-          content: Text('Đã tắt báo động.'),
+          content: Text('Không tìm thấy sự kiện báo động đang phát'),
           behavior: SnackBarBehavior.floating,
         ),
       );
+      return;
+    }
 
-      // Notify app to refresh lists
-      try {
-        AppEvents.instance.notifyTableChanged('event_detections');
-      } catch (_) {}
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      barrierColor: Colors.black.withOpacity(0.05),
+      builder: (_) => const Center(child: CircularProgressIndicator()),
+    );
 
-      if (mounted) {
-        setState(() {
-          _visible = false;
-          _alarmEventIds = [];
-        });
-      }
-      ActiveAlarmNotifier.instance.update(false);
-    } catch (e) {
+    EventLog? event;
+    try {
+      event = await EventService.withDefaultClient().fetchLogDetail(eventId);
+    } catch (e, st) {
+      AppLogger.e('AlarmBubble: load event $eventId failed: $e', e, st);
       messenger.showSnackBar(
         SnackBar(
-          content: Text('Không thể tắt báo động: $e'),
+          content: Text('Không thể tải chi tiết sự kiện: $e'),
           backgroundColor: Colors.red.shade600,
           behavior: SnackBarBehavior.floating,
         ),
       );
+    } finally {
+      if (mounted) {
+        Navigator.of(context, rootNavigator: true).maybePop();
+      }
+    }
+
+    if (!mounted || event == null) return;
+    final ev = event;
+
+    await showGeneralDialog(
+      context: context,
+      barrierDismissible: true,
+      barrierLabel: 'alarm-event-card',
+      barrierColor: const Color.fromRGBO(0, 0, 0, 0.35),
+      pageBuilder: (_, __, ___) {
+        return SafeArea(
+          child: Center(
+            child: ConstrainedBox(
+              constraints: const BoxConstraints(maxWidth: 520, minWidth: 220),
+              child: Padding(
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 16,
+                  vertical: 24,
+                ),
+                child: Material(
+                  color: Colors.transparent,
+                  child: AlertEventCard(
+                    event: ev,
+                    eventId: ev.eventId,
+                    eventType: ev.eventType,
+                    timestamp: ev.createdAt ?? ev.detectedAt ?? DateTime.now(),
+                    createdAt: ev.createdAt,
+                    severity: _mapSeverityFrom(ev),
+                    description: _resolveDescription(ev),
+                    isHandled: _isHandled(ev),
+                    detectionData: ev.detectionData,
+                    contextData: ev.contextData,
+                    cameraId: _resolveCameraId(ev),
+                    confidence: _resolveConfidence(ev),
+                    imageUrls: ev.imageUrls,
+                    onDismiss: () {
+                      Navigator.of(context, rootNavigator: true).maybePop();
+                    },
+                    onMarkHandled: () {
+                      _alarmStatusService.refreshStatus();
+                    },
+                    onEmergencyCall: () {
+                      _alarmStatusService.refreshStatus();
+                    },
+                  ),
+                ),
+              ),
+            ),
+          ),
+        );
+      },
+    );
+  }
+
+  String _mapSeverityFrom(EventLog e) {
+    final s = e.status.toString().toLowerCase();
+    if (s.contains('danger')) return 'critical';
+    if (s.contains('warning')) return 'medium';
+    if (s.contains('critical')) return 'critical';
+    if (s.contains('high')) return 'high';
+    if (s.contains('medium')) return 'medium';
+    if (s.contains('low')) return 'low';
+    return 'high';
+  }
+
+  String _resolveDescription(EventLog e) {
+    if ((e.eventDescription?.isNotEmpty ?? false)) return e.eventDescription!;
+    if ((e.notes?.isNotEmpty ?? false)) return e.notes!;
+    return 'Chạm "Chi tiết" để xem thêm…';
+  }
+
+  String? _resolveCameraId(EventLog e) {
+    try {
+      final det = e.detectionData;
+      final ctx = e.contextData;
+      final val =
+          det['camera_id'] ??
+          det['camera'] ??
+          ctx['camera_id'] ??
+          ctx['camera'];
+      return val?.toString();
+    } catch (_) {
+      return e.cameraId;
+    }
+  }
+
+  double? _resolveConfidence(EventLog e) {
+    try {
+      if (e.confidenceScore != 0.0) return e.confidenceScore;
+      final det = e.detectionData;
+      final ctx = e.contextData;
+      final c =
+          det['confidence'] ?? det['confidence_score'] ?? ctx['confidence'];
+      if (c == null) return null;
+      if (c is num) return c.toDouble();
+      return double.tryParse(c.toString());
+    } catch (_) {
+      return null;
+    }
+  }
+
+  bool _isHandled(EventLog e) {
+    try {
+      return e.confirmStatus;
+    } catch (_) {
+      return false;
     }
   }
 
@@ -154,31 +250,7 @@ class _AlarmBubbleOverlayState extends State<AlarmBubbleOverlay>
         onPanUpdate: (d) {
           setState(() => _position += d.delta);
         },
-        onTap: () async {
-          final confirmed =
-              await showDialog<bool>(
-                context: context,
-                builder: (ctx) => AlertDialog(
-                  backgroundColor: const Color(0xFFF8FAFC),
-                  title: const Text('Tắt báo động'),
-                  content: const Text('Bạn muốn tắt báo động?'),
-                  actions: [
-                    TextButton(
-                      onPressed: () => Navigator.of(ctx).pop(false),
-                      child: const Text('Hủy'),
-                    ),
-                    TextButton(
-                      onPressed: () => Navigator.of(ctx).pop(true),
-                      child: const Text('Đồng ý'),
-                    ),
-                  ],
-                ),
-              ) ??
-              false;
-
-          if (!confirmed) return;
-          await _acknowledgeAlarms();
-        },
+        onTap: _openAlertCard,
         child: Stack(
           alignment: Alignment.center,
           children: [

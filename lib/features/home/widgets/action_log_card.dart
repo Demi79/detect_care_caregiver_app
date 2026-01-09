@@ -5,6 +5,8 @@ import 'package:detect_care_caregiver_app/core/network/api_client.dart';
 import 'package:detect_care_caregiver_app/core/providers/permissions_provider.dart';
 import 'package:detect_care_caregiver_app/core/utils/logger.dart';
 import 'package:detect_care_caregiver_app/features/alarm/data/alarm_remote_data_source.dart';
+import 'package:detect_care_caregiver_app/features/alarm/data/alarm_status.dart';
+import 'package:detect_care_caregiver_app/features/alarm/services/alarm_status_service.dart';
 import 'package:detect_care_caregiver_app/features/assignments/data/assignments_remote_data_source.dart';
 import 'package:detect_care_caregiver_app/features/auth/data/auth_storage.dart';
 import 'package:detect_care_caregiver_app/features/camera/data/camera_api.dart';
@@ -13,6 +15,7 @@ import 'package:detect_care_caregiver_app/features/emergency/emergency_call_help
 import 'package:detect_care_caregiver_app/features/events/data/events_remote_data_source.dart';
 import 'package:detect_care_caregiver_app/features/events/screens/propose_screen.dart';
 import 'package:detect_care_caregiver_app/features/home/repository/event_repository.dart';
+import 'package:detect_care_caregiver_app/features/home/service/event_lifecycle_service.dart';
 import 'package:detect_care_caregiver_app/features/home/service/event_service.dart';
 import 'package:detect_care_caregiver_app/features/home/constants/types.dart';
 import 'package:detect_care_caregiver_app/features/home/models/event_log.dart';
@@ -92,7 +95,6 @@ class ActionLogCard extends StatelessWidget {
   final LogEntry data;
   final void Function(String newStatus, {bool? confirmed})? onUpdated;
 
-  // Cache the accepted assignment customer_id so permission checks can reuse it synchronously.
   static String? _cachedAcceptedCustomerId;
   static bool _acceptedCustomerPrefetchStarted = false;
 
@@ -100,7 +102,6 @@ class ActionLogCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    // Kick off a background fetch for accepted assignments to obtain customerId.
     _kickoffAcceptedCustomerPrefetch();
 
     try {
@@ -815,12 +816,12 @@ class ActionLogCard extends StatelessWidget {
             color: AppTheme.primaryBlue,
             onPressed: () => _callCaregiver(context),
           ),
-        _SeverityActionItem(
-          icon: Icons.notifications_active,
-          label: 'Kích hoạt báo động',
-          color: AppTheme.warningColor,
-          onPressed: () => _activateAlarmForEvent(context, data),
-        ),
+        // _SeverityActionItem(
+        //   icon: Icons.notifications_active,
+        //   label: 'Kích hoạt báo động',
+        //   color: AppTheme.warningColor,
+        //   onPressed: () => _activateAlarmForEvent(context, data),
+        // ),
         _SeverityActionItem(
           icon: Icons.videocam_outlined,
           label: 'Xem camera',

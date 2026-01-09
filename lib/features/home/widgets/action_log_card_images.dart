@@ -2,6 +2,10 @@ part of 'action_log_card.dart';
 
 extension _ActionLogCardImages on ActionLogCard {
   Future<void> _showImagesModal(BuildContext pageContext, EventLog event) {
+    AlarmStatusService.instance.startPolling(
+      interval: const Duration(seconds: 10),
+    );
+
     final permissionCustomerId =
         ActionLogCard._cachedAcceptedCustomerId ??
         data.contextData?['customer_id']?.toString();
@@ -54,15 +58,87 @@ extension _ActionLogCardImages on ActionLogCard {
             isAlarmWorking,
           ) {
             final footerSelectedUrl = selectedSource?.path;
+
+            final hasEmergency = event.hasEmergencyCall ?? false;
+            final emergencySource = event.lastEmergencyCallSource
+                ?.toString()
+                .trim();
+            final shouldDisableCall =
+                hasEmergency &&
+                emergencySource != null &&
+                emergencySource.isNotEmpty;
+
             return Padding(
               padding: const EdgeInsets.symmetric(horizontal: 4),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
                   ElevatedButton.icon(
-                    onPressed: _shouldHideAlarmButtons
+                    onPressed: (_shouldHideAlarmButtons || shouldDisableCall)
                         ? null
-                        : () => _initiateEmergencyCall(context),
+                        : () async {
+                            try {
+                              await EmergencyCallHelper.initiateEmergencyCall(
+                                context,
+                              );
+
+                              try {
+                                await EventLifecycleService.withDefaultClient()
+                                    .updateLifecycleFlags(
+                                      eventId: event.eventId,
+                                      hasEmergencyCall: true,
+                                    );
+                                AppLogger.api(
+                                  'Set hasEmergencyCall=true for ${event.eventId}',
+                                );
+
+                                try {
+                                  final ds = EventsRemoteDataSource();
+                                  await ds.updateEventLifecycle(
+                                    eventId: event.eventId,
+                                    lifecycleState: 'AUTOCALLED',
+                                    notes:
+                                        'Gọi khẩn cấp từ ứng dụng người chăm sóc',
+                                  );
+                                } catch (e) {
+                                  AppLogger.e(
+                                    'Emergency call: lifecycle update failed: $e',
+                                  );
+                                }
+
+                                try {
+                                  final svc = EventService.withDefaultClient();
+                                  final latest = await svc.fetchLogDetail(
+                                    event.eventId,
+                                  );
+                                  if (context.mounted) {
+                                    setDialogState(() {});
+                                  }
+                                } catch (e) {
+                                  AppLogger.e(
+                                    'Failed to fetch latest event after emergency call: $e',
+                                  );
+                                }
+                              } catch (e, st) {
+                                AppLogger.e(
+                                  'Failed to set hasEmergencyCall for ${event.eventId}: $e',
+                                  e,
+                                  st,
+                                );
+                              }
+                            } catch (e) {
+                              AppLogger.e('Emergency call failed: $e');
+                              if (context.mounted) {
+                                ScaffoldMessenger.of(context).showSnackBar(
+                                  SnackBar(
+                                    content: Text(
+                                      'Không thể thực hiện cuộc gọi khẩn cấp: $e',
+                                    ),
+                                  ),
+                                );
+                              }
+                            }
+                          },
                     icon: const Icon(Icons.call),
                     label: const Text('Gọi khẩn cấp'),
                     style: ElevatedButton.styleFrom(
@@ -125,9 +201,7 @@ Future<void> showActionLogImagesModal({
   );
 }
 
-/// Widget builder for images - handles both local file and network URLs
 Widget _buildImageWidget(dynamic imagePath) {
-  // Convert ImageSource to path if needed
   final path = imagePath is ImageSource ? imagePath.path : imagePath as String;
   final isLocal = imagePath is ImageSource
       ? imagePath.isLocal
@@ -197,7 +271,6 @@ Widget _buildImageWidget(dynamic imagePath) {
   );
 }
 
-/// Helper function to build image modal for event - used by both ActionLogCard and AlertCard
 Future<void> buildEventImagesModal({
   required BuildContext pageContext,
   required EventLog event,
@@ -219,7 +292,6 @@ Future<void> buildEventImagesModal({
   alarmSectionBuilder,
 }) {
   final resolveEditTooltip = editTooltipBuilder ?? (_) => 'Cập nhật sự kiện';
-  // AppLogger.d('\n[ImageModal] Đang tải ảnh cho sự kiện ${event.eventId}...');
   var eventForUse = event;
   final future = (() async {
     try {
@@ -256,8 +328,6 @@ Future<void> buildEventImagesModal({
           // AppLogger.d('[ImageModal] Snapshot->event lookup failed: $e');
         }
       }
-      // Also attempt to resolve by recording_id when snapshot resolution
-      // didn't provide a richer event. Some events reference recordings.
       try {
         final det = eventForUse.detectionData ?? {};
         final ctx = eventForUse.contextData ?? {};
@@ -551,24 +621,34 @@ Future<void> buildEventImagesModal({
                       mainAxisSize: MainAxisSize.min,
                       children: [
                         if (showAlarmButton)
-                          ValueListenableBuilder<bool>(
-                            valueListenable: ActiveAlarmNotifier.instance,
-                            builder: (context, alarmActive, _) {
+                          ValueListenableBuilder<AlarmStatus?>(
+                            valueListenable:
+                                AlarmStatusService.instance.statusNotifier,
+                            builder: (context, status, _) {
+                              final alarmPlaying = status?.isPlaying ?? false;
+                              final eventActive =
+                                  status?.isEventActive(eventForUse.eventId) ??
+                                  false;
+                              final shouldShowCancel =
+                                  alarmPlaying &&
+                                  (eventActive ||
+                                      (status?.activeAlarms.isEmpty ?? false));
+
                               final disabled =
                                   isAlarmWorking || eventForUse.eventId.isEmpty;
-                              final label = alarmActive
+                              final label = shouldShowCancel
                                   ? 'TẮT BÁO ĐỘNG'
                                   : 'KÍCH HOẠT BÁO ĐỘNG';
-                              final iconData = alarmActive
+                              final iconData = shouldShowCancel
                                   ? Icons.notifications_off_rounded
                                   : Icons.notifications_active_rounded;
-                              final bgColor = alarmActive
+                              final bgColor = shouldShowCancel
                                   ? Colors.grey.shade200
                                   : Colors.red.shade50;
-                              final fgColor = alarmActive
+                              final fgColor = shouldShowCancel
                                   ? Colors.grey.shade800
                                   : Colors.red.shade700;
-                              final borderColor = alarmActive
+                              final borderColor = shouldShowCancel
                                   ? Colors.grey.shade400
                                   : Colors.red.shade200;
 
@@ -586,12 +666,12 @@ Future<void> buildEventImagesModal({
                                                 0xFFF8FAFC,
                                               ),
                                               title: Text(
-                                                alarmActive
+                                                shouldShowCancel
                                                     ? 'Hủy báo động'
                                                     : 'Gửi báo động?',
                                               ),
                                               content: Text(
-                                                alarmActive
+                                                shouldShowCancel
                                                     ? 'Bạn có chắc muốn hủy báo động?'
                                                     : 'Bạn muốn kích hoạt báo động cho sự kiện này?',
                                               ),
@@ -607,7 +687,7 @@ Future<void> buildEventImagesModal({
                                                     ctx,
                                                   ).pop(true),
                                                   child: Text(
-                                                    alarmActive
+                                                    shouldShowCancel
                                                         ? 'Đồng ý'
                                                         : 'Gửi',
                                                   ),
@@ -648,12 +728,7 @@ Future<void> buildEventImagesModal({
                                               return;
                                             }
 
-                                            if (alarmActive) {
-                                              await EventsRemoteDataSource()
-                                                  .cancelEvent(
-                                                    eventId:
-                                                        eventForUse.eventId,
-                                                  );
+                                            if (shouldShowCancel) {
                                               await AlarmRemoteDataSource()
                                                   .cancelAlarm(
                                                     eventId:
@@ -662,8 +737,8 @@ Future<void> buildEventImagesModal({
                                                     cameraId:
                                                         eventForUse.cameraId,
                                                   );
-                                              ActiveAlarmNotifier.instance
-                                                  .update(false);
+                                              await AlarmStatusService.instance
+                                                  .refreshStatus();
                                               if (rootCtx.mounted) {
                                                 ScaffoldMessenger.of(
                                                   rootCtx,
@@ -685,8 +760,8 @@ Future<void> buildEventImagesModal({
                                                         eventForUse.cameraId,
                                                     enabled: true,
                                                   );
-                                              ActiveAlarmNotifier.instance
-                                                  .update(true);
+                                              await AlarmStatusService.instance
+                                                  .refreshStatus();
                                               if (rootCtx.mounted) {
                                                 ScaffoldMessenger.of(
                                                   rootCtx,
@@ -713,7 +788,7 @@ Future<void> buildEventImagesModal({
                                               ).showSnackBar(
                                                 SnackBar(
                                                   content: Text(
-                                                    alarmActive
+                                                    shouldShowCancel
                                                         ? 'Hủy báo động thất bại: $e'
                                                         : 'Kích hoạt báo động thất bại: $e',
                                                   ),
@@ -777,74 +852,156 @@ Future<void> buildEventImagesModal({
                         if (showAlarmButton && showEmergencyCallButton)
                           const SizedBox(height: 12),
                         if (showEmergencyCallButton)
-                          SizedBox(
-                            width: double.infinity,
-                            height: 48,
-                            child: ElevatedButton(
-                              onPressed: isEmergencyCalling
-                                  ? null
-                                  : () async {
-                                      setDialogState(
-                                        () => isEmergencyCalling = true,
-                                      );
-                                      try {
-                                        Navigator.of(dialogCtx).pop();
-                                        if (!pageContext.mounted) return;
-                                        await EmergencyCallHelper.initiateEmergencyCall(
-                                          context,
-                                        );
-                                      } finally {
-                                        // Dialog is closed; best-effort only.
-                                        if (dialogCtx.mounted) {
+                          Builder(
+                            builder: (ctx) {
+                              final hasEmergency =
+                                  eventForUse.hasEmergencyCall ?? false;
+                              final emergencySource = eventForUse
+                                  .lastEmergencyCallSource
+                                  ?.toString()
+                                  .trim();
+                              final shouldDisableCall =
+                                  hasEmergency &&
+                                  emergencySource != null &&
+                                  emergencySource.isNotEmpty;
+
+                              return SizedBox(
+                                width: double.infinity,
+                                height: 48,
+                                child: ElevatedButton(
+                                  onPressed:
+                                      (isEmergencyCalling || shouldDisableCall)
+                                      ? null
+                                      : () async {
                                           setDialogState(
-                                            () => isEmergencyCalling = false,
+                                            () => isEmergencyCalling = true,
                                           );
-                                        }
-                                      }
-                                    },
-                              style: ElevatedButton.styleFrom(
-                                backgroundColor: const Color(0xFF00ACC1),
-                                foregroundColor: Colors.white,
-                                elevation: 2,
-                                shadowColor: const Color(
-                                  0xFF00ACC1,
-                                ).withOpacity(0.4),
-                                shape: RoundedRectangleBorder(
-                                  borderRadius: BorderRadius.circular(12),
-                                ),
-                              ),
-                              child: isEmergencyCalling
-                                  ? const SizedBox(
-                                      width: 20,
-                                      height: 20,
-                                      child: CircularProgressIndicator(
-                                        strokeWidth: 2.5,
-                                        valueColor:
-                                            AlwaysStoppedAnimation<Color>(
-                                              Colors.white,
-                                            ),
-                                      ),
-                                    )
-                                  : Row(
-                                      mainAxisAlignment:
-                                          MainAxisAlignment.center,
-                                      children: const [
-                                        Icon(
-                                          Icons.phone_in_talk_rounded,
-                                          size: 22,
-                                        ),
-                                        SizedBox(width: 8),
-                                        Text(
-                                          'GỌI KHẨN CẤP',
-                                          style: TextStyle(
-                                            fontWeight: FontWeight.bold,
-                                            fontSize: 12,
-                                            letterSpacing: 0.5,
-                                          ),
-                                        ),
-                                      ],
+                                          try {
+                                            Navigator.of(dialogCtx).pop();
+                                            if (!pageContext.mounted) return;
+
+                                            await EmergencyCallHelper.initiateEmergencyCall(
+                                              context,
+                                            );
+
+                                            try {
+                                              await EventLifecycleService.withDefaultClient()
+                                                  .updateLifecycleFlags(
+                                                    eventId:
+                                                        eventForUse.eventId,
+                                                    hasEmergencyCall: true,
+                                                  );
+                                              AppLogger.api(
+                                                'Set hasEmergencyCall=true for ${eventForUse.eventId}',
+                                              );
+
+                                              // Update lifecycle to AUTOCALLED when emergency call is made
+                                              try {
+                                                final ds =
+                                                    EventsRemoteDataSource();
+                                                await ds.updateEventLifecycle(
+                                                  eventId: eventForUse.eventId,
+                                                  lifecycleState: 'AUTOCALLED',
+                                                  notes:
+                                                      'Emergency call initiated from generic image modal',
+                                                );
+                                              } catch (e) {
+                                                AppLogger.e(
+                                                  'Emergency call: lifecycle update failed: $e',
+                                                );
+                                              }
+
+                                              try {
+                                                final svc =
+                                                    EventService.withDefaultClient();
+                                                final latest = await svc
+                                                    .fetchLogDetail(
+                                                      eventForUse.eventId,
+                                                    );
+                                                AppLogger.d(
+                                                  'Emergency call: fetched latest event data',
+                                                );
+                                              } catch (e) {
+                                                AppLogger.e(
+                                                  'Failed to fetch latest event after emergency call: $e',
+                                                );
+                                              }
+                                            } catch (e, st) {
+                                              AppLogger.e(
+                                                'Failed to set hasEmergencyCall for ${eventForUse.eventId}: $e',
+                                                e,
+                                                st,
+                                              );
+                                            }
+                                          } catch (e) {
+                                            AppLogger.e(
+                                              'Emergency call failed: $e',
+                                            );
+                                            if (pageContext.mounted) {
+                                              ScaffoldMessenger.of(
+                                                pageContext,
+                                              ).showSnackBar(
+                                                SnackBar(
+                                                  content: Text(
+                                                    'Không thể thực hiện cuộc gọi khẩn cấp: $e',
+                                                  ),
+                                                ),
+                                              );
+                                            }
+                                          } finally {
+                                            if (dialogCtx.mounted) {
+                                              setDialogState(
+                                                () =>
+                                                    isEmergencyCalling = false,
+                                              );
+                                            }
+                                          }
+                                        },
+                                  style: ElevatedButton.styleFrom(
+                                    backgroundColor: const Color(0xFF00ACC1),
+                                    foregroundColor: Colors.white,
+                                    elevation: 2,
+                                    shadowColor: const Color(
+                                      0xFF00ACC1,
+                                    ).withOpacity(0.4),
+                                    shape: RoundedRectangleBorder(
+                                      borderRadius: BorderRadius.circular(12),
                                     ),
-                            ),
+                                  ),
+                                  child: isEmergencyCalling
+                                      ? const SizedBox(
+                                          width: 20,
+                                          height: 20,
+                                          child: CircularProgressIndicator(
+                                            strokeWidth: 2.5,
+                                            valueColor:
+                                                AlwaysStoppedAnimation<Color>(
+                                                  Colors.white,
+                                                ),
+                                          ),
+                                        )
+                                      : Row(
+                                          mainAxisAlignment:
+                                              MainAxisAlignment.center,
+                                          children: const [
+                                            Icon(
+                                              Icons.phone_in_talk_rounded,
+                                              size: 22,
+                                            ),
+                                            SizedBox(width: 8),
+                                            Text(
+                                              'GỌI KHẨN CẤP',
+                                              style: TextStyle(
+                                                fontWeight: FontWeight.bold,
+                                                fontSize: 12,
+                                                letterSpacing: 0.5,
+                                              ),
+                                            ),
+                                          ],
+                                        ),
+                                ),
+                              );
+                            },
                           ),
                       ],
                     ),

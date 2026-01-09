@@ -3,6 +3,9 @@ import 'dart:async';
 import 'package:detect_care_caregiver_app/core/events/app_events.dart';
 import 'package:detect_care_caregiver_app/features/assignments/data/assignments_remote_data_source.dart';
 import 'package:provider/provider.dart';
+import 'package:detect_care_caregiver_app/features/alarm/data/alarm_remote_data_source.dart';
+import 'package:detect_care_caregiver_app/features/alarm/data/alarm_status.dart';
+import 'package:detect_care_caregiver_app/features/alarm/services/alarm_status_service.dart';
 import 'package:detect_care_caregiver_app/core/network/api_client.dart';
 import 'package:detect_care_caregiver_app/core/providers/permissions_provider.dart';
 import 'package:detect_care_caregiver_app/core/theme/app_theme.dart';
@@ -105,6 +108,7 @@ class _AlertEventCardState extends State<AlertEventCard>
   bool _imagesPrefetched = false;
   bool _alarmResolved = false;
   bool _localEmergencyCalled = false;
+  final AlarmStatusService _alarmStatusService = AlarmStatusService.instance;
 
   EventLog? _liveEvent;
   StreamSubscription<Map<String, dynamic>>? _eventUpdatedSub;
@@ -161,6 +165,8 @@ class _AlertEventCardState extends State<AlertEventCard>
         }
       } catch (_) {}
     }
+
+    _alarmStatusService.startPolling(interval: const Duration(seconds: 10));
 
     // Cancel auto-dismiss listeners were moved to InAppAlert.
 
@@ -282,6 +288,34 @@ class _AlertEventCardState extends State<AlertEventCard>
     }
   }
 
+  bool _shouldShowCancelButton(
+    AlarmStatus? status,
+    String evLifecycle,
+    bool hasAlarmFlag,
+  ) {
+    if (_alarmResolved) return false;
+
+    if (status != null) {
+      final activeForEvent = status.isEventActive(widget.eventId);
+      final noActiveList = status.activeAlarms.isEmpty;
+      return status.isPlaying && (activeForEvent || noActiveList);
+    }
+
+    final terminalStates = [
+      'CANCELED',
+      'NOTIFIED',
+      'AUTOCALLED',
+      'ACKNOWLEDGED',
+      'EMERGENCY_RESPONSE_RECEIVED',
+      'RESOLVED',
+      'EMERGENCY_ESCALATION_FAILED',
+    ];
+    final bool isAlarmActiveExplicit = evLifecycle == 'ALARM_ACTIVATED';
+    final bool isAlarmActiveImplicit = evLifecycle.isEmpty && hasAlarmFlag;
+    return !terminalStates.contains(evLifecycle) &&
+        (isAlarmActiveExplicit || isAlarmActiveImplicit);
+  }
+
   bool isCustomerVerified() {
     try {
       final ev =
@@ -362,6 +396,27 @@ class _AlertEventCardState extends State<AlertEventCard>
             hasEmergencyCall: true,
           );
           AppLogger.api('Set hasEmergencyCall=true for ${widget.eventId}');
+
+          try {
+            final ds = EventsRemoteDataSource();
+            await ds.updateEventLifecycle(
+              eventId: widget.eventId,
+              lifecycleState: 'AUTOCALLED',
+              notes: 'Gọi khẩn cấp từ ứng dụng người chăm sóc',
+            );
+          } catch (e) {
+            AppLogger.e('Emergency call: lifecycle update failed: $e');
+          }
+
+          try {
+            final svc = EventService.withDefaultClient();
+            final latest = await svc.fetchLogDetail(widget.eventId);
+            if (mounted) setState(() => _liveEvent = latest);
+          } catch (e) {
+            AppLogger.e(
+              'Failed to fetch latest event after emergency call: $e',
+            );
+          }
         } catch (e, st) {
           AppLogger.e(
             'Failed to set hasEmergencyCall for ${widget.eventId}: $e',
@@ -412,6 +467,27 @@ class _AlertEventCardState extends State<AlertEventCard>
             hasEmergencyCall: true,
           );
           AppLogger.api('Set hasEmergencyCall=true for ${widget.eventId}');
+
+          try {
+            final ds = EventsRemoteDataSource();
+            await ds.updateEventLifecycle(
+              eventId: widget.eventId,
+              lifecycleState: 'AUTOCALLED',
+              notes: 'Emergency call initiated from UI',
+            );
+          } catch (e) {
+            AppLogger.e('Emergency call: lifecycle update failed: $e');
+          }
+
+          try {
+            final svc = EventService.withDefaultClient();
+            final latest = await svc.fetchLogDetail(widget.eventId);
+            if (mounted) setState(() => _liveEvent = latest);
+          } catch (e) {
+            AppLogger.e(
+              'Failed to fetch latest event after emergency call: $e',
+            );
+          }
         } catch (e, st) {
           AppLogger.e(
             'Failed to set hasEmergencyCall for ${widget.eventId}: $e',
@@ -454,7 +530,6 @@ class _AlertEventCardState extends State<AlertEventCard>
         _isConfirmed = true;
       });
 
-      // Stop audio and any pending snooze when handled
       try {
         await AudioService.instance.stop();
       } catch (_) {}
@@ -480,12 +555,34 @@ class _AlertEventCardState extends State<AlertEventCard>
 
     try {
       HapticFeedback.heavyImpact();
-      final ds = EventsRemoteDataSource();
-      await ds.updateEventLifecycle(
+      final userId = await AuthStorage.getUserId();
+      if (userId == null || userId.isEmpty) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('Không xác thực được người dùng.')),
+          );
+        }
+        return;
+      }
+
+      await AlarmRemoteDataSource().cancelAlarm(
         eventId: widget.eventId,
-        lifecycleState: 'RESOLVED',
-        notes: 'Resolved from UI',
+        userId: userId,
+        cameraId: widget.cameraId,
       );
+
+      try {
+        final ds = EventsRemoteDataSource();
+        await ds.updateEventLifecycle(
+          eventId: widget.eventId,
+          lifecycleState: 'RESOLVED',
+          notes: 'Resolved from UI',
+        );
+      } catch (e) {
+        AppLogger.e('Resolve alarm: lifecycle update failed: $e');
+      }
+
+      await _alarmStatusService.refreshStatus();
 
       try {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -612,6 +709,46 @@ class _AlertEventCardState extends State<AlertEventCard>
   String _severityText() {
     if (widget.severity == 'critical') return 'Nguy hiểm';
     return 'Cảnh báo';
+  }
+
+  bool _shouldDisableCancelButton(EventLog ev) {
+    try {
+      final hasEmergency = ev.hasEmergencyCall ?? false;
+      final emergencySource = ev.lastEmergencyCallSource?.toString().trim();
+      final hasAlarm = ev.hasAlarmActivated ?? false;
+      final alarmSource = ev.lastAlarmActivatedSource?.toString().trim();
+
+      if (hasEmergency &&
+          emergencySource != null &&
+          emergencySource.isNotEmpty &&
+          emergencySource.toUpperCase() != 'SYSTEM') {
+        return true;
+      }
+
+      if (hasAlarm &&
+          alarmSource != null &&
+          alarmSource.isNotEmpty &&
+          alarmSource.toUpperCase() != 'SYSTEM') {
+        return true;
+      }
+
+      return false;
+    } catch (_) {
+      return false;
+    }
+  }
+
+  bool _shouldDisableEmergencyCallButton(EventLog ev) {
+    try {
+      final hasEmergency = ev.hasEmergencyCall ?? false;
+      final emergencySource = ev.lastEmergencyCallSource?.toString().trim();
+
+      return hasEmergency &&
+          emergencySource != null &&
+          emergencySource.isNotEmpty;
+    } catch (_) {
+      return false;
+    }
   }
 
   @override
@@ -1160,29 +1297,6 @@ class _AlertEventCardState extends State<AlertEventCard>
     final evLifecycle = canonicalLifecycle(_ev.lifecycleState);
     final hasAlarmFlag = _ev.hasAlarmActivated ?? false;
 
-    // Determine whether to show the resolve (cancel alarm) button.
-    // Show only when lifecycle explicitly reports ALARM_ACTIVATED, or when
-    // there is no lifecycle string but the alarm flag is set on the event.
-    final terminalStates = [
-      'CANCELED',
-      'NOTIFIED',
-      'AUTOCALLED',
-      'ACKNOWLEDGED',
-      'EMERGENCY_RESPONSE_RECEIVED',
-      'RESOLVED',
-      'EMERGENCY_ESCALATION_FAILED',
-    ];
-    final bool isAlarmActiveExplicit = evLifecycle == 'ALARM_ACTIVATED';
-    final bool isAlarmActiveImplicit = evLifecycle.isEmpty && hasAlarmFlag;
-    final bool shouldShowResolveButton =
-        !_alarmResolved &&
-        !terminalStates.contains(evLifecycle) &&
-        (isAlarmActiveExplicit || isAlarmActiveImplicit);
-
-    AppLogger.d(
-      '[ResolveButton] lifecycle=$evLifecycle hasAlarm=$hasAlarmFlag alarmResolved=$_alarmResolved',
-    );
-
     return Container(
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
@@ -1236,84 +1350,87 @@ class _AlertEventCardState extends State<AlertEventCard>
           const SizedBox(height: 8),
 
           // ===== HỦY BÁO ĐỘNG (chỉ khi đang ALARM_ACTIVATED) =====
-          // Hide the button for terminal/failed escalation states
-          // (CANCELED, NOTIFIED, AUTOCALLED, ACKNOWLEDGED,
-          //  EMERGENCY_RESPONSE_RECEIVED, RESOLVED, EMERGENCY_ESCALATION_FAILED)
-          if (shouldShowResolveButton) ...[
-            SizedBox(
-              width: double.infinity,
-              child: ElevatedButton.icon(
-                onPressed: _isResolving ? null : _handleResolveAlarm,
+          ValueListenableBuilder<AlarmStatus?>(
+            valueListenable: _alarmStatusService.statusNotifier,
+            builder: (context, status, _) {
+              final shouldShowResolveButton = _shouldShowCancelButton(
+                status,
+                evLifecycle,
+                hasAlarmFlag,
+              );
 
-                icon: _isResolving
-                    ? SizedBox(
-                        width: 16,
-                        height: 16,
-                        child: CircularProgressIndicator(
-                          strokeWidth: 2,
-                          valueColor: AlwaysStoppedAnimation<Color>(
-                            Colors.white,
+              if (!shouldShowResolveButton) return const SizedBox.shrink();
+
+              return Column(
+                children: [
+                  SizedBox(
+                    width: double.infinity,
+                    child: ElevatedButton.icon(
+                      onPressed: _isResolving ? null : _handleResolveAlarm,
+                      icon: _isResolving
+                          ? SizedBox(
+                              width: 16,
+                              height: 16,
+                              child: CircularProgressIndicator(
+                                strokeWidth: 2,
+                                valueColor: AlwaysStoppedAnimation<Color>(
+                                  Colors.white,
+                                ),
+                              ),
+                            )
+                          : const Icon(
+                              Icons.cancel_presentation_outlined,
+                              color: Colors.white,
+                            ),
+                      label: _isResolving
+                          ? const Text('Đang hủy...')
+                          : const Text(
+                              'HỦY BÁO ĐỘNG',
+                              style: TextStyle(
+                                fontWeight: FontWeight.bold,
+                                color: Colors.white,
+                                fontSize: 13,
+                              ),
+                            ),
+                      style: ButtonStyle(
+                        backgroundColor:
+                            MaterialStateProperty.resolveWith<Color?>((states) {
+                              if (states.contains(MaterialState.disabled)) {
+                                return Colors.deepOrange.withOpacity(0.45);
+                              }
+                              return Colors.deepOrange;
+                            }),
+                        foregroundColor: MaterialStateProperty.all<Color>(
+                          Colors.white,
+                        ),
+                        padding: MaterialStateProperty.all(
+                          const EdgeInsets.symmetric(vertical: 12),
+                        ),
+                        shape: MaterialStateProperty.all(
+                          RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(8),
                           ),
                         ),
-                      )
-                    : const Icon(
-                        Icons.cancel_presentation_outlined,
-                        color: Colors.white,
-                      ),
-                label: _isResolving
-                    ? const Text('Đang hủy...')
-                    : const Text(
-                        'HỦY BÁO ĐỘNG',
-                        style: TextStyle(
-                          fontWeight: FontWeight.bold,
-                          color: Colors.white,
-                          fontSize: 13,
+                        elevation: MaterialStateProperty.resolveWith<double?>(
+                          (states) =>
+                              states.contains(MaterialState.disabled) ? 0 : 2,
                         ),
                       ),
-                style: ButtonStyle(
-                  backgroundColor: MaterialStateProperty.resolveWith<Color?>((
-                    states,
-                  ) {
-                    if (states.contains(MaterialState.disabled)) {
-                      return Colors.deepOrange.withOpacity(0.45);
-                    }
-                    return Colors.deepOrange;
-                  }),
-                  foregroundColor: MaterialStateProperty.all<Color>(
-                    Colors.white,
-                  ),
-                  padding: MaterialStateProperty.all(
-                    const EdgeInsets.symmetric(vertical: 12),
-                  ),
-                  shape: MaterialStateProperty.all(
-                    RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(8),
                     ),
                   ),
-                  elevation: MaterialStateProperty.resolveWith<double?>(
-                    (states) => states.contains(MaterialState.disabled) ? 0 : 2,
-                  ),
-                ),
-              ),
-            ),
-            const SizedBox(height: 8),
-          ],
+                  const SizedBox(height: 8),
+                ],
+              );
+            },
+          ),
 
           // ===== GỌI KHẨN CẤP =====
           SizedBox(
             width: double.infinity,
             child: ElevatedButton.icon(
               onPressed:
-                  // Disable call when lifecycle indicates auto-call/handled/response received,
-                  // or when EventLog helper indicates call should be disabled.
-                  ([
-                        'AUTOCALLED',
-                        'CANCELED',
-                        'EMERGENCY_RESPONSE_RECEIVED',
-                      ].contains(evLifecycle) ||
-                      _isEmergencyCalling ||
-                      _cancelSent ||
-                      _ev.isCallDisabled)
+                  (_isEmergencyCalling ||
+                      _shouldDisableEmergencyCallButton(_ev))
                   ? null
                   : _handleEmergencyCall,
               icon: const Icon(Icons.phone, color: Colors.white),
@@ -1358,11 +1475,12 @@ class _AlertEventCardState extends State<AlertEventCard>
             child: SizedBox(
               width: double.infinity,
               child: OutlinedButton(
-                // Disable if already sent or currently cancelling
-                onPressed: (_isCancelling || _cancelSent)
+                onPressed:
+                    (_isCancelling ||
+                        _cancelSent ||
+                        _shouldDisableCancelButton(_ev))
                     ? null
                     : () async {
-                        // Single combined confirmation dialog
                         final confirm = await showDialog<bool>(
                           context: context,
                           builder: (ctx) => AlertDialog(
@@ -1472,7 +1590,6 @@ class _AlertEventCardState extends State<AlertEventCard>
                               );
                             }
 
-                            // Mark as sent so user cannot send another request
                             if (mounted) {
                               setState(() {
                                 _cancelSent = true;

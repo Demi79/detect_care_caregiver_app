@@ -267,6 +267,7 @@ extension _ActionLogCardHelpers on ActionLogCard {
         userId: userId,
         cameraId: event.cameraId,
       );
+      await AlarmStatusService.instance.refreshStatus();
       ActiveAlarmNotifier.instance.update(false);
 
       final rootCtx =

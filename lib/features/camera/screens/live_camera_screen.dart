@@ -5,7 +5,9 @@ import 'dart:ui';
 import 'package:detect_care_caregiver_app/core/network/api_client.dart';
 import 'package:detect_care_caregiver_app/core/utils/logger.dart';
 import 'package:detect_care_caregiver_app/features/alarm/data/alarm_remote_data_source.dart';
+import 'package:detect_care_caregiver_app/features/alarm/data/alarm_status.dart';
 import 'package:detect_care_caregiver_app/features/alarm/services/active_alarm_notifier.dart';
+import 'package:detect_care_caregiver_app/features/alarm/services/alarm_status_service.dart';
 import 'package:detect_care_caregiver_app/features/auth/data/auth_storage.dart';
 import 'package:detect_care_caregiver_app/features/camera/core/camera_core.dart';
 import 'package:detect_care_caregiver_app/features/camera/core/camera_player_factory.dart';
@@ -74,6 +76,10 @@ class _LiveCameraScreenState extends State<LiveCameraScreen>
     super.initState();
     // Thêm observer để monitor lifecycle
     WidgetsBinding.instance.addObserver(this);
+
+    AlarmStatusService.instance.startPolling(
+      interval: const Duration(seconds: 10),
+    );
 
     // Lightweight init - chỉ setup state managers (không load/play)
     final shouldLoadCache = widget.initialUrl == null && widget.loadCache;
@@ -665,26 +671,43 @@ class _LiveCameraScreenState extends State<LiveCameraScreen>
     AppLogger.d(
       '[Camera] _onCancelAlarm called with eventId=$eventId, alarmActive=${ActiveAlarmNotifier.instance.value}',
     );
-
-    // If no mapped event, still allow canceling active alarms via the notifier
-    if ((eventId == null || eventId.isEmpty) &&
-        !ActiveAlarmNotifier.instance.value) {
-      AppLogger.w('[Camera] _onCancelAlarm: no eventId and no active alarm');
-      return;
-    }
-
     if (_cancelingAlarm) return;
     setState(() => _cancelingAlarm = true);
     try {
+      final status = await AlarmStatusService.instance.refreshStatus();
+      final alarmActive = _computeAlarmActive(status);
+      final activeIds = status?.activeAlarms ?? const <String>[];
+
+      AppLogger.d(
+        '[Camera] _onCancelAlarm: alarmActive=$alarmActive, isPlaying=${status?.isPlaying}, eventId=$eventId, activeIds=$activeIds',
+      );
+
+      if (!alarmActive) {
+        AppLogger.d('[Camera] No active alarm from status API');
+        if (mounted) {
+          context.showCameraMessage('Không có báo động đang hoạt động.');
+        }
+        return;
+      }
+
       final messenger = ScaffoldMessenger.of(context);
       messenger.showSnackBar(
         const SnackBar(content: Text('Đang hủy báo động...')),
       );
 
+      final userId = await AuthStorage.getUserId();
+      if (userId == null || userId.isEmpty) {
+        if (mounted) {
+          context.showCameraMessage('Không xác thực được người dùng.');
+        }
+        return;
+      }
+
       // If we have a mapped event id, mark that event as RESOLVED (don't
       // permanently cancel it) so the UI and audits reflect an acknowledged
       // alarm. Also attempt to notify external alarm controller.
       if (eventId != null && eventId.isNotEmpty) {
+        AppLogger.d('[Camera] Canceling alarm for mapped event: $eventId');
         try {
           await EventsRemoteDataSource().updateEventLifecycle(
             eventId: eventId,
@@ -696,14 +719,11 @@ class _LiveCameraScreenState extends State<LiveCameraScreen>
         }
 
         try {
-          final userId = await AuthStorage.getUserId();
-          if (userId != null && userId.isNotEmpty) {
-            await AlarmRemoteDataSource().cancelAlarm(
-              eventId: eventId,
-              userId: userId,
-              cameraId: null,
-            );
-          }
+          await AlarmRemoteDataSource().cancelAlarm(
+            eventId: eventId,
+            userId: userId,
+            cameraId: null,
+          );
         } catch (e) {
           AppLogger.e('External cancel alarm failed: $e');
         }
@@ -713,90 +733,103 @@ class _LiveCameraScreenState extends State<LiveCameraScreen>
             context,
           ).showSnackBar(const SnackBar(content: Text('Đã hủy báo động.')));
         }
-        ActiveAlarmNotifier.instance.update(false);
+        await AlarmStatusService.instance.refreshStatus();
         try {
           AppEvents.instance.notifyTableChanged('event_detections');
         } catch (_) {}
         return;
       }
 
-      // No mapped event id — try to find active alarms (like AlarmBubbleOverlay)
-      // and resolve them.
-      try {
-        final to = DateTime.now().toUtc();
-        final from = to.subtract(const Duration(minutes: 30));
-        final params = <String, dynamic>{
-          'lifecycle_state': 'ALARM_ACTIVATED',
-          'from': from.toIso8601String(),
-          'to': to.toIso8601String(),
-          'limit': 20,
-        };
-        final rows = await EventsRemoteDataSource().listEvents(
-          extraQuery: params,
-        );
-        final ids = rows
-            .map((r) => (r['id'] ?? r['event_id'] ?? r['eventId'])?.toString())
-            .whereType<String>()
-            .toSet()
-            .toList();
+      final idsToResolve = <String>{};
 
-        if (ids.isEmpty) {
-          AppLogger.d('[Camera] No active alarm events found to cancel');
-          if (mounted)
-            context.showCameraMessage(
-              'Không tìm thấy báo động đang hoạt động.',
-            );
-          ActiveAlarmNotifier.instance.update(false);
-          try {
-            AppEvents.instance.notifyTableChanged('event_detections');
-          } catch (_) {}
-          return;
+      if (activeIds.isNotEmpty) {
+        idsToResolve.addAll(activeIds);
+      }
+
+      final statusEventId = status?.eventId;
+      if (statusEventId != null && statusEventId.isNotEmpty) {
+        idsToResolve.add(statusEventId);
+      }
+
+      if (idsToResolve.isEmpty) {
+        final fallbackIds = await _fetchFallbackAlarmIds();
+        idsToResolve.addAll(fallbackIds);
+      }
+
+      final ids = idsToResolve.toList();
+
+      if (ids.isEmpty) {
+        AppLogger.d('[Camera] No active alarm events found to cancel');
+        if (mounted) {
+          context.showCameraMessage('Không tìm thấy báo động đang hoạt động.');
         }
-
-        // Resolve each found alarm and attempt to notify external alarm controller.
-        for (final id in ids) {
-          try {
-            await EventsRemoteDataSource().updateEventLifecycle(
-              eventId: id,
-              lifecycleState: 'RESOLVED',
-              notes: 'RESOLVED via camera overlay',
-            );
-          } catch (e) {
-            AppLogger.e('Failed to resolve event $id: $e');
-          }
-
-          try {
-            final userId = await AuthStorage.getUserId();
-            if (userId != null && userId.isNotEmpty) {
-              await AlarmRemoteDataSource().cancelAlarm(
-                eventId: id,
-                userId: userId,
-                cameraId: null,
-              );
-            }
-          } catch (e) {
-            AppLogger.e('External cancel alarm failed for $id: $e');
-          }
-        }
-
-        AppLogger.d('[Camera] Resolved ${ids.length} alarm events: $ids');
-        if (mounted)
-          ScaffoldMessenger.of(
-            context,
-          ).showSnackBar(const SnackBar(content: Text('Đã hủy báo động.')));
-        ActiveAlarmNotifier.instance.update(false);
         try {
           AppEvents.instance.notifyTableChanged('event_detections');
         } catch (_) {}
-      } catch (e, st) {
-        AppLogger.e('Failed to discover/resolve active alarms: $e', e, st);
-        if (mounted) context.showCameraMessage('Hủy báo động thất bại.');
+        return;
       }
+
+      for (final id in ids) {
+        try {
+          await EventsRemoteDataSource().updateEventLifecycle(
+            eventId: id,
+            lifecycleState: 'RESOLVED',
+            notes: 'RESOLVED via camera overlay',
+          );
+        } catch (e) {
+          AppLogger.e('Failed to resolve event $id: $e');
+        }
+
+        try {
+          await AlarmRemoteDataSource().cancelAlarm(
+            eventId: id,
+            userId: userId,
+            cameraId: null,
+          );
+        } catch (e) {
+          AppLogger.e('External cancel alarm failed for $id: $e');
+        }
+      }
+
+      AppLogger.d('[Camera] Resolved ${ids.length} alarm events: $ids');
+      if (mounted)
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(const SnackBar(content: Text('Đã hủy báo động.')));
+      await AlarmStatusService.instance.refreshStatus();
+      try {
+        AppEvents.instance.notifyTableChanged('event_detections');
+      } catch (_) {}
     } catch (e, st) {
       AppLogger.e('Failed to cancel mapped event alarm: $e', e, st);
       if (mounted) context.showCameraMessage('Hủy báo động thất bại.');
     } finally {
       if (mounted) setState(() => _cancelingAlarm = false);
+    }
+  }
+
+  Future<List<String>> _fetchFallbackAlarmIds() async {
+    try {
+      final to = DateTime.now().toUtc();
+      final from = to.subtract(const Duration(minutes: 30));
+      final params = <String, dynamic>{
+        'lifecycle_state': 'ALARM_ACTIVATED',
+        'from': from.toIso8601String(),
+        'to': to.toIso8601String(),
+        'limit': 20,
+      };
+      final rows = await EventsRemoteDataSource().listEvents(
+        extraQuery: params,
+      );
+      final ids = rows
+          .map((r) => (r['id'] ?? r['event_id'] ?? r['eventId'])?.toString())
+          .whereType<String>()
+          .toSet()
+          .toList();
+      return ids;
+    } catch (e, st) {
+      AppLogger.e('Failed to fetch fallback alarm ids: $e', e, st);
+      return [];
     }
   }
 
@@ -834,8 +867,7 @@ class _LiveCameraScreenState extends State<LiveCameraScreen>
       );
       AppLogger.d('[Camera] setAlarm completed successfully');
 
-      // Reflect activation in UI notifier
-      ActiveAlarmNotifier.instance.update(true);
+      await AlarmStatusService.instance.refreshStatus();
 
       if (mounted) {
         ScaffoldMessenger.of(
@@ -848,6 +880,13 @@ class _LiveCameraScreenState extends State<LiveCameraScreen>
     } finally {
       if (mounted) setState(() => _activatingAlarm = false);
     }
+  }
+
+  bool _computeAlarmActive(AlarmStatus? status) {
+    final statusActive =
+        status?.isEventActive(widget.mappedEventId) ??
+        (status?.isPlaying ?? false);
+    return statusActive || ActiveAlarmNotifier.instance.value;
   }
 
   @override
@@ -1434,7 +1473,9 @@ class _LiveCameraScreenState extends State<LiveCameraScreen>
   Widget _buildFullscreenActionRow(CameraState state) {
     return ValueListenableBuilder<bool>(
       valueListenable: ActiveAlarmNotifier.instance,
-      builder: (context, alarmActive, _) {
+      builder: (context, _, __) {
+        final status = AlarmStatusService.instance.statusNotifier.value;
+        final alarmActive = _computeAlarmActive(status);
         final mainLabel = alarmActive
             ? (_cancelingAlarm ? 'Đang hủy...' : 'Hủy báo động')
             : (_alarming ? 'Đang...' : 'Báo động');
@@ -1684,7 +1725,9 @@ class _LiveCameraScreenState extends State<LiveCameraScreen>
     const spacing = SizedBox(width: 12);
     return ValueListenableBuilder<bool>(
       valueListenable: ActiveAlarmNotifier.instance,
-      builder: (context, alarmActive, _) {
+      builder: (context, _, __) {
+        final status = AlarmStatusService.instance.statusNotifier.value;
+        final alarmActive = _computeAlarmActive(status);
         // Common button definitions
         final captureLabel = _alarming ? 'Đang...' : 'CHỤP ẢNH';
         final captureIcon = Icons.warning_amber_rounded;
