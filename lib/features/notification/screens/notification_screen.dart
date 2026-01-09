@@ -1,5 +1,6 @@
 import 'dart:async';
 
+import 'package:detect_care_caregiver_app/core/events/app_events.dart';
 import 'package:detect_care_caregiver_app/core/models/notification.dart';
 import 'package:detect_care_caregiver_app/core/utils/backend_enums.dart';
 import 'package:detect_care_caregiver_app/features/alarm/data/alarm_remote_data_source.dart';
@@ -95,9 +96,25 @@ class _NotificationScreenState extends State<NotificationScreen> {
             });
           });
     } catch (_) {}
+
+    try {
+      _notificationReceivedSub = AppEvents.instance.notificationReceived.listen((
+        _,
+      ) {
+        try {
+          _debounceTimer?.cancel();
+        } catch (_) {}
+        _debounceTimer = Timer(const Duration(milliseconds: 800), () async {
+          if (!mounted) return;
+          await _loadNotifications();
+          await _fetchUnreadCount();
+        });
+      });
+    } catch (_) {}
   }
 
   StreamSubscription<Map<String, dynamic>?>? _notificationSubscription;
+  StreamSubscription<void>? _notificationReceivedSub;
   Timer? _debounceTimer;
 
   Future<void> _loadNotifications() async {
@@ -129,6 +146,7 @@ class _NotificationScreenState extends State<NotificationScreen> {
 
   Future<void> _fetchUnreadCount() async {
     final count = await _apiService.getUnreadCount();
+    if (!mounted || count == null) return;
     setState(() => _unreadCount = count);
   }
 
@@ -827,6 +845,9 @@ class _NotificationScreenState extends State<NotificationScreen> {
   void dispose() {
     try {
       _notificationSubscription?.cancel();
+    } catch (_) {}
+    try {
+      _notificationReceivedSub?.cancel();
     } catch (_) {}
     try {
       _debounceTimer?.cancel();

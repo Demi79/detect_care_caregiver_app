@@ -76,6 +76,7 @@ class _HomeScreenState extends State<HomeScreen>
   Timer? _notificationRefreshTimer;
   StreamSubscription<void>? _eventsChangedSub;
   StreamSubscription<Map<String, dynamic>>? _eventUpdatedSub;
+  StreamSubscription<void>? _notificationReceivedSub;
 
   bool _skipMergeOnNextRefresh = false;
 
@@ -110,6 +111,13 @@ class _HomeScreenState extends State<HomeScreen>
     _refreshLogs();
     _loadNotificationCount();
 
+    _notificationReceivedSub = AppEvents.instance.notificationReceived.listen((
+      _,
+    ) {
+      if (!mounted) return;
+      _loadNotificationCount();
+    });
+
     _eventsChangedSub = AppEvents.instance.eventsChanged.listen((_) {
       if (!mounted) return;
       _skipMergeOnNextRefresh = true;
@@ -128,7 +136,7 @@ class _HomeScreenState extends State<HomeScreen>
             _logs[idx] = e;
           } else {
             _logs.insert(0, e);
-            _notificationCount++;
+            _loadNotificationCount();
             HapticFeedback.selectionClick();
           }
         });
@@ -209,9 +217,11 @@ class _HomeScreenState extends State<HomeScreen>
     try {
       final service = NotificationApiService();
       final count = await service.getUnreadCount();
-      if (mounted) setState(() => _notificationCount = count);
+      if (mounted && count != null) {
+        setState(() => _notificationCount = count);
+      }
     } catch (_) {
-      if (mounted) setState(() => _notificationCount = 0);
+      // Keep previous count on error.
     }
   }
 
@@ -726,6 +736,7 @@ class _HomeScreenState extends State<HomeScreen>
     _contentScrollController.dispose();
     _eventsChangedSub?.cancel();
     _eventUpdatedSub?.cancel();
+    _notificationReceivedSub?.cancel();
     _supa.dispose();
     super.dispose();
   }
