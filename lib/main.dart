@@ -1,9 +1,12 @@
+import 'dart:convert';
+
 import 'package:detect_care_caregiver_app/widgets/alarm_bubble.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
+import 'package:flutter_ringtone_player/flutter_ringtone_player.dart';
 import 'package:provider/provider.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
@@ -72,6 +75,38 @@ Future<void> firebaseBackgroundHandler(RemoteMessage message) async {
       '⏱️ [FCM-BG] FlutterLocalNotifications init: ${initDuration.inMilliseconds}ms',
     );
 
+    final data = message.data;
+    final eventType = data['event_type'] ?? data['eventType'];
+    final lifecycle = data['lifecycle_state'] ?? data['lifecycleState'];
+    final eventId = (data['event_id'] ?? data['id'] ?? data['eventId'])
+        ?.toString();
+
+    // Stop any active alarm/notification for resolved events.
+    if (eventType == 'event_resolved' ||
+        lifecycle?.toString().toUpperCase() == 'RESOLVED') {
+      debugPrint('🛑 [FCM-BG] Stopping alarm for resolved event');
+      try {
+        await FlutterRingtonePlayer().stop();
+      } catch (_) {}
+
+      if (eventId != null && eventId.isNotEmpty) {
+        try {
+          final id = eventId.hashCode & 0x7FFFFFFF;
+          await flnp.cancel(id);
+        } catch (_) {}
+      }
+      return;
+    }
+
+    if (eventType != null) {
+      final t = eventType.toString().trim().toLowerCase();
+      if (t == 'normal_activity' ||
+          t == 'normal activity' ||
+          t == 'normal-activity') {
+        return;
+      }
+    }
+
     const channelId = 'healthcare_alerts';
     const channelName = 'Cảnh báo Y tế';
     const channelDesc = 'Thông báo cảnh báo y tế và sự kiện khẩn cấp';
@@ -124,12 +159,31 @@ Future<void> firebaseBackgroundHandler(RemoteMessage message) async {
       presentBadge: true,
     );
 
+    String? payload;
+    try {
+      final deeplink =
+          data['deeplink'] ?? data['link'] ?? data['url'] ?? data['action_url'];
+      if (deeplink != null && deeplink.toString().isNotEmpty) {
+        payload = jsonEncode({'deeplink': deeplink.toString()});
+      } else if (eventId != null && eventId.isNotEmpty) {
+        payload = jsonEncode({'deeplink': 'detectcare://alert/$eventId'});
+      }
+    } catch (_) {}
+
+    int notificationId;
+    if (eventId != null && eventId.isNotEmpty) {
+      notificationId = eventId.hashCode & 0x7FFFFFFF;
+    } else {
+      notificationId = DateTime.now().millisecondsSinceEpoch.remainder(100000);
+    }
+
     final showStart = DateTime.now();
     await flnp.show(
-      DateTime.now().millisecondsSinceEpoch.remainder(100000),
+      notificationId,
       message.notification?.title ?? 'New Alert',
       message.notification?.body ?? 'New healthcare event detected',
       NotificationDetails(android: androidDetails, iOS: iosDetails),
+      payload: payload,
     );
     final showDuration = DateTime.now().difference(showStart);
     debugPrint(
@@ -325,6 +379,8 @@ Future<void> main() async {
               provider.load();
               // Đăng ký FCM cho user hiện tại
               fcmRegistration.registerForUser(userId);
+              // Subscribe to realtime notifications for badge updates
+              NotificationManager().subscribeToNotifications(userId);
             }
 
             return provider;

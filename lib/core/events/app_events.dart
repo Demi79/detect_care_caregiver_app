@@ -16,6 +16,8 @@ class AppEvents {
 
   final StreamController<String> _tableChanged =
       StreamController<String>.broadcast();
+  final StreamController<void> _notificationReceived =
+      StreamController<void>.broadcast();
 
   final Map<String, DateTime> _lastTableEmit = {};
 
@@ -26,6 +28,7 @@ class AppEvents {
   Stream<Map<String, dynamic>> get eventUpdated => _eventUpdated.stream;
 
   Stream<String> get tableChanged => _tableChanged.stream;
+  Stream<void> get notificationReceived => _notificationReceived.stream;
 
   void notifyEventsChanged() {
     try {
@@ -57,10 +60,17 @@ class AppEvents {
     } catch (_) {}
   }
 
+  void notifyNotificationReceived() {
+    try {
+      _notificationReceived.add(null);
+    } catch (_) {}
+  }
+
   void dispose() {
     try {
       _eventsChanged.close();
       _eventUpdated.close();
+      _notificationReceived.close();
     } catch (_) {}
   }
 }
