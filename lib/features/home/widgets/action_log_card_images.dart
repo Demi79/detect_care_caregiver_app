@@ -59,14 +59,19 @@ extension _ActionLogCardImages on ActionLogCard {
           ) {
             final footerSelectedUrl = selectedSource?.path;
 
+            final lifecycle = event.lifecycleState
+                ?.toString()
+                .trim()
+                .toUpperCase();
             final hasEmergency = event.hasEmergencyCall ?? false;
             final emergencySource = event.lastEmergencyCallSource
                 ?.toString()
                 .trim();
             final shouldDisableCall =
-                hasEmergency &&
-                emergencySource != null &&
-                emergencySource.isNotEmpty;
+                (lifecycle == 'RESOLVED') ||
+                (hasEmergency &&
+                    emergencySource != null &&
+                    emergencySource.isNotEmpty);
 
             return Padding(
               padding: const EdgeInsets.symmetric(horizontal: 4),
@@ -862,8 +867,13 @@ Future<void> buildEventImagesModal({
                                   .trim();
                               final shouldDisableCall =
                                   hasEmergency &&
-                                  emergencySource != null &&
-                                  emergencySource.isNotEmpty;
+                                      emergencySource != null &&
+                                      emergencySource.isNotEmpty ||
+                                  eventForUse.lifecycleState
+                                          ?.toString()
+                                          .trim()
+                                          .toUpperCase() ==
+                                      'RESOLVED';
 
                               return SizedBox(
                                 width: double.infinity,

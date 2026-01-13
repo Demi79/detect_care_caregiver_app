@@ -740,6 +740,9 @@ class _AlertEventCardState extends State<AlertEventCard>
 
   bool _shouldDisableEmergencyCallButton(EventLog ev) {
     try {
+      final lifecycle = ev.lifecycleState?.toString().trim().toUpperCase();
+      if (lifecycle == 'RESOLVED') return true;
+
       final hasEmergency = ev.hasEmergencyCall ?? false;
       final emergencySource = ev.lastEmergencyCallSource?.toString().trim();
 
@@ -1750,6 +1753,7 @@ class _AlertEventCardState extends State<AlertEventCard>
 
   Future<void> _showImagesModal(BuildContext pageContext) {
     final event = _buildEventLogForImages();
+    final evForModal = _liveEvent ?? event;
     return buildEventImagesModal(
       pageContext: pageContext,
       event: event,
@@ -1770,7 +1774,9 @@ class _AlertEventCardState extends State<AlertEventCard>
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
                   ElevatedButton.icon(
-                    onPressed: _cancelSent
+                    onPressed:
+                        _cancelSent ||
+                            _shouldDisableEmergencyCallButton(evForModal)
                         ? null
                         : () => _initiateEmergencyCall(context),
                     icon: const Icon(Icons.call),
