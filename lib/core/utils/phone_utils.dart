@@ -72,4 +72,35 @@ class PhoneUtils {
 
     return false;
   }
+
+  /// Convert various Vietnamese phone formats to a local format starting with 0
+  static String toLocalVietnamese(String phone) {
+    if (phone.isEmpty) return phone;
+
+    // Keep original for fallback
+    final original = phone;
+
+    // Remove non-digit characters
+    String cleaned = phone.replaceAll(RegExp(r'\D'), '');
+
+    // Remove international 00 prefix if present
+    if (cleaned.startsWith('00')) {
+      cleaned = cleaned.substring(2);
+    }
+
+    // If starts with country code 84, drop it and prefix 0
+    if (cleaned.startsWith('84') && cleaned.length > 2) {
+      final rest = cleaned.substring(2);
+      return '0$rest';
+    }
+
+    // If already local (starts with 0), return as-is
+    if (cleaned.startsWith('0')) return cleaned;
+
+    // If it's 9 digits (no leading zero), add leading 0
+    if (cleaned.length == 9) return '0$cleaned';
+
+    // Fallback: return original input to avoid unexpected modifications
+    return original;
+  }
 }

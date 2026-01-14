@@ -8,6 +8,7 @@ import 'package:detect_care_caregiver_app/features/assignments/data/assignments_
 import 'package:detect_care_caregiver_app/features/auth/providers/auth_provider.dart';
 import 'package:detect_care_caregiver_app/widgets/auth_gate.dart';
 import 'package:detect_care_caregiver_app/core/utils/backend_enums.dart';
+import 'package:detect_care_caregiver_app/core/providers/permissions_provider.dart';
 
 class PendingAssignmentsScreen extends StatefulWidget {
   const PendingAssignmentsScreen({super.key});
@@ -341,6 +342,9 @@ class _PendingAssignmentsScreenState extends State<PendingAssignmentsScreen> {
             width: double.infinity,
             child: FilledButton.icon(
               onPressed: () async {
+                try {
+                  context.read<PermissionsProvider>().reset();
+                } catch (_) {}
                 await context.read<AuthProvider>().logout();
                 if (mounted) {
                   Navigator.of(context).pushAndRemoveUntil(

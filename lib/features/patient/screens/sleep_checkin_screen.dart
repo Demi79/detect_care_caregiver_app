@@ -3,6 +3,7 @@ import 'package:detect_care_caregiver_app/features/assignments/data/assignments_
 import 'package:detect_care_caregiver_app/features/patient/models/sleep_checkin.dart';
 import 'package:flutter/material.dart';
 import 'package:detect_care_caregiver_app/features/auth/data/auth_storage.dart';
+import 'package:detect_care_caregiver_app/core/utils/error_handler.dart';
 import 'package:detect_care_caregiver_app/features/patient/utils/datetime_ext.dart';
 import '../../../../../core/theme/app_theme.dart';
 
@@ -110,7 +111,7 @@ class _SleepCheckinScreenState extends State<SleepCheckinScreen> {
       debugPrint("Checkin error: $e");
       ScaffoldMessenger.of(
         context,
-      ).showSnackBar(SnackBar(content: Text("Lỗi khi ghi nhận: $e")));
+      ).showSnackBar(SnackBar(content: Text(formatErrorMessage(e))));
     } finally {
       setState(() => _loading = false);
     }

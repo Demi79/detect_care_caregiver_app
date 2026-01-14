@@ -9,6 +9,7 @@ import 'package:detect_care_caregiver_app/features/emergency/emergency_call_help
 
 import '../../features/emergency_contacts/data/emergency_contacts_remote_data_source.dart';
 import '../../features/events/data/events_remote_data_source.dart';
+import '../../features/assignments/data/assignments_remote_data_source.dart';
 import '../../features/home/models/log_entry.dart';
 import '../../features/home/widgets/action_log_card.dart';
 import '../../main.dart';
@@ -16,16 +17,78 @@ import '../../services/alert_settings_manager.dart';
 import '../../services/audio_service.dart';
 import '../events/app_events.dart';
 import '../utils/app_lifecycle.dart';
+import 'package:detect_care_caregiver_app/features/auth/data/auth_storage.dart';
 
 class InAppAlert {
-  static bool _showing = false;
+  static int _showingCount = 0;
   static DateTime? _lastShownMinute;
+  static final Set<String> _activeEventIds = <String>{};
 
   static Future<void> show(LogEntry e) async {
     print('🧩 [InAppAlert] Request to show popup for event ${e.eventId}');
-    print(' - _showing: $_showing');
+    // print(' - _showing: $_showing');
     print(' - isForeground: ${AppLifecycle.isForeground}');
-    final eventTime = e.detectedAt ?? e.createdAt ?? DateTime.now();
+
+    await Future.delayed(const Duration(milliseconds: 300));
+
+    try {
+      final id = e.eventId?.toString() ?? '';
+      if (id.isNotEmpty && _activeEventIds.contains(id)) {
+        print('❌ Popup suppressed: event ${id} is already showing');
+        return;
+      }
+    } catch (_) {}
+
+    final currentUserId = await AuthStorage.getUserId();
+
+    try {
+      final creator = e.createBy?.toString();
+      if (creator != null && creator.isNotEmpty && currentUserId != null) {
+        if (creator == currentUserId || creator.contains(currentUserId)) {
+          print('❌ Popup suppressed: self-triggered by create_by');
+          return;
+        }
+      }
+    } catch (_) {}
+
+    try {
+      final actor = e.contextData?['actor']?.toString();
+      if (actor != null && actor.isNotEmpty && currentUserId != null) {
+        if (actor == currentUserId || actor.contains(currentUserId)) {
+          print('❌ Popup suppressed: self-triggered by actor');
+          return;
+        }
+      }
+    } catch (_) {}
+
+    try {
+      String? updatedBy;
+      try {
+        updatedBy = (e as dynamic).updatedBy?.toString();
+      } catch (_) {
+        updatedBy = null;
+      }
+      final updFromContext = e.contextData?['updated_by']?.toString();
+      final updFromDetection = e.detectionData?['updated_by']?.toString();
+      if (currentUserId != null) {
+        if ((updatedBy != null &&
+                updatedBy.isNotEmpty &&
+                updatedBy == currentUserId) ||
+            (updFromContext != null &&
+                updFromContext.isNotEmpty &&
+                updFromContext == currentUserId) ||
+            (updFromDetection != null &&
+                updFromDetection.isNotEmpty &&
+                updFromDetection == currentUserId)) {
+          print(
+            '❌ Popup suppressed: self-triggered by updated_by=$currentUserId',
+          );
+          return;
+        }
+      }
+    } catch (_) {}
+
+    final eventTime = e.createdAt ?? e.detectedAt ?? DateTime.now();
     DateTime truncateToMinute(DateTime t) =>
         DateTime(t.year, t.month, t.day, t.hour, t.minute);
     final eventMinute = truncateToMinute(eventTime);
@@ -49,23 +112,40 @@ class InAppAlert {
       return;
     }
 
-    if (_lastShownMinute != null && _lastShownMinute == eventMinute) {
+    if (_showingCount == 0 &&
+        _lastShownMinute != null &&
+        _lastShownMinute == eventMinute) {
       print('❌ Popup suppressed: already shown an event in the same minute');
       return;
     }
 
-    if (_showing &&
-        _lastShownMinute != null &&
-        eventMinute.isAfter(_lastShownMinute!)) {
-      try {
-        print('ℹ️ New-minute event arrived; dismissing old popup to show new');
-        Navigator.of(ctx, rootNavigator: true).maybePop();
-        await Future.delayed(const Duration(milliseconds: 220));
-      } catch (_) {}
+    if (_showingCount > 0) {
+      print(
+        'ℹ️ ${_showingCount} popup(s) đang hiển thị; show event mới để đè lên (không dismiss event cũ)',
+      );
     }
 
-    _showing = true;
+    try {
+      final id = e.eventId?.toString() ?? '';
+      if (id.isNotEmpty) _activeEventIds.add(id);
+    } catch (_) {}
+
+    _showingCount++;
     _lastShownMinute = eventMinute;
+
+    // Subscriptions to auto-dismiss when event is canceled remotely
+    StreamSubscription<String>? tableSub;
+    StreamSubscription<Map<String, dynamic>>? eventUpdatedSub;
+    bool remoteCanceledDetected = false;
+
+    Future<String?> resolveCustomerId() async {
+      try {
+        final ds = AssignmentsRemoteDataSource();
+        final list = await ds.listPending(status: 'accepted');
+        if (list.isNotEmpty) return list.first.customerId;
+      } catch (_) {}
+      return null;
+    }
 
     final settings = AlertSettingsManager.instance.settings;
     Timer? forwardTimer;
@@ -144,6 +224,117 @@ class InAppAlert {
     }
 
     try {
+      try {
+        tableSub = AppEvents.instance.tableChanged.listen((table) async {
+          if (remoteCanceledDetected) return;
+          if (table != 'event_detections') return;
+          try {
+            final svc = EventService.withDefaultClient();
+            final latest = await svc.fetchLogDetail(e.eventId);
+            final ls = (latest.lifecycleState ?? '').toString().toUpperCase();
+            final lsUpper = ls.toString().toUpperCase();
+            if (lsUpper == 'RESOLVED') {
+              AppLogger.d(
+                '[InAppAlert] lifecycle=RESOLVED — keep popup open for ${e.eventId}',
+              );
+              return;
+            }
+            if (lsUpper == 'CANCELED' || lsUpper == 'CANCELLED') {
+              remoteCanceledDetected = true;
+              final customerId = await resolveCustomerId();
+              final updatedBy = (latest as dynamic).updatedBy?.toString() ?? '';
+              final isCanceledByCustomer =
+                  updatedBy.isNotEmpty &&
+                  customerId != null &&
+                  updatedBy == customerId;
+
+              final message = isCanceledByCustomer
+                  ? 'Sự kiện này vừa bị hủy bởi khách hàng'
+                  : 'Cảnh báo đã được hủy thành công';
+              try {
+                ScaffoldMessenger.of(ctx).showSnackBar(
+                  SnackBar(
+                    content: Text(message),
+                    backgroundColor: isCanceledByCustomer
+                        ? Colors.orange
+                        : Colors.green,
+                    behavior: SnackBarBehavior.floating,
+                    duration: const Duration(milliseconds: 1800),
+                  ),
+                );
+              } catch (_) {}
+              try {
+                cancelForwardTimerLocal();
+                Navigator.of(ctx, rootNavigator: true).maybePop();
+              } catch (_) {}
+            }
+          } catch (_) {}
+        });
+      } catch (_) {}
+
+      try {
+        eventUpdatedSub = AppEvents.instance.eventUpdated.listen((
+          payload,
+        ) async {
+          if (remoteCanceledDetected) return;
+          try {
+            final id = payload is Map
+                ? (payload['id'] ?? payload['eventId'] ?? payload['event_id'])
+                : null;
+            if (id == null || id.toString() != e.eventId) return;
+
+            final ls = payload is Map
+                ? (payload['lifecycle_state'] ??
+                      payload['lifecycleState'] ??
+                      payload['lifecycle'])
+                : null;
+            if (ls == null) return;
+
+            final lsUpper = ls.toString().toUpperCase();
+            if (lsUpper == 'RESOLVED') {
+              AppLogger.d(
+                '[InAppAlert] eventUpdated lifecycle=RESOLVED — ignoring for dismiss (id=${e.eventId})',
+              );
+              return;
+            }
+            if (lsUpper == 'CANCELED' || lsUpper == 'CANCELLED') {
+              remoteCanceledDetected = true;
+              final updatedByVal = payload is Map
+                  ? (payload['updated_by'] ?? payload['updatedBy'])
+                  : null;
+              final updatedBy = updatedByVal?.toString() ?? '';
+              final customerId = await resolveCustomerId();
+              final isCanceledByCustomer =
+                  updatedBy.isNotEmpty &&
+                  customerId != null &&
+                  updatedBy == customerId;
+
+              final message = isCanceledByCustomer
+                  ? 'Sự kiện này vừa bị hủy bởi khách hàng'
+                  : 'Cảnh báo đã được hủy thành công';
+              try {
+                ScaffoldMessenger.of(ctx).showSnackBar(
+                  SnackBar(
+                    content: Text(message),
+                    backgroundColor: isCanceledByCustomer
+                        ? Colors.orange
+                        : Colors.green,
+                    behavior: SnackBarBehavior.floating,
+                    duration: const Duration(milliseconds: 1800),
+                  ),
+                );
+              } catch (_) {}
+              try {
+                cancelForwardTimerLocal();
+                Navigator.of(ctx, rootNavigator: true).maybePop();
+              } catch (_) {}
+            }
+          } catch (err) {
+            AppLogger.w('eventUpdated handling error: $err');
+          }
+        });
+      } catch (_) {}
+
       await showGeneralDialog(
         context: ctx,
         barrierDismissible: true,
@@ -162,15 +353,19 @@ class InAppAlert {
                   child: Material(
                     color: Colors.transparent,
                     child: AlertEventCard(
+                      event: e,
                       eventId: e.eventId,
                       eventType: e.eventType,
                       // patientName: "Bệnh nhân XYZ",
-                      timestamp: e.detectedAt ?? e.createdAt ?? DateTime.now(),
+                      timestamp: e.createdAt ?? e.detectedAt ?? DateTime.now(),
+                      createdAt: e.createdAt,
                       // location: "Phòng ngủ",
                       severity: _mapSeverityFrom(e),
                       description: (e.eventDescription?.isNotEmpty ?? false)
                           ? e.eventDescription!
-                          : 'Chạm “Chi tiết” để xem thêm…',
+                          : (e.notes?.isNotEmpty ?? false)
+                          ? e.notes!
+                          : 'Chạm "Chi tiết" để xem thêm…',
                       isHandled: _isHandled(e),
                       detectionData: e.detectionData,
                       contextData: e.contextData,
@@ -397,11 +592,28 @@ class InAppAlert {
         },
       );
     } finally {
+      try {
+        final id = e.eventId?.toString() ?? '';
+        if (id.isNotEmpty) _activeEventIds.remove(id);
+      } catch (_) {}
       // Always stop any in-app audio when the alert closes.
       try {
         AudioService.instance.stop();
       } catch (_) {}
-      _showing = false;
+      try {
+        await tableSub?.cancel();
+      } catch (_) {}
+      try {
+        await eventUpdatedSub?.cancel();
+      } catch (_) {}
+
+      // ✅ Update home screen khi popup đóng (do event bị cancel hoặc dismiss)
+      try {
+        AppEvents.instance.notifyEventsChanged();
+      } catch (_) {}
+
+      _showingCount--; // ✅ Giảm counter khi popup đóng
+      if (_showingCount < 0) _showingCount = 0; // ✅ Safety check
     }
   }
 

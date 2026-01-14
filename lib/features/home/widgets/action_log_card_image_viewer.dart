@@ -1,12 +1,23 @@
 import 'package:flutter/material.dart';
 
+/// Accept either a list of strings or objects exposing `.path` (e.g. ImageSource)
 void showActionLogCardImageViewer(
   BuildContext context,
-  List<String> urls,
+  List<dynamic> urls,
   int initialIndex,
 ) {
   if (urls.isEmpty) return;
-  var currentIndex = initialIndex.clamp(0, urls.length - 1).toInt();
+
+  final stringUrls = urls.map<String>((u) {
+    if (u is String) return u;
+    try {
+      final p = (u as dynamic).path;
+      if (p is String) return p;
+    } catch (_) {}
+    return u.toString();
+  }).toList();
+
+  var currentIndex = initialIndex.clamp(0, stringUrls.length - 1).toInt();
   showDialog(
     context: context,
     builder: (context) => StatefulBuilder(

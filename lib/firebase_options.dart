@@ -85,4 +85,5 @@ class DefaultFirebaseOptions {
     storageBucket: 'vision-ai-ecfb4.firebasestorage.app',
     measurementId: 'G-SG44CK049R',
   );
+
 }

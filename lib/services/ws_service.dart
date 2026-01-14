@@ -3,7 +3,7 @@ import 'dart:convert';
 import 'dart:io' as io;
 import 'dart:math' as math;
 
-import 'package:detect_care_caregiver_app/services/notification_service.dart';
+import 'package:detect_care_caregiver_app/services/notification_manager.dart';
 import 'package:flutter/foundation.dart';
 
 typedef OnData = void Function(Map<String, dynamic> data);
@@ -235,11 +235,13 @@ class WsService {
         onData(alertData);
 
         // Show notification
-        NotificationService.show(
-          '${appStatus.toUpperCase()} Alert',
-          eventDesc,
+        NotificationManager().showNotification(
+          title: '${appStatus.toUpperCase()} Alert',
+          body: eventDesc,
           urgent: appStatus == 'danger',
-          severity: appStatus == 'danger' ? 'critical' : 'warning',
+          eventId: eventId,
+          imageUrl: imageUrl,
+          eventData: alertData,
         );
       } else {
         //     debugPrint('[WS] Unknown payload type');

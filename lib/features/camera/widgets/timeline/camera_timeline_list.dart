@@ -1,11 +1,13 @@
+import 'package:detect_care_caregiver_app/features/camera/models/camera_entry.dart';
 import 'package:flutter/material.dart';
+
 import 'camera_timeline_components.dart';
 import 'camera_timeline_state_message.dart';
 import 'camera_timeline_zoom_control.dart';
 
 class CameraTimelineList extends StatelessWidget {
   final List<CameraTimelineEntry> entries;
-  final String? selectedClipId;
+  final String? selectedTimelineEntryId;
   final bool isLoading;
   final String? errorMessage;
   final bool compact;
@@ -13,11 +15,12 @@ class CameraTimelineList extends StatelessWidget {
   final ValueChanged<double> onAdjustZoom;
   final ValueChanged<String> onSelectClip;
   final VoidCallback onRetry;
+  final CameraEntry camera;
 
   const CameraTimelineList({
     super.key,
     required this.entries,
-    required this.selectedClipId,
+    required this.selectedTimelineEntryId,
     required this.isLoading,
     required this.errorMessage,
     required this.compact,
@@ -25,6 +28,7 @@ class CameraTimelineList extends StatelessWidget {
     required this.onAdjustZoom,
     required this.onSelectClip,
     required this.onRetry,
+    required this.camera,
   });
 
   @override
@@ -80,12 +84,20 @@ class CameraTimelineList extends StatelessWidget {
                 physics: const BouncingScrollPhysics(),
                 itemBuilder: (context, index) {
                   final entry = entries[index];
-                  final isSelected = entry.clip?.id == selectedClipId;
+                  final sel = selectedTimelineEntryId?.trim();
+                  final clipKey = entry.clip?.selectionKey;
+                  final normalizedClipKey = clipKey?.trim();
+                  final isSelected =
+                      normalizedClipKey != null && normalizedClipKey == sel;
                   return CameraTimelineRow(
+                    key: ValueKey(
+                      normalizedClipKey ?? entry.time.toIso8601String(),
+                    ),
                     entry: entry,
                     isSelected: isSelected,
+                    camera: camera,
                     onClipTap: entry.clip != null
-                        ? () => onSelectClip(entry.clip!.id)
+                      ? () => onSelectClip(entry.clip!.selectionKey)
                         : null,
                   );
                 },

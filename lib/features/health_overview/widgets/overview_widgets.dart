@@ -2,61 +2,49 @@ import 'package:flutter/material.dart';
 import '../../../core/theme/app_theme.dart';
 
 class KPITiles extends StatelessWidget {
-  final int abnormalToday;
-  final double resolvedRate;
-  final Duration avgResponse;
-  final int openAlerts;
+  final int totalEvents;
+  final int totalAbnormal; // danger + warning
+  final int totalFall;
+  final int totalAbnormalBehavior;
 
   const KPITiles({
     super.key,
-    required this.abnormalToday,
-    required this.resolvedRate,
-    required this.avgResponse,
-    required this.openAlerts,
+    required this.totalEvents,
+    required this.totalAbnormal,
+    required this.totalFall,
+    required this.totalAbnormalBehavior,
   });
-
-  String _fmtDur(Duration d) {
-    if (d.inHours >= 1) return '${d.inHours}g ${d.inMinutes % 60}p';
-    return '${d.inMinutes}p';
-  }
 
   @override
   Widget build(BuildContext context) {
     return LayoutBuilder(
       builder: (context, c) {
         final twoCols = c.maxWidth < 520;
-        final textScale = MediaQuery.textScaleFactorOf(context);
-        // Cao “mềm” theo layout + kẹp khi người dùng tăng cỡ chữ
-        final tileHeight =
-            ((twoCols ? 128.0 : 120.0) * textScale.clamp(1.0, 1.25)).clamp(
-              118.0,
-              168.0,
-            );
 
         final tiles = <Widget>[
           _KPICard(
-            title: 'Bất thường',
-            value: '$abnormalToday',
-            icon: Icons.warning_amber_rounded,
-            color: Colors.orange,
-          ),
-          _KPICard(
-            title: 'Tỷ lệ xử lý',
-            value: '${(resolvedRate * 100).toStringAsFixed(0)}%',
-            icon: Icons.task_alt_rounded,
-            color: AppTheme.successColor,
-          ),
-          _KPICard(
-            title: 'Ph.hồi TB',
-            value: _fmtDur(avgResponse),
-            icon: Icons.timer_rounded,
+            title: 'Tổng sự kiện',
+            value: '$totalEvents',
+            icon: Icons.notifications_active_rounded,
             color: AppTheme.primaryBlue,
           ),
           _KPICard(
-            title: 'CB mở',
-            value: '$openAlerts',
-            icon: Icons.notifications_active_rounded,
-            color: AppTheme.dangerColor,
+            title: 'Tổng bất thường',
+            value: '$totalAbnormal',
+            icon: Icons.report_problem_rounded,
+            color: Colors.orange,
+          ),
+          _KPICard(
+            title: 'Số sự kiện ngã',
+            value: '$totalFall',
+            icon: Icons.personal_injury_rounded,
+            color: const Color(0xFFE53E3E),
+          ),
+          _KPICard(
+            title: 'Số hành vi bất thường',
+            value: '$totalAbnormalBehavior',
+            icon: Icons.monitor_heart_rounded,
+            color: const Color(0xFFD53F8C),
           ),
         ];
 
@@ -68,8 +56,7 @@ class KPITiles extends StatelessWidget {
             crossAxisCount: twoCols ? 2 : 4,
             crossAxisSpacing: AppTheme.spacingM,
             mainAxisSpacing: AppTheme.spacingM,
-            // dùng chiều cao cố định linh hoạt để tránh tràn đáy
-            mainAxisExtent: tileHeight, // ← chìa khóa
+            childAspectRatio: twoCols ? 1.6 : 2.2,
           ),
           itemBuilder: (_, i) => tiles[i],
         );
@@ -92,22 +79,14 @@ class _KPICard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final textScale = MediaQuery.textScaleFactorOf(context);
-    final pad = (AppTheme.spacingL * (textScale > 1.1 ? .85 : 1.0)).clamp(
-      10.0,
-      16.0,
-    );
-
     return Container(
-      padding: EdgeInsets.all(pad),
+      padding: const EdgeInsets.all(AppTheme.spacingL),
       decoration: BoxDecoration(
         color: Colors.white,
         borderRadius: BorderRadius.circular(AppTheme.borderRadiusMedium),
         boxShadow: AppTheme.cardShadow,
       ),
       child: Column(
-        mainAxisSize: MainAxisSize.max,
-        mainAxisAlignment: MainAxisAlignment.spaceBetween, // chống tràn đáy
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Row(
@@ -124,8 +103,6 @@ class _KPICard extends StatelessWidget {
               Expanded(
                 child: Text(
                   title,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
                   style: Theme.of(context).textTheme.labelLarge?.copyWith(
                     color: AppTheme.textSecondary,
                   ),
@@ -133,21 +110,34 @@ class _KPICard extends StatelessWidget {
               ),
             ],
           ),
-          const SizedBox(height: 4),
-          // Giá trị lớn có FittedBox để tự thu nhỏ nếu thiếu chỗ
-          FittedBox(
-            alignment: Alignment.centerLeft,
-            fit: BoxFit.scaleDown,
-            child: Text(
-              value,
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-              style: Theme.of(context).textTheme.headlineSmall?.copyWith(
-                fontWeight: FontWeight.w700,
-                color: AppTheme.text,
+          const SizedBox(height: AppTheme.spacingS),
+          () {
+            final double leftIndent = 36.0 + AppTheme.spacingS;
+            return Expanded(
+              child: Padding(
+                padding: EdgeInsets.only(left: leftIndent),
+                child: Align(
+                  alignment: Alignment.bottomLeft,
+                  child: FittedBox(
+                    alignment: Alignment.centerLeft,
+                    fit: BoxFit.scaleDown,
+                    child: Text(
+                      value,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: Theme.of(context).textTheme.headlineMedium
+                          ?.copyWith(
+                            fontWeight: FontWeight.w900,
+                            color: AppTheme.text,
+                            fontSize: 24,
+                            height: 1.0,
+                          ),
+                    ),
+                  ),
+                ),
               ),
-            ),
-          ),
+            );
+          }(),
         ],
       ),
     );
@@ -156,7 +146,7 @@ class _KPICard extends StatelessWidget {
 
 class WeeklyAlertsBar extends StatelessWidget {
   final List<int> counts;
-  final List<String> labels; // ví dụ: ['T2','T3',...]
+  final List<String> labels;
   const WeeklyAlertsBar({super.key, required this.counts, required this.labels})
     : assert(counts.length == labels.length);
 
@@ -164,9 +154,6 @@ class WeeklyAlertsBar extends StatelessWidget {
   Widget build(BuildContext context) {
     final maxVal = (counts.isEmpty ? 1 : counts.reduce((a, b) => a > b ? a : b))
         .clamp(1, 999);
-
-    final screenH = MediaQuery.sizeOf(context).height;
-    final chartH = (screenH * 0.18).clamp(120.0, 180.0);
 
     return Container(
       padding: const EdgeInsets.all(AppTheme.spacingL),
@@ -180,21 +167,17 @@ class WeeklyAlertsBar extends StatelessWidget {
         children: [
           Row(
             children: [
-              const Icon(
+              Icon(
                 Icons.bar_chart_rounded,
                 color: AppTheme.primaryBlue,
                 size: 20,
               ),
               const SizedBox(width: 8),
-              Expanded(
-                child: Text(
-                  'Bất thường (7 ngày)',
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                    fontWeight: FontWeight.w600,
-                    color: AppTheme.text,
-                  ),
+              Text(
+                'Sự kiện bất thường (7 ngày)',
+                style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                  fontWeight: FontWeight.w600,
+                  color: AppTheme.text,
                 ),
               ),
             ],
@@ -202,7 +185,7 @@ class WeeklyAlertsBar extends StatelessWidget {
           const SizedBox(height: AppTheme.spacingM),
 
           SizedBox(
-            height: chartH,
+            height: 120,
             child: Row(
               crossAxisAlignment: CrossAxisAlignment.end,
               children: List.generate(counts.length, (i) {
@@ -230,8 +213,6 @@ class WeeklyAlertsBar extends StatelessWidget {
               return Expanded(
                 child: Text(
                   labels[i],
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
                   textAlign: TextAlign.center,
                   style: Theme.of(context).textTheme.bodySmall?.copyWith(
                     color: AppTheme.textSecondary,
@@ -245,15 +226,11 @@ class WeeklyAlertsBar extends StatelessWidget {
           Row(
             children: List.generate(counts.length, (i) {
               return Expanded(
-                child: FittedBox(
-                  fit: BoxFit.scaleDown,
-                  child: Text(
-                    '${counts[i]}',
-                    maxLines: 1,
-                    textAlign: TextAlign.center,
-                    style: Theme.of(context).textTheme.labelSmall?.copyWith(
-                      color: AppTheme.textSecondary,
-                    ),
+                child: Text(
+                  '${counts[i]}',
+                  textAlign: TextAlign.center,
+                  style: Theme.of(context).textTheme.labelSmall?.copyWith(
+                    color: AppTheme.textSecondary,
                   ),
                 ),
               );
@@ -279,7 +256,9 @@ class StatusBreakdownBar extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final total = (danger + warning + normal).clamp(1, 1 << 30);
-    final d = danger / total, w = warning / total, n = normal / total;
+    final d = danger / total;
+    final w = warning / total;
+    final n = normal / total;
 
     return Container(
       padding: const EdgeInsets.all(AppTheme.spacingL),
@@ -293,21 +272,17 @@ class StatusBreakdownBar extends StatelessWidget {
         children: [
           Row(
             children: [
-              const Icon(
+              Icon(
                 Icons.segment_rounded,
                 color: AppTheme.primaryBlue,
                 size: 20,
               ),
               const SizedBox(width: 8),
-              Expanded(
-                child: Text(
-                  'Trạng thái (7 ngày)',
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                    fontWeight: FontWeight.w600,
-                  ),
-                ),
+              Text(
+                'Phân bố trạng thái',
+                style: Theme.of(
+                  context,
+                ).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w600),
               ),
             ],
           ),
@@ -332,12 +307,12 @@ class StatusBreakdownBar extends StatelessWidget {
             ),
           ),
           const SizedBox(height: AppTheme.spacingS),
-          const Wrap(
+          Wrap(
             spacing: 12,
-            children: [
-              _LegendDot(color: Colors.red, label: 'Nguy'),
-              _LegendDot(color: Colors.orange, label: 'Cảnh'),
-              _LegendDot(color: Colors.blue, label: 'Thường'),
+            children: const [
+              _LegendDot(color: Colors.red, label: 'Nguy hiểm'),
+              _LegendDot(color: Colors.orange, label: 'Cảnh báo'),
+              _LegendDot(color: Colors.blue, label: 'Bình thường'),
             ],
           ),
         ],
@@ -363,8 +338,6 @@ class _LegendDot extends StatelessWidget {
         const SizedBox(width: 6),
         Text(
           label,
-          maxLines: 1,
-          overflow: TextOverflow.ellipsis,
           style: Theme.of(
             context,
           ).textTheme.bodySmall?.copyWith(color: AppTheme.textSecondary),
@@ -409,31 +382,23 @@ class TimeOfDayHistogram extends StatelessWidget {
             ),
             const SizedBox(height: 6),
             Text(
+              // localize time-of-day labels
               label,
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
               textAlign: TextAlign.center,
               style: Theme.of(
                 context,
               ).textTheme.bodySmall?.copyWith(color: AppTheme.textSecondary),
             ),
-            FittedBox(
-              fit: BoxFit.scaleDown,
-              child: Text(
-                '$v',
-                maxLines: 1,
-                style: Theme.of(
-                  context,
-                ).textTheme.labelSmall?.copyWith(color: AppTheme.textSecondary),
-              ),
+            Text(
+              '$v',
+              style: Theme.of(
+                context,
+              ).textTheme.labelSmall?.copyWith(color: AppTheme.textSecondary),
             ),
           ],
         ),
       );
     }
-
-    final screenH = MediaQuery.sizeOf(context).height;
-    final h = (screenH * 0.22).clamp(132.0, 200.0);
 
     return Container(
       padding: const EdgeInsets.all(AppTheme.spacingL),
@@ -447,34 +412,30 @@ class TimeOfDayHistogram extends StatelessWidget {
         children: [
           Row(
             children: [
-              const Icon(
+              Icon(
                 Icons.schedule_rounded,
                 color: AppTheme.primaryBlue,
                 size: 20,
               ),
               const SizedBox(width: 8),
-              Expanded(
-                child: Text(
-                  'Theo thời điểm',
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                    fontWeight: FontWeight.w600,
-                  ),
-                ),
+              Text(
+                'Khung giờ trong ngày (khoảng đã chọn)',
+                style: Theme.of(
+                  context,
+                ).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w600),
               ),
             ],
           ),
           const SizedBox(height: AppTheme.spacingM),
           SizedBox(
-            height: h,
+            height: 150,
             child: Row(
               crossAxisAlignment: CrossAxisAlignment.end,
               children: [
-                bar('Sáng', morning),
-                bar('Chiều', afternoon),
-                bar('Tối', evening),
-                bar('Đêm', night),
+                bar('Buổi sáng', morning),
+                bar('Buổi trưa', afternoon),
+                bar('Buổi chiều', evening),
+                bar('Buổi tối', night),
               ],
             ),
           ),
@@ -487,10 +448,12 @@ class TimeOfDayHistogram extends StatelessWidget {
 class ResolutionGauge extends StatelessWidget {
   final int confirmedTrue;
   final int confirmedFalse;
+  // final int pending;
   const ResolutionGauge({
     super.key,
     required this.confirmedTrue,
     required this.confirmedFalse,
+    // required this.pending,
   });
 
   @override
@@ -526,15 +489,11 @@ class ResolutionGauge extends StatelessWidget {
                   strokeWidth: 10,
                   valueColor: const AlwaysStoppedAnimation<Color>(Colors.blue),
                 ),
-                FittedBox(
-                  fit: BoxFit.scaleDown,
-                  child: Text(
-                    '${(rate * 100).toStringAsFixed(0)}%',
-                    maxLines: 1,
-                    style: Theme.of(context).textTheme.labelLarge?.copyWith(
-                      fontWeight: FontWeight.w700,
-                    ),
-                  ),
+                Text(
+                  '${(rate * 100).toStringAsFixed(0)}%',
+                  style: Theme.of(
+                    context,
+                  ).textTheme.labelLarge?.copyWith(fontWeight: FontWeight.w700),
                 ),
               ],
             ),
@@ -546,26 +505,24 @@ class ResolutionGauge extends StatelessWidget {
               children: [
                 Row(
                   children: [
-                    const Icon(
+                    Icon(
                       Icons.donut_large_rounded,
                       color: AppTheme.primaryBlue,
                       size: 20,
                     ),
                     const SizedBox(width: 8),
-                    Expanded(
-                      child: Text(
-                        'KQ xử lý',
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: Theme.of(context).textTheme.titleMedium
-                            ?.copyWith(fontWeight: FontWeight.w600),
+                    Text(
+                      'Tỷ lệ đã xử lý (khoảng đã chọn)',
+                      style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                        fontWeight: FontWeight.w600,
                       ),
                     ),
                   ],
                 ),
                 const SizedBox(height: AppTheme.spacingS),
-                _row('Đúng', confirmedTrue, Colors.blue),
-                _row('Giả', confirmedFalse, Colors.orange),
+                _row('Xác nhận (đúng)', confirmedTrue, Colors.blue),
+                _row('Báo động giả', confirmedFalse, Colors.orange),
+                // _row('Pending', pending, Colors.grey),
               ],
             ),
           ),
@@ -585,17 +542,8 @@ class ResolutionGauge extends StatelessWidget {
             decoration: BoxDecoration(color: color, shape: BoxShape.circle),
           ),
           const SizedBox(width: 6),
-          Expanded(
-            child: Text(label, maxLines: 1, overflow: TextOverflow.ellipsis),
-          ),
-          FittedBox(
-            fit: BoxFit.scaleDown,
-            child: Text(
-              '$val',
-              maxLines: 1,
-              style: const TextStyle(fontWeight: FontWeight.w600),
-            ),
-          ),
+          Expanded(child: Text(label)),
+          Text('$val', style: const TextStyle(fontWeight: FontWeight.w600)),
         ],
       ),
     );

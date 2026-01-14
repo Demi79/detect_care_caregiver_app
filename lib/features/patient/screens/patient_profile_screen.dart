@@ -1,12 +1,19 @@
+import 'dart:async';
 import 'package:detect_care_caregiver_app/features/patient/screens/update_patient_info_screen.dart';
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
+import 'package:provider/provider.dart';
 
 import 'package:detect_care_caregiver_app/features/patient/models/medical_info.dart';
 import 'package:detect_care_caregiver_app/core/utils/backend_enums.dart';
+import 'package:detect_care_caregiver_app/core/utils/error_handler.dart';
+import 'package:detect_care_caregiver_app/core/utils/logger.dart';
 import 'package:detect_care_caregiver_app/features/patient/data/medical_info_remote_data_source.dart';
+import 'package:detect_care_caregiver_app/features/emergency/call_action_service.dart';
 import 'package:detect_care_caregiver_app/features/assignments/data/assignments_remote_data_source.dart';
 import 'package:detect_care_caregiver_app/features/auth/data/auth_storage.dart';
+import 'package:detect_care_caregiver_app/core/providers/permissions_provider.dart';
+import 'package:detect_care_caregiver_app/features/shared_permissions/screens/caregiver_settings_screen.dart';
 
 class PatientProfileScreen extends StatefulWidget {
   final bool embedInParent;
@@ -23,29 +30,135 @@ class _PatientProfileScreenState extends State<PatientProfileScreen> {
   bool _loading = true;
   String? _error;
   String? _customerId;
+  bool _hasPermission = true;
+  VoidCallback? _permListener;
 
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) {
+        try {
+          final permProvider = context.read<PermissionsProvider>();
+          AppLogger.i(
+            '[PatientProfile] Force reloading PermissionsProvider on screen init',
+          );
+          permProvider.reload();
+        } catch (e) {
+          AppLogger.w(
+            '[PatientProfile] Failed to reload PermissionsProvider: $e',
+          );
+        }
+      }
+    });
     _load();
+  }
+
+  @override
+  void dispose() {
+    // Remove permissions listener to avoid leaks
+    try {
+      final permProvider = context.read<PermissionsProvider>();
+      if (_permListener != null) {
+        permProvider.removeListener(_permListener!);
+      }
+    } catch (_) {}
+    super.dispose();
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    final permProvider = context.read<PermissionsProvider>();
+    _permListener ??= () {
+      if (!mounted) return;
+      final cid = _customerId;
+      if (cid == null || cid.isEmpty) return;
+      final nowHas = permProvider.hasPermission(cid, 'profile_view');
+      if (nowHas != _hasPermission) {
+        setState(() {
+          _hasPermission = nowHas;
+          if (!nowHas) {
+            _error =
+                'Bạn không có quyền xem hồ sơ bệnh nhân. Quyền "Xem hồ sơ bệnh nhân" đã bị thu hồi.';
+            _data = null;
+          } else {
+            _error = null;
+          }
+        });
+        if (nowHas && _data == null && !_loading) {
+          _load();
+        }
+      }
+    };
+    permProvider.addListener(_permListener!);
   }
 
   Future<void> _load() async {
     setState(() {
       _loading = true;
       _error = null;
+      _hasPermission = true;
     });
     try {
       // Resolve linked customer (patient) id from assignments if present
       String? customerId;
+      bool hasAcceptedAssignment = false;
+
       try {
         final assignDs = AssignmentsRemoteDataSource();
         final list = await assignDs.listPending(status: 'accepted');
-        if (list.isNotEmpty) customerId = list.first.customerId;
+        if (list.isNotEmpty) {
+          customerId = list.first.customerId;
+          hasAcceptedAssignment = true;
+        }
       } catch (_) {}
+
+      // If no accepted assignment but embedInParent is false (standalone mode),
+      // user accessed from settings and needs permission
+      if (!hasAcceptedAssignment && !widget.embedInParent) {
+        setState(() {
+          _hasPermission = false;
+          _error =
+              'Bạn không có quyền xem thông tin bệnh nhân. Hãy nhờ bệnh nhân cấp quyền truy cập trong "Quyền được chia sẻ".';
+        });
+        return;
+      }
+
       customerId ??= await AuthStorage.getUserId();
       if (customerId == null || customerId.isEmpty) {
         throw Exception('No customer id available');
+      }
+
+      final permProvider = Provider.of<PermissionsProvider>(
+        context,
+        listen: false,
+      );
+
+      AppLogger.i(
+        '[PatientProfile] Force reloading permissions from API before check',
+      );
+      await permProvider.reload();
+
+      final hasProfileView = permProvider.hasPermission(
+        customerId,
+        'profile_view',
+      );
+
+      AppLogger.d(
+        '[PatientProfile] _load: customerId=$customerId, profileView=$hasProfileView',
+      );
+      AppLogger.d(
+        '[PatientProfile] Available permissions: ${permProvider.permissions.map((p) => 'customerId=${p.customerId}, profileView=${p.profileView}').toList()}',
+      );
+
+      if (!hasProfileView) {
+        setState(() {
+          _hasPermission = false;
+          _error =
+              'Bạn không có quyền xem hồ sơ bệnh nhân. Quyền "Xem hồ sơ bệnh nhân" đã bị thu hồi.';
+        });
+        return;
       }
 
       _customerId = customerId;
@@ -55,10 +168,35 @@ class _PatientProfileScreenState extends State<PatientProfileScreen> {
       });
     } catch (e) {
       setState(() {
-        _error = e.toString();
+        _error = formatErrorMessage(e);
       });
     } finally {
       if (mounted) setState(() => _loading = false);
+    }
+  }
+
+  String _normalizePhone(String raw) {
+    if (raw == null) return '';
+    var s = raw.trim();
+    // remove spaces, parentheses and dashes
+    s = s.replaceAll(RegExp(r'[\s\-\(\)]'), '');
+    // If starts with +84 -> replace with 0
+    if (s.startsWith('+84')) return '0' + s.substring(3);
+    // If starts with 84 (no plus) -> replace with 0
+    if (s.startsWith('84') && s.length > 2) return '0' + s.substring(2);
+    return s;
+  }
+
+  Future<void> _dialNumber(String raw) async {
+    try {
+      await attemptCall(context: context, rawPhone: raw, actionLabel: 'Gọi');
+    } catch (e) {
+      AppLogger.w('[PatientProfile] dial failed: $e');
+      if (mounted) {
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(const SnackBar(content: Text('Lỗi khi gọi điện')));
+      }
     }
   }
 
@@ -109,6 +247,8 @@ class _PatientProfileScreenState extends State<PatientProfileScreen> {
 
   @override
   Widget build(BuildContext context) {
+    // No longer rely on realtime - permissions are force-reloaded in _load()
+
     final Widget bodyWidget = _loading
         ? const Center(
             child: CircularProgressIndicator(color: Color(0xFF3B82F6)),
@@ -120,14 +260,20 @@ class _PatientProfileScreenState extends State<PatientProfileScreen> {
               child: Column(
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
-                  const Icon(
-                    Icons.error_outline,
+                  Icon(
+                    _hasPermission
+                        ? Icons.cloud_off_outlined
+                        : Icons.lock_outline,
                     size: 64,
-                    color: Color(0xFFEF4444),
+                    color: _hasPermission
+                        ? const Color(0xFF94A3B8)
+                        : const Color(0xFFF59E0B),
                   ),
                   const SizedBox(height: 16),
                   Text(
-                    'Lỗi tải dữ liệu',
+                    _hasPermission
+                        ? 'Không thể tải dữ liệu'
+                        : 'Không có quyền truy cập',
                     style: TextStyle(
                       fontSize: 18,
                       fontWeight: FontWeight.w600,
@@ -141,18 +287,43 @@ class _PatientProfileScreenState extends State<PatientProfileScreen> {
                     style: TextStyle(color: Colors.grey[600]),
                   ),
                   const SizedBox(height: 24),
-                  ElevatedButton.icon(
-                    onPressed: _load,
-                    icon: const Icon(Icons.refresh),
-                    label: const Text('Thử lại'),
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: const Color(0xFF3B82F6),
-                      foregroundColor: Colors.white,
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 24,
-                        vertical: 12,
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      OutlinedButton.icon(
+                        onPressed: _load,
+                        icon: const Icon(Icons.refresh),
+                        label: const Text('Thử lại'),
+                        style: OutlinedButton.styleFrom(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 20,
+                            vertical: 12,
+                          ),
+                        ),
                       ),
-                    ),
+                      if (!_hasPermission) ...[
+                        const SizedBox(width: 12),
+                        ElevatedButton.icon(
+                          onPressed: () {
+                            Navigator.of(context).push(
+                              MaterialPageRoute(
+                                builder: (_) => const CaregiverSettingsScreen(),
+                              ),
+                            );
+                          },
+                          icon: const Icon(Icons.key),
+                          label: const Text('Yêu cầu quyền'),
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: const Color(0xFFF59E0B),
+                            foregroundColor: Colors.white,
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 20,
+                              vertical: 12,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ],
                   ),
                 ],
               ),
@@ -163,7 +334,14 @@ class _PatientProfileScreenState extends State<PatientProfileScreen> {
     if (widget.embedInParent) {
       return Container(
         color: const Color(0xFFF8FAFC),
-        child: SafeArea(child: bodyWidget),
+        child: SafeArea(
+          child: Column(
+            children: [
+              _buildEmbeddedHeader('Thông tin bệnh nhân'),
+              Expanded(child: bodyWidget),
+            ],
+          ),
+        ),
       );
     }
 
@@ -201,7 +379,8 @@ class _PatientProfileScreenState extends State<PatientProfileScreen> {
         ),
       ),
       body: bodyWidget,
-      floatingActionButton: (!_loading && _data != null)
+      floatingActionButton:
+          (!_loading && _data != null && !widget.embedInParent)
           ? FloatingActionButton.extended(
               onPressed: _goToEdit,
               backgroundColor: const Color(0xFF3B82F6),
@@ -209,6 +388,31 @@ class _PatientProfileScreenState extends State<PatientProfileScreen> {
               label: const Text('Chỉnh sửa'),
             )
           : null,
+    );
+  }
+
+  Widget _buildEmbeddedHeader(String title) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        border: Border(
+          bottom: BorderSide(
+            color: const Color(0xFFE2E8F0).withValues(alpha: 0.5),
+            width: 0.5,
+          ),
+        ),
+      ),
+      child: Center(
+        child: Text(
+          title,
+          style: const TextStyle(
+            fontSize: 20,
+            fontWeight: FontWeight.w600,
+            color: Color(0xFF007AFF),
+          ),
+        ),
+      ),
     );
   }
 
@@ -231,6 +435,28 @@ class _PatientProfileScreenState extends State<PatientProfileScreen> {
 
             // Thói quen sinh hoạt Card
             _buildHabitsCard(habits),
+            const SizedBox(height: 16),
+
+            // Edit button when embedded in parent
+            if (widget.embedInParent && !_loading && _data != null)
+              Align(
+                alignment: Alignment.center,
+                child: ElevatedButton.icon(
+                  onPressed: _goToEdit,
+                  icon: const Icon(Icons.edit),
+                  label: const Text('Chỉnh sửa'),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: const Color(0xFF3B82F6),
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 32,
+                      vertical: 12,
+                    ),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                  ),
+                ),
+              ),
             const SizedBox(height: 100),
           ],
         ),
@@ -303,6 +529,129 @@ class _PatientProfileScreenState extends State<PatientProfileScreen> {
               'Bệnh mãn tính',
               patient!.chronicDiseases!.join(', '),
             ),
+          ],
+          // Emergency contacts
+          if (_data?.contacts != null && _data!.contacts.isNotEmpty) ...[
+            const SizedBox(height: 20),
+            const Divider(height: 1, thickness: 1),
+            const SizedBox(height: 20),
+            Row(
+              children: [
+                Container(
+                  padding: const EdgeInsets.all(8),
+                  decoration: BoxDecoration(
+                    color: Colors.redAccent.withOpacity(0.1),
+                    borderRadius: BorderRadius.circular(10),
+                  ),
+                  child: const Icon(
+                    Icons.emergency_outlined,
+                    color: Colors.redAccent,
+                    size: 20,
+                  ),
+                ),
+                const SizedBox(width: 10),
+                const Text(
+                  'Liên hệ khẩn cấp',
+                  style: TextStyle(
+                    fontSize: 18,
+                    fontWeight: FontWeight.w600,
+                    color: Color(0xFF1E293B),
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 16),
+            ..._data!.contacts.asMap().entries.map((entry) {
+              final index = entry.key;
+              final c = entry.value;
+              final isLast = index == _data!.contacts.length - 1;
+
+              return Column(
+                children: [
+                  Container(
+                    padding: const EdgeInsets.all(14),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFFF8FAFC),
+                      borderRadius: BorderRadius.circular(12),
+                      border: Border.all(color: Colors.grey.shade200, width: 1),
+                    ),
+                    child: Row(
+                      children: [
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                c.name,
+                                style: const TextStyle(
+                                  fontSize: 16,
+                                  fontWeight: FontWeight.w600,
+                                  color: Color(0xFF1E293B),
+                                ),
+                              ),
+                              const SizedBox(height: 6),
+                              Row(
+                                children: [
+                                  Container(
+                                    padding: const EdgeInsets.symmetric(
+                                      horizontal: 8,
+                                      vertical: 3,
+                                    ),
+                                    decoration: BoxDecoration(
+                                      color: const Color(
+                                        0xFF3B82F6,
+                                      ).withOpacity(0.1),
+                                      borderRadius: BorderRadius.circular(6),
+                                    ),
+                                    child: Text(
+                                      c.relation,
+                                      style: const TextStyle(
+                                        fontSize: 12,
+                                        fontWeight: FontWeight.w500,
+                                        color: Color(0xFF3B82F6),
+                                      ),
+                                    ),
+                                  ),
+                                  const SizedBox(width: 8),
+                                  Expanded(
+                                    child: Text(
+                                      _normalizePhone(c.phone),
+                                      style: TextStyle(
+                                        fontSize: 14,
+                                        fontWeight: FontWeight.w500,
+                                        color: Colors.grey[700],
+                                      ),
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ],
+                          ),
+                        ),
+                        const SizedBox(width: 12),
+                        Material(
+                          color: Colors.redAccent,
+                          borderRadius: BorderRadius.circular(10),
+                          child: InkWell(
+                            onTap: () => _dialNumber(c.phone),
+                            borderRadius: BorderRadius.circular(10),
+                            child: Container(
+                              padding: const EdgeInsets.all(10),
+                              child: const Icon(
+                                Icons.phone,
+                                color: Colors.white,
+                                size: 20,
+                              ),
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  if (!isLast) const SizedBox(height: 10),
+                ],
+              );
+            }).toList(),
           ],
         ],
       ),

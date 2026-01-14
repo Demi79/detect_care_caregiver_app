@@ -1,13 +1,21 @@
 import 'package:flutter/material.dart';
 
-/// Simple image viewer helper used by `ActionLogCard` to show a full-screen
-/// gallery for a list of image URLs.
 Future<void> showActionLogCardImageViewer(
   BuildContext context,
-  List<String> urls,
+  List<dynamic> urls,
   int initialIndex,
 ) {
   if (urls.isEmpty) return Future.value();
+
+  final stringUrls = urls.map<String>((u) {
+    if (u is String) return u;
+    try {
+      final p = (u as dynamic).path;
+      if (p is String) return p;
+    } catch (_) {}
+    return u.toString();
+  }).toList();
+
   return Navigator.of(context).push(
     MaterialPageRoute<void>(
       builder: (ctx) => Scaffold(
@@ -18,7 +26,7 @@ Future<void> showActionLogCardImageViewer(
           iconTheme: const IconThemeData(color: Colors.white),
         ),
         body: SafeArea(
-          child: _ImageGallery(urls: urls, initialIndex: initialIndex),
+          child: _ImageGallery(urls: stringUrls, initialIndex: initialIndex),
         ),
       ),
       fullscreenDialog: true,

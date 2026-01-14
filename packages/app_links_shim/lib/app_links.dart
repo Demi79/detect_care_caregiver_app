@@ -9,10 +9,10 @@ class AppLinks {
   AppLinks();
 
   /// Returns the initial deep-link Uri if present. Shim returns null.
-  Future<Uri?> getInitialLink() async => null;
-
-  /// Same as above (some versions call this name).
   Future<Uri?> getInitialAppLink() async => null;
+
+  // /// Same as above (some versions call this name).
+  // Future<Uri?> getInitialAppLink() async => null;
 
   /// Alternative name used in some releases.
   Future<Uri?> getInitialAppLinkUri() async => null;

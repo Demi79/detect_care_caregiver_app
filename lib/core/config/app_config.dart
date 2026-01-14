@@ -23,4 +23,9 @@ class AppConfig {
   static String get alarmControlUrl =>
       dotenv.env['ALARM_CONTROL_URL'] ??
       'https://alarm.cicca.dpdns.org/api/alarm/control';
+
+  /// Alarm status endpoint.
+  static String get alarmStatusUrl =>
+      dotenv.env['ALARM_STATUS_URL'] ??
+      'https://alarm.cicca.dpdns.org/api/alarm/status';
 }

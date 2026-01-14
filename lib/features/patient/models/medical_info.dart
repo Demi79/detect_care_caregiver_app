@@ -155,6 +155,7 @@ class EmergencyContact {
 /// Thói quen sinh hoạt (habit)
 class Habit {
   final String habitType;
+  final String? habitId;
   final String habitName;
   final String? description;
   final String? sleepStart;
@@ -169,6 +170,7 @@ class Habit {
   final bool isActive;
 
   const Habit({
+    this.habitId,
     required this.habitType,
     required this.habitName,
     this.description,
@@ -185,6 +187,7 @@ class Habit {
   });
 
   factory Habit.fromJson(Map<String, dynamic> json) => Habit(
+    habitId: json['habit_id']?.toString() ?? json['habitId']?.toString(),
     habitType: json['habit_type']?.toString() ?? '',
     habitName: json['habit_name']?.toString() ?? '',
     description: json['description']?.toString(),
@@ -207,6 +210,7 @@ class Habit {
   );
 
   Map<String, dynamic> toJson() => {
+    if (habitId != null) 'habit_id': habitId,
     'habit_type': habitType,
     'habit_name': habitName,
     if (description != null) 'description': description,

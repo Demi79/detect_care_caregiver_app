@@ -78,8 +78,7 @@ class _CameraTimelineScreenState extends State<CameraTimelineScreen> {
                   Icons.arrow_back_ios_new,
                   color: Colors.black87,
                 ),
-                onPressed: () =>
-                    Navigator.of(context, rootNavigator: true).maybePop(),
+                onPressed: () => Navigator.of(context).maybePop(),
               ),
               titleSpacing: 0,
               title: Column(
@@ -197,8 +196,12 @@ class _CameraTimelineScreenState extends State<CameraTimelineScreen> {
                         ],
                         CameraTimelineDateSelector(
                           formattedDay: _formatDay(ctl.selectedDay),
-                          onPrev: () => ctl.changeDay(-1),
-                          onNext: () => ctl.changeDay(1),
+                          onPrev: ctl.canGoPrev
+                              ? () => ctl.changeDay(-1)
+                              : () {},
+                          onNext: ctl.canGoNext
+                              ? () => ctl.changeDay(1)
+                              : () {},
                           onMenu: () =>
                               ScaffoldMessenger.of(context).showSnackBar(
                                 const SnackBar(
@@ -217,14 +220,17 @@ class _CameraTimelineScreenState extends State<CameraTimelineScreen> {
                           height: (timelineHeight * 1.35).clamp(380.0, 720.0),
                           child: CameraTimelineList(
                             entries: ctl.entries,
-                            selectedClipId: ctl.selectedClipId,
+                            selectedTimelineEntryId:
+                                ctl.selectedTimelineEntryId,
                             isLoading: ctl.isLoading,
                             errorMessage: ctl.errorMessage,
                             compact: false,
                             zoomLevel: ctl.zoomLevel,
                             onAdjustZoom: (d) => ctl.adjustZoom(d),
-                            onSelectClip: (id) => ctl.selectClip(id),
+                            onSelectClip: (timelineEntryId) =>
+                                ctl.selectClip(timelineEntryId),
                             onRetry: () => unawaited(ctl.loadTimeline()),
+                            camera: widget.camera,
                           ),
                         ),
                         const SizedBox(height: 12),
@@ -285,8 +291,8 @@ class _CameraTimelineScreenState extends State<CameraTimelineScreen> {
         ],
         CameraTimelineDateSelector(
           formattedDay: _formatDay(ctl.selectedDay),
-          onPrev: () => ctl.changeDay(-1),
-          onNext: () => ctl.changeDay(1),
+          onPrev: ctl.canGoPrev ? () => ctl.changeDay(-1) : () {},
+          onNext: ctl.canGoNext ? () => ctl.changeDay(1) : () {},
           onMenu: () => ScaffoldMessenger.of(context).showSnackBar(
             const SnackBar(content: Text('Menu ngày đang phát triển.')),
           ),
@@ -299,14 +305,15 @@ class _CameraTimelineScreenState extends State<CameraTimelineScreen> {
         Expanded(
           child: CameraTimelineList(
             entries: ctl.entries,
-            selectedClipId: ctl.selectedClipId,
+            selectedTimelineEntryId: ctl.selectedTimelineEntryId,
             isLoading: ctl.isLoading,
             errorMessage: ctl.errorMessage,
             compact: true,
             zoomLevel: ctl.zoomLevel,
             onAdjustZoom: (d) => ctl.adjustZoom(d),
-            onSelectClip: (id) => ctl.selectClip(id),
+            onSelectClip: (timelineEntryId) => ctl.selectClip(timelineEntryId),
             onRetry: () => unawaited(ctl.loadTimeline()),
+            camera: widget.camera,
           ),
         ),
       ],

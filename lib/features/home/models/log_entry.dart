@@ -3,6 +3,7 @@ class LogEntry {
   final String status;
   final String eventType;
   final String? eventDescription;
+  final String? notes;
   final String? cameraId;
   final double confidenceScore;
   final DateTime? detectedAt;
@@ -12,6 +13,14 @@ class LogEntry {
   final Map<String, dynamic> contextData;
   final Map<String, dynamic> boundingBoxes;
   final String? lifecycleState;
+  final String? createBy;
+  final bool? hasEmergencyCall;
+  final bool? hasAlarmActivated;
+  final String? lastEmergencyCallSource;
+  final String? lastAlarmActivatedSource;
+  final DateTime? lastEmergencyCallAt;
+  final DateTime? lastAlarmActivatedAt;
+  final bool? isAlarmTimeoutExpired;
 
   final bool confirmStatus;
 
@@ -20,6 +29,7 @@ class LogEntry {
     required this.status,
     required this.eventType,
     this.eventDescription,
+    this.notes,
     this.cameraId,
     required this.confidenceScore,
     this.detectedAt,
@@ -29,6 +39,14 @@ class LogEntry {
     this.contextData = const {},
     this.boundingBoxes = const {},
     this.lifecycleState,
+    this.createBy,
+    this.hasEmergencyCall,
+    this.hasAlarmActivated,
+    this.lastEmergencyCallSource,
+    this.lastAlarmActivatedSource,
+    this.lastEmergencyCallAt,
+    this.lastAlarmActivatedAt,
+    this.isAlarmTimeoutExpired,
     required this.confirmStatus,
   });
 }

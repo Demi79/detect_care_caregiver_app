@@ -37,27 +37,8 @@ class AddHabitDialogState extends State<AddHabitDialog> {
                 validator: (v) =>
                     v == null || v.isEmpty ? 'Nhập tên thói quen' : null,
               ),
-              DropdownButtonFormField<String>(
-                decoration: const InputDecoration(labelText: 'Loại thói quen'),
-                items: const [
-                  DropdownMenuItem(value: 'sleep', child: Text('Ngủ nghỉ')),
-                  DropdownMenuItem(value: 'meal', child: Text('Ăn uống')),
-                  DropdownMenuItem(
-                    value: 'medication',
-                    child: Text('Uống thuốc'),
-                  ),
-                  DropdownMenuItem(value: 'activity', child: Text('Vận động')),
-                  DropdownMenuItem(
-                    value: 'bathroom',
-                    child: Text('Vệ sinh cá nhân'),
-                  ),
-                  DropdownMenuItem(value: 'therapy', child: Text('Liệu pháp')),
-                  DropdownMenuItem(value: 'social', child: Text('Giao tiếp')),
-                ],
-                onChanged: (v) => _habitType = v,
-                validator: (v) =>
-                    v == null || v.isEmpty ? 'Chọn loại thói quen' : null,
-              ),
+
+              const SizedBox.shrink(),
               TextFormField(
                 decoration: const InputDecoration(labelText: 'Mô tả'),
                 onChanged: (v) => _description = v,
@@ -115,7 +96,7 @@ class AddHabitDialogState extends State<AddHabitDialog> {
             if (_formKey.currentState?.validate() ?? false) {
               Navigator.of(context).pop(
                 HabitItemDto(
-                  habitType: _habitType,
+                  habitType: _habitType ?? 'sleep',
                   habitName: _habitName,
                   description: _description,
                   typicalTime: _typicalTime,

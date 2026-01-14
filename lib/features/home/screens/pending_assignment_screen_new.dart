@@ -4,6 +4,7 @@ import 'package:provider/provider.dart';
 import 'package:detect_care_caregiver_app/features/home/screens/home_screen.dart';
 import 'package:detect_care_caregiver_app/features/assignments/data/assignments_remote_data_source.dart';
 import 'package:detect_care_caregiver_app/features/auth/providers/auth_provider.dart';
+import 'package:detect_care_caregiver_app/core/providers/permissions_provider.dart';
 
 class PendingAssignmentsScreen extends StatefulWidget {
   const PendingAssignmentsScreen({super.key});
@@ -142,6 +143,9 @@ class _PendingAssignmentsScreenState extends State<PendingAssignmentsScreen> {
           child: Center(
             child: OutlinedButton.icon(
               onPressed: () async {
+                try {
+                  context.read<PermissionsProvider>().reset();
+                } catch (_) {}
                 await context.read<AuthProvider>().logout();
                 if (mounted) {
                   Navigator.of(context).pushAndRemoveUntil(

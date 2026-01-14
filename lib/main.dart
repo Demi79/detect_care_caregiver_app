@@ -1,8 +1,12 @@
+import 'dart:convert';
+
+import 'package:detect_care_caregiver_app/widgets/alarm_bubble.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
+import 'package:flutter_ringtone_player/flutter_ringtone_player.dart';
 import 'package:provider/provider.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
@@ -40,6 +44,7 @@ import 'package:detect_care_caregiver_app/features/setting/data/settings_reposit
 import 'package:detect_care_caregiver_app/features/setting/providers/settings_provider.dart';
 import 'package:detect_care_caregiver_app/features/setting/screens/settings_screen.dart';
 
+import 'package:detect_care_caregiver_app/core/providers/permissions_provider.dart';
 import 'package:detect_care_caregiver_app/firebase_options.dart';
 import 'package:detect_care_caregiver_app/services/notification_manager.dart';
 import 'package:detect_care_caregiver_app/widgets/auth_gate.dart';
@@ -48,6 +53,9 @@ import 'package:detect_care_caregiver_app/widgets/auth_gate.dart';
 
 @pragma('vm:entry-point')
 Future<void> firebaseBackgroundHandler(RemoteMessage message) async {
+  final startTime = DateTime.now();
+  debugPrint('🔔 [FCM-BG] Handler started at $startTime');
+
   await Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform);
 
   final flnp = FlutterLocalNotificationsPlugin();
@@ -60,7 +68,44 @@ Future<void> firebaseBackgroundHandler(RemoteMessage message) async {
   );
 
   try {
+    final initStart = DateTime.now();
     await flnp.initialize(initSettings);
+    final initDuration = DateTime.now().difference(initStart);
+    debugPrint(
+      '⏱️ [FCM-BG] FlutterLocalNotifications init: ${initDuration.inMilliseconds}ms',
+    );
+
+    final data = message.data;
+    final eventType = data['event_type'] ?? data['eventType'];
+    final lifecycle = data['lifecycle_state'] ?? data['lifecycleState'];
+    final eventId = (data['event_id'] ?? data['id'] ?? data['eventId'])
+        ?.toString();
+
+    // Stop any active alarm/notification for resolved events.
+    if (eventType == 'event_resolved' ||
+        lifecycle?.toString().toUpperCase() == 'RESOLVED') {
+      debugPrint('🛑 [FCM-BG] Stopping alarm for resolved event');
+      try {
+        await FlutterRingtonePlayer().stop();
+      } catch (_) {}
+
+      if (eventId != null && eventId.isNotEmpty) {
+        try {
+          final id = eventId.hashCode & 0x7FFFFFFF;
+          await flnp.cancel(id);
+        } catch (_) {}
+      }
+      return;
+    }
+
+    if (eventType != null) {
+      final t = eventType.toString().trim().toLowerCase();
+      if (t == 'normal_activity' ||
+          t == 'normal activity' ||
+          t == 'normal-activity') {
+        return;
+      }
+    }
 
     const channelId = 'healthcare_alerts';
     const channelName = 'Cảnh báo Y tế';
@@ -84,11 +129,16 @@ Future<void> firebaseBackgroundHandler(RemoteMessage message) async {
           : null,
     );
 
+    final channelStart = DateTime.now();
     await flnp
         .resolvePlatformSpecificImplementation<
           AndroidFlutterLocalNotificationsPlugin
         >()
         ?.createNotificationChannel(androidChannel);
+    final channelDuration = DateTime.now().difference(channelStart);
+    debugPrint(
+      '⏱️ [FCM-BG] Channel creation: ${channelDuration.inMilliseconds}ms',
+    );
 
     final androidDetails = AndroidNotificationDetails(
       channelId,
@@ -109,15 +159,44 @@ Future<void> firebaseBackgroundHandler(RemoteMessage message) async {
       presentBadge: true,
     );
 
+    String? payload;
+    try {
+      final deeplink =
+          data['deeplink'] ?? data['link'] ?? data['url'] ?? data['action_url'];
+      if (deeplink != null && deeplink.toString().isNotEmpty) {
+        payload = jsonEncode({'deeplink': deeplink.toString()});
+      } else if (eventId != null && eventId.isNotEmpty) {
+        payload = jsonEncode({'deeplink': 'detectcare://alert/$eventId'});
+      }
+    } catch (_) {}
+
+    int notificationId;
+    if (eventId != null && eventId.isNotEmpty) {
+      notificationId = eventId.hashCode & 0x7FFFFFFF;
+    } else {
+      notificationId = DateTime.now().millisecondsSinceEpoch.remainder(100000);
+    }
+
+    final showStart = DateTime.now();
     await flnp.show(
-      DateTime.now().millisecondsSinceEpoch.remainder(100000),
+      notificationId,
       message.notification?.title ?? 'New Alert',
       message.notification?.body ?? 'New healthcare event detected',
       NotificationDetails(android: androidDetails, iOS: iosDetails),
+      payload: payload,
+    );
+    final showDuration = DateTime.now().difference(showStart);
+    debugPrint(
+      '⏱️ [FCM-BG] Notification show: ${showDuration.inMilliseconds}ms',
     );
   } catch (e) {
     debugPrint('❌ Background notification failed: $e');
   }
+
+  final totalDuration = DateTime.now().difference(startTime);
+  debugPrint(
+    '✅ [FCM-BG] Handler completed in ${totalDuration.inMilliseconds}ms',
+  );
 }
 
 /// ----------------------------- BOOTSTRAP APP ------------------------------ ///
@@ -156,18 +235,26 @@ Future<void> _initSupabase() async {
 
   await Supabase.initialize(url: supabaseUrl, anonKey: AppConfig.supabaseKey);
 
-  final auth = Supabase.instance.client.auth;
+  // Defer auto-signin to microtask để không block boot
+  Future.microtask(() async {
+    final auth = Supabase.instance.client.auth;
 
-  if (auth.currentSession == null) {
-    final email = dotenv.env['SUPABASE_DEV_EMAIL'] ?? '';
-    final password = dotenv.env['SUPABASE_DEV_PASSWORD'] ?? '';
+    if (auth.currentSession == null) {
+      final email = dotenv.env['SUPABASE_DEV_EMAIL'] ?? '';
+      final password = dotenv.env['SUPABASE_DEV_PASSWORD'] ?? '';
 
-    try {
-      await auth.signInWithPassword(email: email, password: password);
-    } catch (e) {
-      debugPrint('[Supabase] signIn error: $e');
+      try {
+        final signInStart = DateTime.now();
+        await auth.signInWithPassword(email: email, password: password);
+        final signInDuration = DateTime.now().difference(signInStart);
+        debugPrint(
+          '⏱️ [Supabase] Auto-signin: ${signInDuration.inMilliseconds}ms',
+        );
+      } catch (e) {
+        debugPrint('[Supabase] signIn error: $e');
+      }
     }
-  }
+  });
 }
 
 Future<void> _initNotifications() async {
@@ -185,15 +272,39 @@ Future<void> _initNotifications() async {
 }
 
 Future<void> _bootstrapCore() async {
+  final bootStart = DateTime.now();
+  debugPrint('🚀 [BOOTSTRAP] Starting app initialization...');
+
   AppLifecycle.init();
 
+  final envStart = DateTime.now();
   await _initEnv();
+  debugPrint(
+    '⏱️ [BOOTSTRAP] Env loaded: ${DateTime.now().difference(envStart).inMilliseconds}ms',
+  );
+
+  final firebaseStart = DateTime.now();
   await _initFirebase();
+  debugPrint(
+    '⏱️ [BOOTSTRAP] Firebase init: ${DateTime.now().difference(firebaseStart).inMilliseconds}ms',
+  );
+
+  final supabaseStart = DateTime.now();
   await _initSupabase();
+  debugPrint(
+    '⏱️ [BOOTSTRAP] Supabase init: ${DateTime.now().difference(supabaseStart).inMilliseconds}ms',
+  );
+
   await _initNotifications();
+  debugPrint('⏱️ [BOOTSTRAP] Notifications scheduled (deferred)');
 
   final deviceHealthService = DeviceHealthService();
   deviceHealthService.startHealthMonitoring();
+
+  final totalDuration = DateTime.now().difference(bootStart);
+  debugPrint(
+    '✅ [BOOTSTRAP] Total boot time: ${totalDuration.inMilliseconds}ms',
+  );
 }
 
 /// ------------------------------- MAIN ENTRY ------------------------------- ///
@@ -241,6 +352,16 @@ Future<void> main() async {
       providers: [
         ChangeNotifierProvider(create: (_) => ThemeProvider()),
         ChangeNotifierProvider(create: (_) => AuthProvider(authRepo)),
+        ChangeNotifierProxyProvider<AuthProvider, PermissionsProvider>(
+          create: (_) => PermissionsProvider(),
+          update: (_, auth, previous) {
+            final provider = previous ?? PermissionsProvider();
+            if (auth.user != null) {
+              provider.initialize();
+            }
+            return provider;
+          },
+        ),
         ChangeNotifierProvider(
           create: (_) => HealthOverviewProvider(healthOverviewRepo),
         ),
@@ -258,6 +379,8 @@ Future<void> main() async {
               provider.load();
               // Đăng ký FCM cho user hiện tại
               fcmRegistration.registerForUser(userId);
+              // Subscribe to realtime notifications for badge updates
+              NotificationManager().subscribeToNotifications(userId);
             }
 
             return provider;
@@ -270,6 +393,36 @@ Future<void> main() async {
 
   _setupApiClientUnauthenticatedHandler();
   _setupOnAssignmentLostHandler();
+  _setupApiClientTooManyRequestsHandler();
+}
+
+void _setupApiClientTooManyRequestsHandler() {
+  try {
+    ApiClient.onTooManyRequests = () async {
+      try {
+        final navigator = NavigatorKey.navigatorKey.currentState;
+        if (navigator == null) return;
+        final ctx = navigator.context;
+
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          try {
+            ScaffoldMessenger.of(ctx).showSnackBar(
+              const SnackBar(
+                content: Text(
+                  'Hệ thống đang quá tải, vui lòng thử lại sau vài giây',
+                ),
+                duration: Duration(seconds: 2),
+              ),
+            );
+          } catch (_) {}
+        });
+      } catch (e) {
+        print('onTooManyRequests handler failed: $e');
+      }
+    };
+  } catch (e) {
+    print('Failed to register onTooManyRequests handler: $e');
+  }
 }
 
 /// ------------------------- GLOBAL NAVIGATOR & APP ------------------------- ///
@@ -316,7 +469,7 @@ class _MyAppState extends State<MyApp> {
         GlobalCupertinoLocalizations.delegate,
       ],
       supportedLocales: const [Locale('vi', 'VN'), Locale('en', 'US')],
-      home: const AuthGate(),
+      home: Stack(children: const [AuthGate(), AlarmBubbleOverlay()]),
       routes: {
         '/settings': (_) => const SettingsScreen(),
         '/waiting': (_) => const PendingAssignmentsScreen(),
@@ -359,6 +512,13 @@ void _setupApiClientUnauthenticatedHandler() {
       // Logout qua AuthProvider
       try {
         final auth = Provider.of<AuthProvider>(ctx, listen: false);
+        try {
+          final permProvider = Provider.of<PermissionsProvider>(
+            ctx,
+            listen: false,
+          );
+          permProvider.reset();
+        } catch (_) {}
         await auth.logout();
       } catch (_) {}
 

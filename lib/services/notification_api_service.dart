@@ -249,15 +249,17 @@ class NotificationApiService {
   }
 
   /// Lấy số lượng notifications chưa đọc
-  Future<int> getUnreadCount() async {
+  Future<int?> getUnreadCount() async {
     try {
       // Include user identifier to satisfy backend UUID validation
       final userId = await AuthStorage.getUserId();
       final rawUserId = userId ?? '';
       final trimmed = rawUserId.trim();
       if (trimmed.isEmpty) {
-        AppLogger.d('🔔 NotificationApiService: no userId, returning 0 unread');
-        return 0;
+        AppLogger.d(
+          '🔔 NotificationApiService: no userId, returning null unread',
+        );
+        return null;
       }
 
       // Debug: ensure userId looks like UUID v4
@@ -275,17 +277,24 @@ class NotificationApiService {
         '🔔 getUnreadCount userId codeUnits: ${trimmed.codeUnits.map((c) => c.toRadixString(16)).toList()}',
       );
 
-      final response = await _apiClient.get('/notifications/unread-count');
+      final query = trimmed.isNotEmpty ? {'user_id': trimmed} : null;
+      final extraHeaders = trimmed.isNotEmpty ? {'X-User-Id': trimmed} : null;
+
+      final response = await _apiClient.get(
+        '/notifications/unread-count',
+        query: query,
+        extraHeaders: extraHeaders,
+      );
 
       if (response.statusCode == 200) {
         final data = _apiClient.extractDataFromResponse(response);
-        return data['count'] ?? 0;
+        return data['unread'] ?? data['count'] ?? 0;
       } else {
         throw Exception('Failed to get unread count: ${response.statusCode}');
       }
     } catch (e, st) {
       AppLogger.e('Error getting unread count: $e', e, st);
-      return 0; // Return 0 on error to avoid breaking UI
+      return null; // Return null on error to preserve previous state
     }
   }
 

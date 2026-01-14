@@ -22,7 +22,7 @@ class DeepLinkService {
 
     // Handle initial link
     try {
-      final initialUri = await _appLinks!.getInitialLink();
+      final initialUri = await _appLinks!.getInitialAppLink();
       if (initialUri != null) {
         _handleUri(initialUri);
       }

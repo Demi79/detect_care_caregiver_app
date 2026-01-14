@@ -61,6 +61,26 @@ class _NotificationDetailScreenState extends State<NotificationDetailScreen>
     return DateFormat('dd/MM/yyyy HH:mm').format(dt.toLocal());
   }
 
+  CameraEntry _buildCameraFromMetadata() {
+    try {
+      final metadata = widget.notification.metadata ?? {};
+      final eventData = metadata['events'] as Map<String, dynamic>? ?? {};
+      final cameraData = eventData['cameras'] as Map<String, dynamic>? ?? {};
+
+      final id = cameraData['camera_id']?.toString() ?? 'unknown';
+      final name = cameraData['camera_name']?.toString() ?? 'Camera';
+      final url =
+          cameraData['rtsp_url']?.toString() ??
+          cameraData['hls_url']?.toString() ??
+          cameraData['url']?.toString() ??
+          '';
+
+      return CameraEntry(id: id, name: name, url: url);
+    } catch (e) {
+      return const CameraEntry(id: 'unknown', name: 'Camera', url: '');
+    }
+  }
+
   String _formatRelativeTime(DateTime? dt) {
     if (dt == null) return '-';
     final now = DateTime.now();
@@ -371,7 +391,7 @@ class _NotificationDetailScreenState extends State<NotificationDetailScreen>
       final api = CameraApi(
         ApiClient(tokenProvider: AuthStorage.getAccessToken),
       );
-      final response = await api.getCamerasByUser(customerId: customerId);
+      final response = await api.getCamerasByUser(userId: customerId);
       if (response['data'] is! List) {
         messenger.showSnackBar(
           SnackBar(
@@ -427,7 +447,11 @@ class _NotificationDetailScreenState extends State<NotificationDetailScreen>
       Navigator.push(
         context,
         MaterialPageRoute(
-          builder: (_) => LiveCameraScreen(initialUrl: cameraUrl),
+          builder: (_) => LiveCameraScreen(
+            initialUrl: cameraUrl,
+            camera: matched,
+            customerId: widget.notification.patientId,
+          ),
         ),
       );
     } catch (e) {
@@ -1188,10 +1212,16 @@ class _NotificationDetailScreenState extends State<NotificationDetailScreen>
                                         if (stream != null &&
                                             stream.isNotEmpty) {
                                           if (!context.mounted) return;
+                                          final camera =
+                                              _buildCameraFromMetadata();
                                           Navigator.of(ctx).push(
                                             MaterialPageRoute(
                                               builder: (_) => LiveCameraScreen(
                                                 initialUrl: stream,
+                                                camera: camera,
+                                                customerId: widget
+                                                    .notification
+                                                    .patientId,
                                               ),
                                             ),
                                           );

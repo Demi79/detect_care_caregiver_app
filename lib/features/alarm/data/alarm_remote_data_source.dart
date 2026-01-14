@@ -2,14 +2,13 @@ import 'dart:convert';
 
 import 'package:detect_care_caregiver_app/core/utils/logger.dart';
 import 'package:detect_care_caregiver_app/core/config/app_config.dart';
+import 'package:detect_care_caregiver_app/features/alarm/data/alarm_status.dart';
 import 'package:detect_care_caregiver_app/features/auth/data/auth_storage.dart';
 import 'package:http/http.dart' as http;
 
 class AlarmRemoteDataSource {
-  /// Control endpoint as requested
-  /// Control URL comes from AppConfig so it can be overridden in tests or
-  /// different environments via the ALARM_CONTROL_URL environment variable.
   static String get _controlUrl => AppConfig.alarmControlUrl;
+  static String get _statusUrl => AppConfig.alarmStatusUrl;
 
   final http.Client _client;
 
@@ -77,5 +76,32 @@ class AlarmRemoteDataSource {
       cameraId: cameraId,
       enabled: false,
     );
+  }
+
+  Future<AlarmStatus> getStatus() async {
+    final uri = Uri.parse(_statusUrl);
+    final token = await AuthStorage.getAccessToken();
+    final headers = <String, String>{'Content-Type': 'application/json'};
+    if (token != null && token.isNotEmpty) {
+      headers['Authorization'] = 'Bearer $token';
+    }
+
+    try {
+      AppLogger.api('→ ALARM GET $uri');
+      final res = await _client.get(uri, headers: headers);
+      AppLogger.api('← ALARM GET ${res.statusCode}');
+      if (res.statusCode < 200 || res.statusCode >= 300) {
+        AppLogger.e('❌ Alarm status failed: ${res.statusCode} ${res.body}');
+        throw Exception('Alarm status failed: ${res.statusCode}');
+      }
+      final decoded = json.decode(res.body);
+      if (decoded is! Map<String, dynamic>) {
+        throw Exception('Alarm status response is not a JSON object');
+      }
+      return AlarmStatus.fromJson(decoded);
+    } catch (e, st) {
+      AppLogger.e('❌ Error fetching alarm status: $e', e, st);
+      rethrow;
+    }
   }
 }

@@ -1,73 +1,35 @@
 import 'dart:math' as math;
 
 import 'package:cached_network_image/cached_network_image.dart';
+import 'package:detect_care_caregiver_app/core/utils/logger.dart';
+import 'package:detect_care_caregiver_app/features/camera/models/camera_entry.dart';
+import 'package:detect_care_caregiver_app/features/events/data/events_remote_data_source.dart';
+import 'package:detect_care_caregiver_app/features/home/models/event_log.dart';
+import 'package:detect_care_caregiver_app/features/home/widgets/action_log_card.dart';
+import 'package:detect_care_caregiver_app/widgets/event_update_modal.dart';
 import 'package:flutter/material.dart';
 
-// Helper extension: withOpacity has been flagged by analyzer as deprecated in
-// some SDKs; provide a safe helper that uses withAlpha under the hood to avoid
-// precision-loss warnings while keeping intent clear.
-extension ColorOpacitySafe on Color {
-  Color withOpacitySafe(double opacity) {
-    final a = (opacity * 255).round().clamp(0, 255);
-    return withAlpha(a);
-  }
-}
+import 'timeline_mapper.dart';
+import 'timeline_models.dart';
+import 'timeline_utils.dart';
 
-/// Model describing a recorded clip item in the timeline.
-class CameraTimelineClip {
-  final String id;
-  final DateTime startTime;
-  final Duration duration;
-  final Color accent;
-  final String? cameraId;
-  final String? playUrl;
-  final String? downloadUrl;
-  final String? thumbnailUrl;
-  final String? eventType;
-  final Map<String, dynamic>? metadata;
+export 'timeline_models.dart';
+export 'timeline_utils.dart';
 
-  const CameraTimelineClip({
-    required this.id,
-    required this.startTime,
-    required this.duration,
-    required this.accent,
-    this.cameraId,
-    this.playUrl,
-    this.downloadUrl,
-    this.thumbnailUrl,
-    this.eventType,
-    this.metadata,
-  });
+EventLog _buildTimelineEventLog(CameraTimelineClip clip, CameraEntry camera) =>
+    buildTimelineEventLog(clip, camera);
 
-  String get timeLabel {
-    // Display times in UTC+7 (local Vietnam time) regardless of stored timezone.
-    final tz = startTime.toUtc().add(const Duration(hours: 7));
-    final h = tz.hour.toString().padLeft(2, '0');
-    final m = tz.minute.toString().padLeft(2, '0');
-    final s = tz.second.toString().padLeft(2, '0');
-    return '$h:$m:$s';
-  }
+bool _timelineCanEdit(EventLog event) => timelineCanEdit(
+  EventLogLike(createdAt: event.createdAt, detectedAt: event.detectedAt),
+);
 
-  String get durationLabel {
-    final minutes = duration.inMinutes;
-    final seconds = duration.inSeconds % 60;
-    return "${minutes.toString().padLeft(1, '0')}'${seconds.toString().padLeft(2, '0')}\"";
-  }
-}
-
-/// Container for each timeline row.
-class CameraTimelineEntry {
-  final DateTime time;
-  final CameraTimelineClip? clip;
-
-  const CameraTimelineEntry({required this.time, this.clip});
-
-  String get timeLabel {
-    final tz = time.toUtc().add(const Duration(hours: 7));
-    final h = tz.hour.toString().padLeft(2, '0');
-    final m = tz.minute.toString().padLeft(2, '0');
-    return '$h:$m';
-  }
+void _showUpdateModal(BuildContext context, EventLog event) {
+  showEventUpdateModalForEvent(
+    context: context,
+    event: event,
+    imageSourceEvent: event,
+    canEditEvent: _timelineCanEdit(event),
+  );
 }
 
 class CameraTimelineModeOption {
@@ -141,12 +103,14 @@ class CameraTimelineCircleButton extends StatelessWidget {
   final IconData icon;
   final VoidCallback? onTap;
   final double size;
+  final bool enabled;
 
   const CameraTimelineCircleButton({
     super.key,
     required this.icon,
     this.onTap,
     this.size = 40,
+    this.enabled = true,
   });
 
   @override
@@ -155,13 +119,17 @@ class CameraTimelineCircleButton extends StatelessWidget {
       width: size,
       height: size,
       child: Material(
-        color: Colors.grey.shade100,
+        color: enabled ? Colors.grey.shade100 : Colors.grey.shade50,
         shape: const CircleBorder(),
         child: InkWell(
           onTap: onTap,
           customBorder: const CircleBorder(),
           child: Center(
-            child: Icon(icon, size: 20, color: Colors.grey.shade800),
+            child: Icon(
+              icon,
+              size: 20,
+              color: enabled ? Colors.grey.shade800 : Colors.grey.shade400,
+            ),
           ),
         ),
       ),
@@ -169,24 +137,24 @@ class CameraTimelineCircleButton extends StatelessWidget {
   }
 }
 
-/// A single row in the timeline list. It renders the left time label, the
-/// vertical indicator and either a clip card or an empty placeholder.
 class CameraTimelineRow extends StatelessWidget {
   final CameraTimelineEntry entry;
   final bool isSelected;
   final VoidCallback? onClipTap;
+  final CameraEntry camera;
 
   const CameraTimelineRow({
     super.key,
     required this.entry,
     required this.isSelected,
     this.onClipTap,
+    required this.camera,
   });
 
   @override
   Widget build(BuildContext context) {
     final hasClip = entry.clip != null;
-    const clipHeight = 96.0 + 16 + 10; // thumbnail + paddings
+    final clipHeight = 96.0 + 16 + 10;
 
     return Row(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -276,6 +244,7 @@ class CameraTimelineRow extends StatelessWidget {
                   onTap: onClipTap,
                   showPlayButton: false,
                   showCameraIcon: false,
+                  camera: camera,
                 )
               : CameraTimelineEmptyCard(timeLabel: entry.timeLabel),
         ),
@@ -291,6 +260,7 @@ class CameraTimelineClipCard extends StatelessWidget {
   final VoidCallback? onPlay;
   final bool showPlayButton;
   final bool showCameraIcon;
+  final CameraEntry camera;
 
   const CameraTimelineClipCard({
     super.key,
@@ -300,6 +270,7 @@ class CameraTimelineClipCard extends StatelessWidget {
     this.onPlay,
     this.showPlayButton = true,
     this.showCameraIcon = true,
+    required this.camera,
   });
 
   @override
@@ -463,8 +434,48 @@ class CameraTimelineClipCard extends StatelessWidget {
     );
   }
 
-  void _handleTap(BuildContext context) {
+  void _handleTap(BuildContext context) async {
     onTap?.call();
+    final meta = clip.metadata;
+    if (meta != null && meta.isNotEmpty) {
+      var event = _buildTimelineEventLog(clip, camera);
+
+      // Only attempt snapshot->event resolution for snapshot items. Avoid
+      // treating recordings (or events) as snapshots which could trigger
+      // incorrect lookups when ids were normalized incorrectly earlier.
+      if (clip.kind == TimelineItemKind.snapshot) {
+        final snapId = clip.snapshotId;
+        if (event.eventId.isEmpty && (snapId != null && snapId.isNotEmpty)) {
+          try {
+            final resolver = EventsRemoteDataSource();
+            final found = await resolver.listEvents(
+              limit: 1,
+              extraQuery: {'snapshot_id': snapId},
+            );
+            if (found.isNotEmpty) {
+              final resolved = EventLog.fromJson(found.first);
+              event = resolved;
+              AppLogger.d(
+                '[Timeline] Snapshot lookup resolved eventId=${event.eventId} for snapshot=$snapId',
+              );
+            }
+          } catch (e) {
+            AppLogger.d('[Timeline] Snapshot->event lookup failed: $e');
+          }
+        }
+      }
+
+      buildEventImagesModal(
+        pageContext: context,
+        event: event,
+        title: 'Hình ảnh sự kiện',
+        allowRecordingLookup: clip.kind != TimelineItemKind.recording,
+        onEdit: () => _showUpdateModal(context, event),
+        editTooltipBuilder: (_) => 'Đề xuất sự kiện',
+      );
+      return;
+    }
+
     final url = clip.thumbnailUrl?.trim();
     if (url == null || url.isEmpty) return;
     showDialog<void>(
@@ -472,7 +483,7 @@ class CameraTimelineClipCard extends StatelessWidget {
       builder: (ctx) => GestureDetector(
         onTap: () => Navigator.of(ctx).maybePop(),
         child: Dialog(
-          backgroundColor: Colors.black.withOpacity(0.85),
+          backgroundColor: Colors.black.withOpacitySafe(0.85),
           insetPadding: const EdgeInsets.symmetric(
             horizontal: 20,
             vertical: 48,

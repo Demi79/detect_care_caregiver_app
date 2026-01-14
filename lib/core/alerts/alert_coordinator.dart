@@ -57,10 +57,17 @@ class AlertCoordinator {
   }
 
   static LogEntry? fromData(Map<String, dynamic> data) {
-    final isSystemEvent = data['type'] == 'system_event';
+    final type = data['type']?.toString().toLowerCase();
+    final category = data['category']?.toString().toLowerCase();
+    final isSystemEvent = type == 'system_event' || category == 'alert';
 
-    if (isSystemEvent) {
+    if (isSystemEvent ||
+        data.containsKey('event_id') ||
+        data.containsKey('eventId')) {
       // Convert system event data to EventLog
+      return EventLog.fromJson(data);
+    }
+    if (data.containsKey('message')) {
       return EventLog.fromJson(data);
     }
     // For actor messages, return null to skip showing alert

@@ -8,6 +8,7 @@ import 'package:detect_care_caregiver_app/features/auth/models/login_result.dart
 import 'package:detect_care_caregiver_app/features/auth/models/user.dart';
 import 'package:detect_care_caregiver_app/features/auth/repositories/auth_repository.dart';
 import 'package:detect_care_caregiver_app/features/assignments/data/assignments_remote_data_source.dart';
+import 'package:detect_care_caregiver_app/services/notification_manager.dart';
 import 'package:flutter/foundation.dart';
 import 'package:supabase_flutter/supabase_flutter.dart' hide User;
 
@@ -39,6 +40,7 @@ class AuthProvider extends ChangeNotifier {
     user = null;
     _cachedUserId = null;
     _disposeInvitationSubscription();
+    NotificationManager().unsubscribeFromNotifications();
     _set(AuthStatus.unauthenticated);
   }
 

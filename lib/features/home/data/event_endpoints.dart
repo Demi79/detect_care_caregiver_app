@@ -37,7 +37,9 @@ class EventEndpoints {
 
   static const String selectList =
       'event_id,event_type,event_description,confidence_score,'
-      'status,lifecycle_state,detected_at,created_at,confirm_status';
+      'status,lifecycle_state,detected_at,created_at,confirm_status,'
+      'proposed_status,proposed_event_type,previous_status,proposed_by,'
+      'pending_reason,pending_until,notes,updated_by';
 
   static const String selectDetail = selectList;
 
