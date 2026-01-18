@@ -231,26 +231,55 @@ class InAppAlert {
           try {
             final svc = EventService.withDefaultClient();
             final latest = await svc.fetchLogDetail(e.eventId);
-            final ls = (latest.lifecycleState ?? '').toString().toUpperCase();
-            final lsUpper = ls.toString().toUpperCase();
-            if (lsUpper == 'RESOLVED') {
-              AppLogger.d(
-                '[InAppAlert] lifecycle=RESOLVED — keep popup open for ${e.eventId}',
-              );
-              return;
-            }
-            if (lsUpper == 'CANCELED' || lsUpper == 'CANCELLED') {
+            final updatedBy = (latest as dynamic).updatedBy?.toString() ?? '';
+
+            if (updatedBy.isNotEmpty) {
               remoteCanceledDetected = true;
               final customerId = await resolveCustomerId();
-              final updatedBy = (latest as dynamic).updatedBy?.toString() ?? '';
+              final isByCustomer =
+                  customerId != null && updatedBy == customerId;
+
+              try {
+                ScaffoldMessenger.of(ctx).showSnackBar(
+                  SnackBar(
+                    content: Text(
+                      isByCustomer
+                          ? 'Sự kiện đã được cập nhật bởi khách hàng'
+                          : 'Sự kiện đã được cập nhật',
+                    ),
+                    backgroundColor: Colors.blue,
+                    behavior: SnackBarBehavior.floating,
+                    duration: const Duration(milliseconds: 1800),
+                  ),
+                );
+              } catch (_) {}
+              try {
+                cancelForwardTimerLocal();
+                Navigator.of(ctx, rootNavigator: true).maybePop();
+              } catch (_) {}
+              return;
+            }
+
+            final ls = (latest.lifecycleState ?? '').toString().toUpperCase();
+            final lsUpper = ls.toString().toUpperCase();
+            if (lsUpper == 'RESOLVED' ||
+                lsUpper == 'CANCELED' ||
+                lsUpper == 'CANCELLED') {
+              remoteCanceledDetected = true;
+              final customerId = await resolveCustomerId();
               final isCanceledByCustomer =
                   updatedBy.isNotEmpty &&
                   customerId != null &&
                   updatedBy == customerId;
 
-              final message = isCanceledByCustomer
-                  ? 'Sự kiện này vừa bị hủy bởi khách hàng'
-                  : 'Cảnh báo đã được hủy thành công';
+              String message;
+              if (lsUpper == 'RESOLVED') {
+                message = 'Sự kiện đã được giải quyết';
+              } else if (isCanceledByCustomer) {
+                message = 'Sự kiện này vừa bị hủy bởi khách hàng';
+              } else {
+                message = 'Cảnh báo đã được hủy thành công';
+              }
               try {
                 ScaffoldMessenger.of(ctx).showSnackBar(
                   SnackBar(
@@ -283,6 +312,38 @@ class InAppAlert {
                 : null;
             if (id == null || id.toString() != e.eventId) return;
 
+            final updatedByVal = payload is Map
+                ? (payload['updated_by'] ?? payload['updatedBy'])
+                : null;
+            final updatedBy = updatedByVal?.toString() ?? '';
+
+            if (updatedBy.isNotEmpty) {
+              remoteCanceledDetected = true;
+              final customerId = await resolveCustomerId();
+              final isByCustomer =
+                  customerId != null && updatedBy == customerId;
+
+              try {
+                ScaffoldMessenger.of(ctx).showSnackBar(
+                  SnackBar(
+                    content: Text(
+                      isByCustomer
+                          ? 'Sự kiện đã được cập nhật bởi khách hàng'
+                          : 'Sự kiện đã được cập nhật',
+                    ),
+                    backgroundColor: Colors.blue,
+                    behavior: SnackBarBehavior.floating,
+                    duration: const Duration(milliseconds: 1800),
+                  ),
+                );
+              } catch (_) {}
+              try {
+                cancelForwardTimerLocal();
+                Navigator.of(ctx, rootNavigator: true).maybePop();
+              } catch (_) {}
+              return;
+            }
+
             final ls = payload is Map
                 ? (payload['lifecycle_state'] ??
                       payload['lifecycleState'] ??
@@ -291,27 +352,24 @@ class InAppAlert {
             if (ls == null) return;
 
             final lsUpper = ls.toString().toUpperCase();
-            if (lsUpper == 'RESOLVED') {
-              AppLogger.d(
-                '[InAppAlert] eventUpdated lifecycle=RESOLVED — ignoring for dismiss (id=${e.eventId})',
-              );
-              return;
-            }
-            if (lsUpper == 'CANCELED' || lsUpper == 'CANCELLED') {
+            if (lsUpper == 'RESOLVED' ||
+                lsUpper == 'CANCELED' ||
+                lsUpper == 'CANCELLED') {
               remoteCanceledDetected = true;
-              final updatedByVal = payload is Map
-                  ? (payload['updated_by'] ?? payload['updatedBy'])
-                  : null;
-              final updatedBy = updatedByVal?.toString() ?? '';
               final customerId = await resolveCustomerId();
               final isCanceledByCustomer =
                   updatedBy.isNotEmpty &&
                   customerId != null &&
                   updatedBy == customerId;
 
-              final message = isCanceledByCustomer
-                  ? 'Sự kiện này vừa bị hủy bởi khách hàng'
-                  : 'Cảnh báo đã được hủy thành công';
+              String message;
+              if (lsUpper == 'RESOLVED') {
+                message = 'Sự kiện đã được giải quyết';
+              } else if (isCanceledByCustomer) {
+                message = 'Sự kiện này vừa bị hủy bởi khách hàng';
+              } else {
+                message = 'Cảnh báo đã được hủy thành công';
+              }
               try {
                 ScaffoldMessenger.of(ctx).showSnackBar(
                   SnackBar(

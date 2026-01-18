@@ -32,6 +32,8 @@ class EventLog implements LogEntry {
   final String? lifecycleState;
   @override
   final String? createBy;
+  final String? createdBy;
+  final String? createdByDisplay;
   @override
   final bool? hasEmergencyCall;
   @override
@@ -82,6 +84,8 @@ class EventLog implements LogEntry {
     this.lifecycleState,
     this.cameraId,
     this.createBy,
+    this.createdBy,
+    this.createdByDisplay,
     this.updatedBy,
     this.hasEmergencyCall,
     this.hasAlarmActivated,
@@ -347,6 +351,15 @@ class EventLog implements LogEntry {
       boundingBoxes: m(first(json, ['bounding_boxes', 'boundingBoxes'])),
       confirmStatus: parsedConfirm,
       createBy: s(first(json, ['create_by', 'created_by', 'createBy'])),
+      createdBy: s(first(json, ['created_by', 'createBy', 'create_by'])),
+      createdByDisplay: s(
+        first(json, [
+          'created_by_display',
+          'createdByDisplay',
+          'creator_name',
+          'creatorName',
+        ]),
+      ),
       confirmationState: s(
         first(json, ['confirmation_state', 'confirmationState']),
       ),
@@ -580,6 +593,8 @@ class EventLog implements LogEntry {
     String? confirmationState,
     String? cameraId,
     String? createBy,
+    String? createdBy,
+    String? createdByDisplay,
     String? updatedBy,
     bool? hasEmergencyCall,
     bool? hasAlarmActivated,
@@ -607,6 +622,8 @@ class EventLog implements LogEntry {
     confirmationState: confirmationState ?? this.confirmationState,
     cameraId: cameraId ?? this.cameraId,
     createBy: createBy ?? this.createBy,
+    createdBy: createdBy ?? this.createdBy,
+    createdByDisplay: createdByDisplay ?? this.createdByDisplay,
     updatedBy: updatedBy ?? this.updatedBy,
     hasEmergencyCall: hasEmergencyCall ?? this.hasEmergencyCall,
     hasAlarmActivated: hasAlarmActivated ?? this.hasAlarmActivated,
