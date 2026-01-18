@@ -96,6 +96,7 @@ class ActionLogCard extends StatelessWidget {
   final void Function(String newStatus, {bool? confirmed})? onUpdated;
 
   static String? _cachedAcceptedCustomerId;
+  static String? _cachedCustomerName;
   static bool _acceptedCustomerPrefetchStarted = false;
 
   const ActionLogCard({super.key, required this.data, this.onUpdated});
@@ -1109,8 +1110,9 @@ class ActionLogCard extends StatelessWidget {
 
       if (active.isNotEmpty) {
         _cachedAcceptedCustomerId = active.first.customerId;
+        _cachedCustomerName = active.first.customerName;
         AppLogger.d(
-          '[ActionLogCard] cached accepted customerId=${_cachedAcceptedCustomerId}',
+          '[ActionLogCard] cached accepted customerId=${_cachedAcceptedCustomerId}, customerName=${_cachedCustomerName}',
         );
         return _cachedAcceptedCustomerId;
       }
@@ -2174,51 +2176,132 @@ class ActionLogCard extends StatelessWidget {
                         children: [
                           _sectionTitle('Chi tiết sự kiện'),
                           const SizedBox(height: 12),
-                          _detailCard([
-                            if ((data.lifecycleState ?? '')
-                                .toString()
-                                .isNotEmpty)
-                              _kvRow(
-                                'Hiện tại sự kiện',
-                                be.BackendEnums.lifecycleStateToVietnamese(
-                                  _canonicalLifecycle(data.lifecycleState),
+                          FutureBuilder<Map<String, dynamic>>(
+                            future:
+                                Future.wait([
+                                  EventRepository(
+                                    EventService.withDefaultClient(),
+                                  ).getEventDetails(data.eventId),
+                                  AuthStorage.getUserId().then(
+                                    (id) => id ?? '',
+                                  ),
+                                ]).then(
+                                  (results) => {
+                                    'detail': results[0] as EventLog,
+                                    'userId': results[1] as String,
+                                  },
                                 ),
-                                Colors.grey.shade600,
-                                Icons.event_available,
-                              ),
-                            _kvRow(
-                              'Trạng thái',
-                              be.BackendEnums.statusToVietnamese(data.status),
-                              statusColor,
-                              Icons.flag_outlined,
-                            ),
-                            _kvRow(
-                              'Sự kiện',
-                              be.BackendEnums.eventTypeToVietnamese(
-                                data.eventType,
-                              ),
-                              typeColor,
-                              Icons.category_outlined,
-                            ),
-                            _kvRow(
-                              'Mô tả',
-                              _getEventDisplayText(),
-                              typeColor,
-                              Icons.category_outlined,
-                            ),
-                            // _kvRow(
-                            //   'Mã sự kiện',
-                            //   _shortId(data.eventId),
-                            //   Colors.grey.shade600,
-                            //   Icons.fingerprint_outlined,
-                            // ),
-                            _kvRow(
-                              'Thời gian tạo',
-                              _formatDateTime(data.createdAt),
-                              Colors.grey.shade600,
-                              Icons.access_time_outlined,
-                            ),
-                          ]),
+                            builder: (context, snap) {
+                              final baseRows = <Widget>[
+                                if ((data.lifecycleState ?? '')
+                                    .toString()
+                                    .isNotEmpty)
+                                  _kvRow(
+                                    'Hiện tại sự kiện',
+                                    be.BackendEnums.lifecycleStateToVietnamese(
+                                      _canonicalLifecycle(data.lifecycleState),
+                                    ),
+                                    Colors.grey.shade600,
+                                    Icons.event_available,
+                                  ),
+                                _kvRow(
+                                  'Trạng thái',
+                                  be.BackendEnums.statusToVietnamese(
+                                    data.status,
+                                  ),
+                                  statusColor,
+                                  Icons.flag_outlined,
+                                ),
+                                _kvRow(
+                                  'Sự kiện',
+                                  be.BackendEnums.eventTypeToVietnamese(
+                                    data.eventType,
+                                  ),
+                                  typeColor,
+                                  Icons.category_outlined,
+                                ),
+                                _kvRow(
+                                  'Mô tả',
+                                  _getEventDisplayText(),
+                                  typeColor,
+                                  Icons.category_outlined,
+                                ),
+                                _kvRow(
+                                  'Thời gian tạo',
+                                  _formatDateTime(data.createdAt),
+                                  Colors.grey.shade600,
+                                  Icons.access_time_outlined,
+                                ),
+                              ];
+
+                              if (snap.connectionState ==
+                                      ConnectionState.done &&
+                                  !snap.hasError &&
+                                  snap.data != null) {
+                                final detail = snap.data!['detail'] as EventLog;
+                                final currentUserId =
+                                    snap.data!['userId'] as String;
+                                final createdBy =
+                                    (detail.createdBy ?? detail.createBy)
+                                        ?.toString()
+                                        .trim();
+                                final createdByDisplay = detail.createdByDisplay
+                                    ?.toString()
+                                    .trim();
+
+                                if (createdBy != null && createdBy.isNotEmpty) {
+                                  String createdByText = '';
+                                  bool shouldShow = false;
+
+                                  if (createdBy == currentUserId) {
+                                    createdByText =
+                                        'Sự kiện này được tạo bởi bạn';
+                                    shouldShow = true;
+                                  } else if (createdBy ==
+                                      permissionCustomerId) {
+                                    if (createdByDisplay != null &&
+                                        createdByDisplay.isNotEmpty) {
+                                      createdByText =
+                                          'Sự kiện này được tạo bởi khách hàng $createdByDisplay';
+                                    } else {
+                                      createdByText =
+                                          'Sự kiện này được tạo bởi khách hàng';
+                                    }
+                                    shouldShow = true;
+                                  }
+
+                                  if (shouldShow && createdByText.isNotEmpty) {
+                                    baseRows.add(
+                                      _kvRow(
+                                        'Nguồn',
+                                        createdByText,
+                                        Colors.grey.shade600,
+                                        Icons.person_outline,
+                                      ),
+                                    );
+                                  }
+                                }
+
+                                final notes =
+                                    detail.contextData?['notes']
+                                        ?.toString()
+                                        .trim() ??
+                                    detail.notes?.toString().trim();
+                                if (notes != null && notes.isNotEmpty) {
+                                  baseRows.add(
+                                    _kvRow(
+                                      'Ghi chú',
+                                      notes,
+                                      Colors.grey.shade600,
+                                      Icons.note_outlined,
+                                    ),
+                                  );
+                                }
+                              }
+
+                              return _detailCard(baseRows);
+                            },
+                          ),
 
                           Builder(
                             builder: (ctx) {

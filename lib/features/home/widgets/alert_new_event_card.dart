@@ -1148,6 +1148,16 @@ class _AlertEventCardState extends State<AlertEventCard>
             widget.description.isNotEmpty ? widget.description : '-',
           ),
           const SizedBox(height: 8),
+          _buildInfoRow(
+            'Trạng thái vòng đời',
+            be.BackendEnums.lifecycleStateToVietnamese(
+              _liveEvent?.lifecycleState ??
+                  (widget.event is EventLog
+                      ? (widget.event as EventLog).lifecycleState
+                      : null),
+            ),
+          ),
+          const SizedBox(height: 8),
           // Show camera display name (camera_name) when available from API.
           if (widget.cameraId == null)
             _buildInfoRow('Camera', 'Phòng khách')
