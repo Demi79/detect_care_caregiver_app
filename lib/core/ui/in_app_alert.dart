@@ -157,24 +157,16 @@ class InAppAlert {
     }
 
     if (settings.forwardingMode == 'elapsed_time') {
-      // Lấy ngưỡng cấu hình (giây) để auto-forward.
-      // Giới hạn trong khoảng 30–60s để phù hợp với yêu cầu sản phẩm
-      // (tránh người dùng đặt giá trị quá ngắn hoặc quá dài).
       final seconds = settings.forwardingElapsedThresholdSeconds;
       final int clampSeconds = seconds < 30
           ? 30
           : (seconds > 60 ? 60 : seconds);
       try {
-        // Khởi tạo timer client-side: nếu caregiver không tương tác trong
-        // `clampSeconds` giây kể từ khi modal hiển thị, client sẽ gọi API
-        // để chuyển lifecycle sang trạng thái forward (tạm thời do client)
-        // — backend nên có worker đảm bảo hành động này ở phía server.
         forwardTimer = Timer(Duration(seconds: clampSeconds), () async {
           AppLogger.i(
             '⏱️ Auto-forward timer fired for ${e.eventId} after ${clampSeconds}s',
           );
           try {
-            // Double-check latest lifecycle to avoid racing with a cancel/confirm
             final svc = EventService.withDefaultClient();
             final latest = await svc.fetchLogDetail(e.eventId);
             final ls = (latest.lifecycleState ?? '').toString().toUpperCase();
