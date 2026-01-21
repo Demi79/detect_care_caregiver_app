@@ -239,24 +239,13 @@ class InAppAlert {
             final latest = await svc.fetchLogDetail(e.eventId);
 
             final ls = (latest.lifecycleState ?? '').toString().toUpperCase();
-            if (ls == 'RESOLVED' ||
-                ls == 'CANCELED' ||
-                ls == 'CANCELLED' ||
-                ls == 'ACKNOWLEDGED') {
+            if (_shouldAutoClose(ls)) {
               remoteCanceledDetected = true;
 
-              String message;
-              if (ls == 'RESOLVED') {
-                message = 'Sự kiện đã được giải quyết';
-              } else if (ls == 'ACKNOWLEDGED') {
-                message = 'Sự kiện đã được xác nhận';
-              } else {
-                message = 'Cảnh báo đã được hủy thành công';
-              }
               try {
                 ScaffoldMessenger.of(ctx).showSnackBar(
                   SnackBar(
-                    content: Text(message),
+                    content: Text(_autoCloseMessage(ls)),
                     backgroundColor: Colors.green,
                     behavior: SnackBarBehavior.floating,
                     duration: const Duration(milliseconds: 1800),
@@ -292,24 +281,13 @@ class InAppAlert {
             if (ls == null) return;
 
             final lsUpper = ls.toString().toUpperCase();
-            if (lsUpper == 'RESOLVED' ||
-                lsUpper == 'CANCELED' ||
-                lsUpper == 'CANCELLED' ||
-                lsUpper == 'ACKNOWLEDGED') {
+            if (_shouldAutoClose(lsUpper)) {
               remoteCanceledDetected = true;
 
-              String message;
-              if (lsUpper == 'RESOLVED') {
-                message = 'Sự kiện đã được giải quyết';
-              } else if (lsUpper == 'ACKNOWLEDGED') {
-                message = 'Sự kiện đã được xác nhận';
-              } else {
-                message = 'Cảnh báo đã được hủy thành công';
-              }
               try {
                 ScaffoldMessenger.of(ctx).showSnackBar(
                   SnackBar(
-                    content: Text(message),
+                    content: Text(_autoCloseMessage(lsUpper)),
                     backgroundColor: Colors.green,
                     behavior: SnackBarBehavior.floating,
                     duration: const Duration(milliseconds: 1800),
@@ -669,5 +647,21 @@ class InAppAlert {
       }
     } catch (_) {}
     return false;
+  }
+
+  // Only close popup for specific lifecycle values
+  static bool _shouldAutoClose(String lifecycleUpper) {
+    final ls = lifecycleUpper.trim();
+    return ls == 'RESOLVED' ||
+        ls == 'CANCELED' ||
+        ls == 'CANCELLED' ||
+        ls == 'ACKNOWLEDGED';
+  }
+
+  static String _autoCloseMessage(String lifecycleUpper) {
+    final ls = lifecycleUpper.trim();
+    if (ls == 'RESOLVED') return 'Sự kiện đã được giải quyết';
+    if (ls == 'ACKNOWLEDGED') return 'Sự kiện đã được xác nhận';
+    return 'Cảnh báo đã được hủy thành công';
   }
 }
