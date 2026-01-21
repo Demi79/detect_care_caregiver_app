@@ -223,70 +223,37 @@ class InAppAlert {
       }
     }
 
+    bool allowAutoDismiss = false;
+    Timer(const Duration(seconds: 2), () {
+      allowAutoDismiss = true;
+    });
+
     try {
       try {
         tableSub = AppEvents.instance.tableChanged.listen((table) async {
           if (remoteCanceledDetected) return;
+          if (!allowAutoDismiss) return;
           if (table != 'event_detections') return;
           try {
             final svc = EventService.withDefaultClient();
             final latest = await svc.fetchLogDetail(e.eventId);
-            final updatedBy = (latest as dynamic).updatedBy?.toString() ?? '';
 
-            if (updatedBy.isNotEmpty) {
+            final rawLs = (latest.lifecycleState ?? '').toString();
+            final ls = rawLs.trim().toUpperCase();
+            if (_shouldAutoClose(ls)) {
               remoteCanceledDetected = true;
-              final customerId = await resolveCustomerId();
-              final isByCustomer =
-                  customerId != null && updatedBy == customerId;
 
               try {
-                ScaffoldMessenger.of(ctx).showSnackBar(
-                  SnackBar(
-                    content: Text(
-                      isByCustomer
-                          ? 'Sự kiện đã được cập nhật bởi khách hàng'
-                          : 'Sự kiện đã được cập nhật',
-                    ),
-                    backgroundColor: Colors.blue,
-                    behavior: SnackBarBehavior.floating,
-                    duration: const Duration(milliseconds: 1800),
-                  ),
+                AppLogger.i(
+                  'InAppAlert auto-close (tableChanged) lifecycle=$ls',
                 );
               } catch (_) {}
-              try {
-                cancelForwardTimerLocal();
-                Navigator.of(ctx, rootNavigator: true).maybePop();
-              } catch (_) {}
-              return;
-            }
 
-            final ls = (latest.lifecycleState ?? '').toString().toUpperCase();
-            final lsUpper = ls.toString().toUpperCase();
-            if (lsUpper == 'RESOLVED' ||
-                lsUpper == 'CANCELED' ||
-                lsUpper == 'CANCELLED') {
-              remoteCanceledDetected = true;
-              final customerId = await resolveCustomerId();
-              final isCanceledByCustomer =
-                  updatedBy.isNotEmpty &&
-                  customerId != null &&
-                  updatedBy == customerId;
-
-              String message;
-              if (lsUpper == 'RESOLVED') {
-                message = 'Sự kiện đã được giải quyết';
-              } else if (isCanceledByCustomer) {
-                message = 'Sự kiện này vừa bị hủy bởi khách hàng';
-              } else {
-                message = 'Cảnh báo đã được hủy thành công';
-              }
               try {
                 ScaffoldMessenger.of(ctx).showSnackBar(
                   SnackBar(
-                    content: Text(message),
-                    backgroundColor: isCanceledByCustomer
-                        ? Colors.orange
-                        : Colors.green,
+                    content: Text(_autoCloseMessage(ls)),
+                    backgroundColor: Colors.green,
                     behavior: SnackBarBehavior.floating,
                     duration: const Duration(milliseconds: 1800),
                   ),
@@ -306,43 +273,12 @@ class InAppAlert {
           payload,
         ) async {
           if (remoteCanceledDetected) return;
+          if (!allowAutoDismiss) return; // Bỏ qua updates trong 2 giây đầu
           try {
             final id = payload is Map
                 ? (payload['id'] ?? payload['eventId'] ?? payload['event_id'])
                 : null;
             if (id == null || id.toString() != e.eventId) return;
-
-            final updatedByVal = payload is Map
-                ? (payload['updated_by'] ?? payload['updatedBy'])
-                : null;
-            final updatedBy = updatedByVal?.toString() ?? '';
-
-            if (updatedBy.isNotEmpty) {
-              remoteCanceledDetected = true;
-              final customerId = await resolveCustomerId();
-              final isByCustomer =
-                  customerId != null && updatedBy == customerId;
-
-              try {
-                ScaffoldMessenger.of(ctx).showSnackBar(
-                  SnackBar(
-                    content: Text(
-                      isByCustomer
-                          ? 'Sự kiện đã được cập nhật bởi khách hàng'
-                          : 'Sự kiện đã được cập nhật',
-                    ),
-                    backgroundColor: Colors.blue,
-                    behavior: SnackBarBehavior.floating,
-                    duration: const Duration(milliseconds: 1800),
-                  ),
-                );
-              } catch (_) {}
-              try {
-                cancelForwardTimerLocal();
-                Navigator.of(ctx, rootNavigator: true).maybePop();
-              } catch (_) {}
-              return;
-            }
 
             final ls = payload is Map
                 ? (payload['lifecycle_state'] ??
@@ -351,32 +287,21 @@ class InAppAlert {
                 : null;
             if (ls == null) return;
 
-            final lsUpper = ls.toString().toUpperCase();
-            if (lsUpper == 'RESOLVED' ||
-                lsUpper == 'CANCELED' ||
-                lsUpper == 'CANCELLED') {
+            final lsUpper = ls.toString().trim().toUpperCase();
+            if (_shouldAutoClose(lsUpper)) {
               remoteCanceledDetected = true;
-              final customerId = await resolveCustomerId();
-              final isCanceledByCustomer =
-                  updatedBy.isNotEmpty &&
-                  customerId != null &&
-                  updatedBy == customerId;
 
-              String message;
-              if (lsUpper == 'RESOLVED') {
-                message = 'Sự kiện đã được giải quyết';
-              } else if (isCanceledByCustomer) {
-                message = 'Sự kiện này vừa bị hủy bởi khách hàng';
-              } else {
-                message = 'Cảnh báo đã được hủy thành công';
-              }
+              try {
+                AppLogger.i(
+                  'InAppAlert auto-close (eventUpdated) lifecycle=$lsUpper',
+                );
+              } catch (_) {}
+
               try {
                 ScaffoldMessenger.of(ctx).showSnackBar(
                   SnackBar(
-                    content: Text(message),
-                    backgroundColor: isCanceledByCustomer
-                        ? Colors.orange
-                        : Colors.green,
+                    content: Text(_autoCloseMessage(lsUpper)),
+                    backgroundColor: Colors.green,
                     behavior: SnackBarBehavior.floating,
                     duration: const Duration(milliseconds: 1800),
                   ),
@@ -735,5 +660,22 @@ class InAppAlert {
       }
     } catch (_) {}
     return false;
+  }
+
+  // Only close popup for specific lifecycle values
+  static bool _shouldAutoClose(String lifecycleUpper) {
+    final ls = lifecycleUpper.trim().toUpperCase();
+    if (ls.isEmpty) return false;
+    return ls == 'RESOLVED' ||
+        ls == 'CANCELED' ||
+        ls == 'CANCELLED' ||
+        ls == 'ACKNOWLEDGED';
+  }
+
+  static String _autoCloseMessage(String lifecycleUpper) {
+    final ls = lifecycleUpper.trim().toUpperCase();
+    if (ls == 'RESOLVED') return 'Sự kiện đã được giải quyết';
+    if (ls == 'ACKNOWLEDGED') return 'Sự kiện đã được xác nhận';
+    return 'Cảnh báo đã được hủy thành công';
   }
 }
