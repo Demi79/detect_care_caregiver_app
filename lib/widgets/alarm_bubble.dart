@@ -65,10 +65,9 @@ class _AlarmBubbleOverlayState extends State<AlarmBubbleOverlay>
 
     final ids = <String>[];
     if (status != null) {
-      ids.addAll(status.activeAlarms);
       final fromStatus = status.eventId;
       if (fromStatus != null && fromStatus.isNotEmpty) {
-        if (!ids.contains(fromStatus)) ids.add(fromStatus);
+        ids.add(fromStatus);
       }
     }
 
@@ -86,11 +85,9 @@ class _AlarmBubbleOverlayState extends State<AlarmBubbleOverlay>
 
   Future<void> _openAlertCard() async {
     final messenger = ScaffoldMessenger.of(context);
-    final eventId = _alarmEventIds.isNotEmpty
-        ? _alarmEventIds.first
-        : _lastStatus?.eventId;
+    final resolvedEventId = _lastStatus?.eventId;
 
-    if (eventId == null || eventId.isEmpty) {
+    if (resolvedEventId == null || resolvedEventId.isEmpty) {
       messenger.showSnackBar(
         const SnackBar(
           content: Text('Không tìm thấy sự kiện báo động đang phát'),
@@ -109,9 +106,11 @@ class _AlarmBubbleOverlayState extends State<AlarmBubbleOverlay>
 
     EventLog? event;
     try {
-      event = await EventService.withDefaultClient().fetchLogDetail(eventId);
+      event = await EventService.withDefaultClient().fetchLogDetail(
+        resolvedEventId,
+      );
     } catch (e, st) {
-      AppLogger.e('AlarmBubble: load event $eventId failed: $e', e, st);
+      AppLogger.e('AlarmBubble: load event $resolvedEventId failed: $e', e, st);
       messenger.showSnackBar(
         SnackBar(
           content: Text('Không thể tải chi tiết sự kiện: $e'),
