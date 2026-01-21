@@ -238,9 +238,16 @@ class InAppAlert {
             final svc = EventService.withDefaultClient();
             final latest = await svc.fetchLogDetail(e.eventId);
 
-            final ls = (latest.lifecycleState ?? '').toString().toUpperCase();
+            final rawLs = (latest.lifecycleState ?? '').toString();
+            final ls = rawLs.trim().toUpperCase();
             if (_shouldAutoClose(ls)) {
               remoteCanceledDetected = true;
+
+              try {
+                AppLogger.i(
+                  'InAppAlert auto-close (tableChanged) lifecycle=$ls',
+                );
+              } catch (_) {}
 
               try {
                 ScaffoldMessenger.of(ctx).showSnackBar(
@@ -280,9 +287,15 @@ class InAppAlert {
                 : null;
             if (ls == null) return;
 
-            final lsUpper = ls.toString().toUpperCase();
+            final lsUpper = ls.toString().trim().toUpperCase();
             if (_shouldAutoClose(lsUpper)) {
               remoteCanceledDetected = true;
+
+              try {
+                AppLogger.i(
+                  'InAppAlert auto-close (eventUpdated) lifecycle=$lsUpper',
+                );
+              } catch (_) {}
 
               try {
                 ScaffoldMessenger.of(ctx).showSnackBar(
@@ -651,7 +664,8 @@ class InAppAlert {
 
   // Only close popup for specific lifecycle values
   static bool _shouldAutoClose(String lifecycleUpper) {
-    final ls = lifecycleUpper.trim();
+    final ls = lifecycleUpper.trim().toUpperCase();
+    if (ls.isEmpty) return false;
     return ls == 'RESOLVED' ||
         ls == 'CANCELED' ||
         ls == 'CANCELLED' ||
@@ -659,7 +673,7 @@ class InAppAlert {
   }
 
   static String _autoCloseMessage(String lifecycleUpper) {
-    final ls = lifecycleUpper.trim();
+    final ls = lifecycleUpper.trim().toUpperCase();
     if (ls == 'RESOLVED') return 'Sự kiện đã được giải quyết';
     if (ls == 'ACKNOWLEDGED') return 'Sự kiện đã được xác nhận';
     return 'Cảnh báo đã được hủy thành công';
