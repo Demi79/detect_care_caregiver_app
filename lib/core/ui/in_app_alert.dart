@@ -88,6 +88,36 @@ class InAppAlert {
       }
     } catch (_) {}
 
+    try {
+      String? proposedBy;
+      try {
+        proposedBy = (e as dynamic).proposedBy?.toString();
+      } catch (_) {
+        proposedBy = null;
+      }
+      final propFromContext = e.contextData?['proposed_by']?.toString();
+      final propFromDetection = e.detectionData?['proposed_by']?.toString();
+      if (currentUserId != null) {
+        final matchesUser =
+            (proposedBy != null &&
+                proposedBy.isNotEmpty &&
+                proposedBy == currentUserId) ||
+            (propFromContext != null &&
+                propFromContext.isNotEmpty &&
+                propFromContext == currentUserId) ||
+            (propFromDetection != null &&
+                propFromDetection.isNotEmpty &&
+                propFromDetection == currentUserId);
+
+        if (matchesUser) {
+          print(
+            '❌ Popup suppressed: self-triggered by proposed_by=$currentUserId',
+          );
+          return;
+        }
+      }
+    } catch (_) {}
+
     final eventTime = e.createdAt ?? e.detectedAt ?? DateTime.now();
     DateTime truncateToMinute(DateTime t) =>
         DateTime(t.year, t.month, t.day, t.hour, t.minute);

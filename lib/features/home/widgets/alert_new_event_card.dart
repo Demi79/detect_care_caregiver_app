@@ -110,6 +110,8 @@ class _AlertEventCardState extends State<AlertEventCard>
   bool _localEmergencyCalled = false;
   final AlarmStatusService _alarmStatusService = AlarmStatusService.instance;
 
+  String? _activeAlarmEventId;
+
   EventLog? _liveEvent;
   StreamSubscription<Map<String, dynamic>>? _eventUpdatedSub;
   Future<List<ImageSource>>? _prefetchFuture;
@@ -296,9 +298,14 @@ class _AlertEventCardState extends State<AlertEventCard>
     if (_alarmResolved) return false;
 
     if (status != null) {
-      final activeForEvent = status.isEventActive(widget.eventId);
-      final noActiveList = status.activeAlarms.isEmpty;
-      return status.isPlaying && (activeForEvent || noActiveList);
+      if (status.isPlaying) {
+        _activeAlarmEventId = status.eventId;
+        AppLogger.d(
+          '[_shouldShowCancelButton] Alarm is playing, eventId=${status.eventId}, showing cancel button',
+        );
+        return true;
+      }
+      return false;
     }
 
     final terminalStates = [
@@ -312,8 +319,16 @@ class _AlertEventCardState extends State<AlertEventCard>
     ];
     final bool isAlarmActiveExplicit = evLifecycle == 'ALARM_ACTIVATED';
     final bool isAlarmActiveImplicit = evLifecycle.isEmpty && hasAlarmFlag;
-    return !terminalStates.contains(evLifecycle) &&
+    final fallbackShow =
+        !terminalStates.contains(evLifecycle) &&
         (isAlarmActiveExplicit || isAlarmActiveImplicit);
+
+    AppLogger.d(
+      '[_shouldShowCancelButton] No status, using lifecycle: $evLifecycle '
+      'hasAlarmFlag=$hasAlarmFlag fallbackShow=$fallbackShow',
+    );
+
+    return fallbackShow;
   }
 
   bool isCustomerVerified() {
@@ -565,8 +580,13 @@ class _AlertEventCardState extends State<AlertEventCard>
         return;
       }
 
+      final alarmEventId = _activeAlarmEventId ?? widget.eventId;
+      AppLogger.d(
+        '[_handleResolveAlarm] Canceling alarm with eventId=$alarmEventId (from status)',
+      );
+
       await AlarmRemoteDataSource().cancelAlarm(
-        eventId: widget.eventId,
+        eventId: alarmEventId,
         userId: userId,
         cameraId: widget.cameraId,
       );
