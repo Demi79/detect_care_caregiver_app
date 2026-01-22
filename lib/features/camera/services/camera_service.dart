@@ -47,7 +47,7 @@ class CameraService {
         ApiClient(tokenProvider: AuthStorage.getAccessToken),
       );
 
-      final result = await _cameraApi.getCamerasByUser(customerId: customerId);
+      final result = await _cameraApi.getCamerasByUser(userId: customerId);
       final List<dynamic> data = result['data'] ?? [];
       return data.map((e) => CameraEntry.fromJson(e)).toList();
     } catch (e) {
@@ -138,12 +138,54 @@ class CameraService {
 
   Future<void> refreshThumbnails(List<String> cameraIds) async {
     // Method placeholder - implement when CameraApi supports this
-    debugPrint('Thumbnail refresh requested for ${cameraIds.length} cameras');
+    if (kDebugMode) {
+      debugPrint('Thumbnail refresh requested for ${cameraIds.length} cameras');
+    }
     // TODO: Implement actual thumbnail refresh when API supports it
     // For now, just add a small delay to simulate network call
     await Future.delayed(const Duration(milliseconds: 50));
   }
 
+  /// Refresh thumbnail for a camera after user exits live view
+  /// This triggers the backend to create a new snapshot request
+  Future<String?> refreshCameraThumbnail(String cameraId) async {
+    try {
+      final response = await _cameraApi.refreshThumbnail(cameraId);
+
+      // Extract thumbnail URL from response
+      final thumbnailUrl = response['thumbnail_url'] as String?;
+      final status = response['status'] as String?;
+
+      if (status == 'success' && thumbnailUrl != null) {
+        return thumbnailUrl;
+      }
+
+      // If error but has old thumbnail, return it
+      if (status == 'error' && thumbnailUrl != null) {
+        debugPrint('Camera offline, using cached thumbnail for $cameraId');
+        return thumbnailUrl;
+      }
+
+      return null;
+    } catch (e) {
+      debugPrint('Failed to refresh thumbnail for $cameraId: $e');
+      return null;
+    }
+  }
+
+  /// Get latest thumbnail without triggering new capture
+  /// Used for quick display in camera list
+  Future<String?> getLatestThumbnail(String cameraId) async {
+    try {
+      final response = await _cameraApi.getLatestThumbnail(cameraId);
+      return response['thumbnail_url'] as String?;
+    } catch (e) {
+      debugPrint('Failed to get latest thumbnail for $cameraId: $e');
+      return null;
+    }
+  }
+
+  @Deprecated('Use refreshCameraThumbnail or getLatestThumbnail instead')
   Future<String?> fetchTimelineThumbnail(String cameraId) async {
     try {
       final dateStr = DateTime.now().toIso8601String().split('T').first;

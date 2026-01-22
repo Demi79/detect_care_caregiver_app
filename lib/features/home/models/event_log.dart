@@ -9,6 +9,7 @@ class EventLog implements LogEntry {
   final String eventType;
   @override
   final String? eventDescription;
+  final String? notes;
   @override
   final double confidenceScore;
   @override
@@ -29,6 +30,25 @@ class EventLog implements LogEntry {
   final bool confirmStatus;
   @override
   final String? lifecycleState;
+  @override
+  final String? createBy;
+  final String? createdBy;
+  final String? createdByDisplay;
+  @override
+  final bool? hasEmergencyCall;
+  @override
+  final bool? hasAlarmActivated;
+  @override
+  final String? lastEmergencyCallSource;
+  @override
+  final String? lastAlarmActivatedSource;
+  @override
+  final DateTime? lastEmergencyCallAt;
+  @override
+  final DateTime? lastAlarmActivatedAt;
+  @override
+  final bool? isAlarmTimeoutExpired;
+  final String? updatedBy;
   final List<String> imageUrls;
 
   final String? confirmationState;
@@ -44,6 +64,7 @@ class EventLog implements LogEntry {
     required this.status,
     required this.eventType,
     this.eventDescription,
+    this.notes,
     required this.confidenceScore,
     this.detectedAt,
     this.createdAt,
@@ -62,6 +83,17 @@ class EventLog implements LogEntry {
     this.imageUrls = const [],
     this.lifecycleState,
     this.cameraId,
+    this.createBy,
+    this.createdBy,
+    this.createdByDisplay,
+    this.updatedBy,
+    this.hasEmergencyCall,
+    this.hasAlarmActivated,
+    this.lastEmergencyCallSource,
+    this.lastAlarmActivatedSource,
+    this.lastEmergencyCallAt,
+    this.lastAlarmActivatedAt,
+    this.isAlarmTimeoutExpired,
   });
 
   factory EventLog.fromJson(Map<String, dynamic> json) {
@@ -122,8 +154,35 @@ class EventLog implements LogEntry {
       return null;
     }
 
-    final rawEventId = first(json, ['event_id', 'eventId', 'id']);
-    final parsedEventId = s(rawEventId) ?? '';
+    // final rawEventId = first(json, ['event_id', 'eventId', 'id']);
+    // final parsedEventId = s(rawEventId) ?? '';
+    bool isUuidLoose(String s) => RegExp(
+      r'^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$',
+      caseSensitive: false,
+    ).hasMatch(s.trim());
+
+    final hasEventShape = [
+      'event_type',
+      'eventType',
+      'type',
+      'status',
+      'event_status',
+      'lifecycle_state',
+      'lifecycleState',
+    ].any((key) => json.containsKey(key));
+
+    final rawEventIdKeys = hasEventShape
+        ? ['event_id', 'eventId', 'id']
+        : ['event_id', 'eventId'];
+
+    final ev = s(first(json, rawEventIdKeys))?.trim();
+    final id = s(first(json, ['id']))?.trim();
+
+    final parsedEventId = (ev != null && ev.isNotEmpty)
+        ? ev
+        : ((hasEventShape && id != null && id.isNotEmpty && isUuidLoose(id))
+              ? id
+              : '');
 
     final confirmKeys = [
       'confirm_status',
@@ -157,6 +216,7 @@ class EventLog implements LogEntry {
 
     final rawDetected = first(json, ['detected_at', 'detectedAt']);
     final rawCreated = first(json, ['created_at', 'createdAt']);
+    final updatedByValue = s(first(json, ['updated_by', 'updatedBy']));
     final parsedDetected = dt(rawDetected);
     final parsedCreated = dt(rawCreated);
 
@@ -277,6 +337,7 @@ class EventLog implements LogEntry {
       eventDescription: s(
         first(json, ['event_description', 'eventDescription']),
       ),
+      notes: s(first(json, ['notes'])),
       confidenceScore: d(
         first(json, ['confidence_score', 'confidenceScore', 'confidence']),
       ),
@@ -289,6 +350,16 @@ class EventLog implements LogEntry {
       contextData: ctxMap,
       boundingBoxes: m(first(json, ['bounding_boxes', 'boundingBoxes'])),
       confirmStatus: parsedConfirm,
+      createBy: s(first(json, ['create_by', 'created_by', 'createBy'])),
+      createdBy: s(first(json, ['created_by', 'createBy', 'create_by'])),
+      createdByDisplay: s(
+        first(json, [
+          'created_by_display',
+          'createdByDisplay',
+          'creator_name',
+          'creatorName',
+        ]),
+      ),
       confirmationState: s(
         first(json, ['confirmation_state', 'confirmationState']),
       ),
@@ -307,6 +378,144 @@ class EventLog implements LogEntry {
           s(topCamera) ??
           s(detMap['camera_id']) ??
           s(ctxMap['camera_id']),
+      updatedBy: s(first(json, ['updated_by', 'updatedBy'])),
+      hasEmergencyCall:
+          (first(json, [
+                'has_emergency_call',
+                'hasEmergencyCall',
+                'emergency_call',
+              ]) !=
+              null)
+          ? (first(json, [
+                      'has_emergency_call',
+                      'hasEmergencyCall',
+                      'emergency_call',
+                    ])
+                    is bool
+                ? first(json, [
+                        'has_emergency_call',
+                        'hasEmergencyCall',
+                        'emergency_call',
+                      ])
+                      as bool
+                : (first(json, [
+                            'has_emergency_call',
+                            'hasEmergencyCall',
+                            'emergency_call',
+                          ])
+                          is num
+                      ? (first(json, [
+                                  'has_emergency_call',
+                                  'hasEmergencyCall',
+                                  'emergency_call',
+                                ])
+                                as num) !=
+                            0
+                      : (first(json, [
+                              'has_emergency_call',
+                              'hasEmergencyCall',
+                              'emergency_call',
+                            ]).toString().trim().toLowerCase() ==
+                            'true')))
+          : false,
+      hasAlarmActivated:
+          (first(json, [
+                'has_alarm_activated',
+                'hasAlarmActivated',
+                'alarm_activated',
+              ]) !=
+              null)
+          ? (first(json, [
+                      'has_alarm_activated',
+                      'hasAlarmActivated',
+                      'alarm_activated',
+                    ])
+                    is bool
+                ? first(json, [
+                        'has_alarm_activated',
+                        'hasAlarmActivated',
+                        'alarm_activated',
+                      ])
+                      as bool
+                : (first(json, [
+                            'has_alarm_activated',
+                            'hasAlarmActivated',
+                            'alarm_activated',
+                          ])
+                          is num
+                      ? (first(json, [
+                                  'has_alarm_activated',
+                                  'hasAlarmActivated',
+                                  'alarm_activated',
+                                ])
+                                as num) !=
+                            0
+                      : (first(json, [
+                              'has_alarm_activated',
+                              'hasAlarmActivated',
+                              'alarm_activated',
+                            ]).toString().trim().toLowerCase() ==
+                            'true')))
+          : false,
+      lastEmergencyCallSource: s(
+        first(json, [
+          'last_emergency_call_source',
+          'lastEmergencyCallSource',
+          'emergency_call_source',
+        ]),
+      ),
+      lastAlarmActivatedSource: s(
+        first(json, [
+          'last_alarm_activated_source',
+          'lastAlarmActivatedSource',
+          'alarm_activated_source',
+        ]),
+      ),
+      lastEmergencyCallAt: dt(
+        first(json, ['last_emergency_call_at', 'lastEmergencyCallAt']),
+      ),
+      lastAlarmActivatedAt: dt(
+        first(json, ['last_alarm_activated_at', 'lastAlarmActivatedAt']),
+      ),
+      isAlarmTimeoutExpired:
+          (first(json, [
+                'isAlarmTimeoutExpired',
+                'is_alarm_timeout_expired',
+                'alarm_timeout_expired',
+              ]) !=
+              null)
+          ? (first(json, [
+                      'isAlarmTimeoutExpired',
+                      'is_alarm_timeout_expired',
+                      'alarm_timeout_expired',
+                    ])
+                    is bool
+                ? first(json, [
+                        'isAlarmTimeoutExpired',
+                        'is_alarm_timeout_expired',
+                        'alarm_timeout_expired',
+                      ])
+                      as bool
+                : (first(json, [
+                            'isAlarmTimeoutExpired',
+                            'is_alarm_timeout_expired',
+                            'alarm_timeout_expired',
+                          ])
+                          is num
+                      ? (first(json, [
+                                  'isAlarmTimeoutExpired',
+                                  'is_alarm_timeout_expired',
+                                  'alarm_timeout_expired',
+                                ])
+                                as num) !=
+                            0
+                      : (first(json, [
+                              'isAlarmTimeoutExpired',
+                              'is_alarm_timeout_expired',
+                              'alarm_timeout_expired',
+                            ]).toString().trim().toLowerCase() ==
+                            'true')))
+          : false,
     );
   }
 
@@ -316,6 +525,7 @@ class EventLog implements LogEntry {
       'status': status,
       'event_type': eventType,
       'event_description': eventDescription,
+      'notes': notes,
       'confidence_score': confidenceScore,
       if (detectedAt != null) 'detected_at': detectedAt!.toIso8601String(),
       if (createdAt != null) 'created_at': createdAt!.toIso8601String(),
@@ -334,7 +544,21 @@ class EventLog implements LogEntry {
         'pending_until': pendingUntil!.toIso8601String(),
       if (imageUrls.isNotEmpty) 'image_urls': imageUrls,
       if (cameraId != null) 'camera_id': cameraId,
+      if (createBy != null) 'create_by': createBy,
+      if (updatedBy != null) 'updated_by': updatedBy,
       if (lifecycleState != null) 'lifecycle_state': lifecycleState,
+      if (hasEmergencyCall != null) 'has_emergency_call': hasEmergencyCall,
+      if (hasAlarmActivated != null) 'has_alarm_activated': hasAlarmActivated,
+      if (lastEmergencyCallSource != null)
+        'last_emergency_call_source': lastEmergencyCallSource,
+      if (lastAlarmActivatedSource != null)
+        'last_alarm_activated_source': lastAlarmActivatedSource,
+      if (lastEmergencyCallAt != null)
+        'last_emergency_call_at': lastEmergencyCallAt!.toIso8601String(),
+      if (lastAlarmActivatedAt != null)
+        'last_alarm_activated_at': lastAlarmActivatedAt!.toIso8601String(),
+      if (isAlarmTimeoutExpired != null)
+        'is_alarm_timeout_expired': isAlarmTimeoutExpired,
     };
   }
 
@@ -368,6 +592,17 @@ class EventLog implements LogEntry {
     String? pendingReason,
     String? confirmationState,
     String? cameraId,
+    String? createBy,
+    String? createdBy,
+    String? createdByDisplay,
+    String? updatedBy,
+    bool? hasEmergencyCall,
+    bool? hasAlarmActivated,
+    String? lastEmergencyCallSource,
+    String? lastAlarmActivatedSource,
+    DateTime? lastEmergencyCallAt,
+    DateTime? lastAlarmActivatedAt,
+    bool? isAlarmTimeoutExpired,
   }) => EventLog(
     eventId: eventId,
     status: status ?? this.status,
@@ -386,5 +621,121 @@ class EventLog implements LogEntry {
     pendingReason: pendingReason ?? this.pendingReason,
     confirmationState: confirmationState ?? this.confirmationState,
     cameraId: cameraId ?? this.cameraId,
+    createBy: createBy ?? this.createBy,
+    createdBy: createdBy ?? this.createdBy,
+    createdByDisplay: createdByDisplay ?? this.createdByDisplay,
+    updatedBy: updatedBy ?? this.updatedBy,
+    hasEmergencyCall: hasEmergencyCall ?? this.hasEmergencyCall,
+    hasAlarmActivated: hasAlarmActivated ?? this.hasAlarmActivated,
+    lastEmergencyCallSource:
+        lastEmergencyCallSource ?? this.lastEmergencyCallSource,
+    lastAlarmActivatedSource:
+        lastAlarmActivatedSource ?? this.lastAlarmActivatedSource,
+    lastEmergencyCallAt: lastEmergencyCallAt ?? this.lastEmergencyCallAt,
+    lastAlarmActivatedAt: lastAlarmActivatedAt ?? this.lastAlarmActivatedAt,
+    isAlarmTimeoutExpired: isAlarmTimeoutExpired ?? this.isAlarmTimeoutExpired,
   );
+}
+
+extension EventLogEmergencyHelpers on EventLog {
+  bool get _hasEmergencyCall => hasEmergencyCall ?? false;
+  bool get _hasAlarmActivated => hasAlarmActivated ?? false;
+  String? get _lastEmergencySource => lastEmergencyCallSource;
+  String? get _lastAlarmSource => lastAlarmActivatedSource;
+  bool get _isAlarmTimeoutExpired => isAlarmTimeoutExpired ?? false;
+
+  AlertActionDecision getAlertActionDecision() {
+    final emSrc = (_lastEmergencySource ?? '').toString().toUpperCase();
+    final alSrc = (_lastAlarmSource ?? '').toString().toUpperCase();
+
+    // 1) Caregiver CALL (highest priority)
+    if (_hasEmergencyCall && emSrc == 'CAREGIVER') {
+      return AlertActionDecision(
+        mode: AlertActionMode.caregiverCall,
+        disableCall: true,
+        disableAlarm: true,
+        disableCancel: true,
+      );
+    }
+
+    // 2) Customer CALL (user-initiated by customer)
+    if (_hasEmergencyCall && emSrc == 'CUSTOMER') {
+      return AlertActionDecision(
+        mode: AlertActionMode.customerCall,
+        disableCall: true,
+        disableAlarm: false,
+        disableCancel: true,
+      );
+    }
+
+    // 3) System AUTO CALL
+    if (_hasEmergencyCall && emSrc == 'SYSTEM') {
+      return AlertActionDecision(
+        mode: AlertActionMode.systemCall,
+        disableCall: true,
+        disableAlarm: false,
+        disableCancel: false,
+      );
+    }
+
+    // 4) System AUTO ALARM (only disables alarm if timeout not expired)
+    if (_hasAlarmActivated && alSrc == 'SYSTEM' && !_isAlarmTimeoutExpired) {
+      return AlertActionDecision(
+        mode: AlertActionMode.systemAlarm,
+        disableCall: false,
+        disableAlarm: true,
+        disableCancel: false,
+      );
+    }
+
+    // 5) User ALARM (Customer or Caregiver) -> disables alarm and cancel
+    if (_hasAlarmActivated && (alSrc == 'CUSTOMER' || alSrc == 'CAREGIVER')) {
+      return AlertActionDecision(
+        mode: AlertActionMode.userAlarm,
+        disableCall: false,
+        disableAlarm: true,
+        disableCancel: true,
+      );
+    }
+
+    // 6) Fallbacks: if unknown emergency source but emergency present, behave like customer call
+    if (_hasEmergencyCall) {
+      return AlertActionDecision(
+        mode: AlertActionMode.customerCall,
+        disableCall: true,
+        disableAlarm: false,
+        disableCancel: true,
+      );
+    }
+
+    // Default: nothing disabled
+    return AlertActionDecision(mode: AlertActionMode.none);
+  }
+
+  bool get isCallDisabled => getAlertActionDecision().disableCall;
+  bool get isAlarmDisabled => getAlertActionDecision().disableAlarm;
+  bool get isCancelDisabled => getAlertActionDecision().disableCancel;
+}
+
+enum AlertActionMode {
+  none,
+  systemCall,
+  customerCall,
+  caregiverCall,
+  systemAlarm,
+  userAlarm,
+}
+
+class AlertActionDecision {
+  final AlertActionMode mode;
+  final bool disableCall;
+  final bool disableAlarm;
+  final bool disableCancel;
+
+  const AlertActionDecision({
+    this.mode = AlertActionMode.none,
+    this.disableCall = false,
+    this.disableAlarm = false,
+    this.disableCancel = false,
+  });
 }

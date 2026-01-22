@@ -11,24 +11,31 @@ class CameraTimelineApi {
     : _client = client ?? ApiClient(tokenProvider: AuthStorage.getAccessToken);
 
   final ApiClient _client;
+  static const String _kDateParam = 'date';
+  static const String _kTzParam = 'tz';
 
   /// Bước 1: Lấy danh sách bản ghi theo ngày (có hỗ trợ page/limit/extra query).
   Future<Map<String, dynamic>> listRecordings(
     String cameraId, {
     required String date,
+    String? tz,
     int? page,
     int? limit,
     Map<String, dynamic>? extraQuery,
   }) async {
     return _getMap(
       '/cameras/$cameraId/recordings',
-      query: {
-        'date': date,
-        if (page != null) 'page': page,
-        if (limit != null) 'limit': limit,
-        'all': true,
-        ...?extraQuery,
-      },
+      query: _mergeQuery(
+        {
+          'date': date,
+          if (page != null) 'page': page,
+          if (limit != null) 'limit': limit,
+          'all': true,
+          ...?extraQuery,
+        },
+        date: date,
+        tz: tz,
+      ),
     );
   }
 
@@ -57,16 +64,24 @@ class CameraTimelineApi {
   Future<Map<String, dynamic>> listSnapshots(
     String cameraId, {
     required String date,
+    String? tz,
   }) async {
-    return _getMap('/cameras/$cameraId/snapshots', query: {'date': date});
+    return _getMap(
+      '/cameras/$cameraId/snapshots',
+      query: _mergeQuery(const {}, date: date, tz: tz),
+    );
   }
 
   /// Bước 5: Lấy danh sách sự kiện camera theo ngày.
   Future<Map<String, dynamic>> listEvents(
     String cameraId, {
     required String date,
+    String? tz,
   }) async {
-    return _getMap('/cameras/$cameraId/events', query: {'date': date});
+    return _getMap(
+      '/cameras/$cameraId/events',
+      query: _mergeQuery(const {}, date: date, tz: tz),
+    );
   }
 
   /// Bước 6: Lấy lịch những ngày có bản ghi (dạng YYYY-MM).
@@ -154,5 +169,17 @@ class CameraTimelineApi {
     }
 
     return _wrapData(raw);
+  }
+
+  Map<String, dynamic> _mergeQuery(
+    Map<String, dynamic> base, {
+    required String date,
+    String? tz,
+  }) {
+    final query = <String, dynamic>{_kDateParam: date, ...base};
+    if (tz != null && tz.isNotEmpty) {
+      query[_kTzParam] = tz;
+    }
+    return query;
   }
 }

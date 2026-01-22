@@ -33,11 +33,15 @@ class NotificationFilterPanel extends StatelessWidget {
           selectedValue: selectedFilterValue,
           onSelected: onFilterSelected,
         ),
-        _buildChipRow(
-          options: statusOptions,
-          selectedValue: selectedStatusValue,
-          onSelected: onStatusSelected,
-        ),
+        // Status filter row disabled per request (commented out)
+        // To re-enable, uncomment the following _buildChipRow and ensure
+        // `selectedStatusValue` / `onStatusSelected` are wired in the
+        // parent widget (`NotificationScreen`).
+        // _buildChipRow(
+        //   options: statusOptions,
+        //   selectedValue: selectedStatusValue,
+        //   onSelected: onStatusSelected,
+        // ),
       ],
     );
   }

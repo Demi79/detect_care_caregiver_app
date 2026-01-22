@@ -1,5 +1,9 @@
 import 'package:detect_care_caregiver_app/core/theme/app_theme.dart';
 import 'package:detect_care_caregiver_app/features/home/models/log_entry.dart';
+import 'package:detect_care_caregiver_app/features/home/repository/event_repository.dart';
+import 'package:detect_care_caregiver_app/features/home/service/event_service.dart';
+import 'package:detect_care_caregiver_app/core/network/api_client.dart';
+import 'package:detect_care_caregiver_app/features/auth/data/auth_storage.dart';
 import 'package:detect_care_caregiver_app/features/home/widgets/filter_bar.dart';
 import 'package:flutter/material.dart';
 
@@ -40,12 +44,79 @@ class _CancelEventLogScreenState extends State<CancelEventLogScreen> {
   late String _selectedStatus;
   late String _selectedPeriod;
 
+  final ScrollController _scrollController = ScrollController();
+  final GlobalKey _filterKey = GlobalKey();
+  double _filterHeight = 0.0;
+  bool _compactVisible = false;
+
+  List<LogEntry> _allLogs = [];
+
   @override
   void initState() {
     super.initState();
     _selectedDayRange = widget.selectedDayRange;
-    _selectedStatus = widget.selectedStatus;
+    _selectedStatus = 'all';
     _selectedPeriod = widget.selectedPeriod;
+    _scrollController.addListener(_onScroll);
+    WidgetsBinding.instance.addPostFrameCallback((_) => _measureFilter());
+    _loadAllTotals();
+  }
+
+  void _loadAllTotals() async {
+    try {
+      final repo = EventRepository(
+        EventService(ApiClient(tokenProvider: AuthStorage.getAccessToken)),
+      );
+      final allEvents = await repo.getEvents(
+        page: 1,
+        limit: 200,
+        status: null,
+        dayRange: _selectedDayRange,
+        period: null,
+        search: null,
+        includeCanceled: null,
+      );
+      if (!mounted) return;
+      setState(() => _allLogs = allEvents);
+    } catch (_) {}
+  }
+
+  @override
+  void dispose() {
+    _scrollController.removeListener(_onScroll);
+    _scrollController.dispose();
+    super.dispose();
+  }
+
+  void _onScroll() {
+    final shouldShow =
+        _scrollController.hasClients &&
+        _scrollController.offset > (_filterHeight + 8.0);
+    if (shouldShow != _compactVisible) {
+      setState(() => _compactVisible = shouldShow);
+    }
+  }
+
+  void _measureFilter() {
+    try {
+      final ctx = _filterKey.currentContext;
+      final h = ctx?.size?.height ?? 0.0;
+      if (h > 0 && h != _filterHeight) {
+        setState(() => _filterHeight = h);
+      }
+    } catch (_) {}
+  }
+
+  String _formatDateShort(DateTime d) => '${d.day}/${d.month}/${d.year}';
+
+  String _formatRangeShort(DateTimeRange? r) {
+    if (r == null) return 'Tất cả';
+    final same =
+        r.start.year == r.end.year &&
+        r.start.month == r.end.month &&
+        r.start.day == r.end.day;
+    if (same) return _formatDateShort(r.start);
+    return '${_formatDateShort(r.start)} → ${_formatDateShort(r.end)}';
   }
 
   @override
@@ -154,82 +225,165 @@ class _CancelEventLogScreenState extends State<CancelEventLogScreen> {
         // ],
       ),
       body: SafeArea(
-        child: SingleChildScrollView(
-          physics: const BouncingScrollPhysics(),
-          padding: const EdgeInsets.all(16),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.center,
-            children: [
-              FilterBar(
-                statusOptions: const ['abnormal', 'danger', 'warning'],
-                periodOptions: HomeFilters.periodOptions,
-                selectedDayRange: _selectedDayRange,
-                selectedStatus: _selectedStatus,
-                selectedPeriod: _selectedPeriod,
-                onDayRangeChanged: (dr) {
-                  setState(() => _selectedDayRange = dr);
-                  try {
-                    widget.onDayRangeChanged(dr);
-                  } catch (_) {}
-                },
-                onStatusChanged: (s) {
-                  setState(
-                    () => _selectedStatus = s ?? HomeFilters.defaultStatus,
-                  );
-                  try {
-                    widget.onStatusChanged(s);
-                  } catch (_) {}
-                },
-                onPeriodChanged: (p) {
-                  setState(
-                    () => _selectedPeriod = p ?? HomeFilters.defaultPeriod,
-                  );
-                  try {
-                    widget.onPeriodChanged(p);
-                  } catch (_) {}
-                },
-              ),
-              const SizedBox(height: 24),
-              _SummaryRow(logs: filtered),
-              const SizedBox(height: 12),
-              const Divider(height: 1),
-              const SizedBox(height: 12),
-
-              if (filtered.isEmpty)
-                _EmptyState(
-                  onClearFilters: () {
-                    setState(() {
-                      _selectedDayRange = HomeFilters.defaultDayRange;
-                      _selectedStatus = HomeFilters.defaultStatus;
-                      _selectedPeriod = HomeFilters.defaultPeriod;
-                    });
-                    try {
-                      widget.onDayRangeChanged(HomeFilters.defaultDayRange);
-                      widget.onStatusChanged(HomeFilters.defaultStatus);
-                      widget.onPeriodChanged(HomeFilters.defaultPeriod);
-                    } catch (_) {}
-                  },
-                  onRefresh: widget.onRefresh,
-                )
-              else
-                ...filtered.map((log) {
-                  try {
-                    print(
-                      '[CancelEventLogScreen] event=${log.eventId} confirm=${log.confirmStatus} status=${log.status} detectedAt=${log.detectedAt}',
-                    );
-                  } catch (_) {}
-                  return Padding(
-                    padding: const EdgeInsets.only(bottom: 12),
-                    child: ActionLogCard(
-                      data: log,
-                      onUpdated: (newStatus, {bool? confirmed}) => widget
-                          .onEventUpdated
-                          ?.call(log.eventId, confirmed: confirmed),
+        child: Stack(
+          children: [
+            Padding(
+              padding: EdgeInsets.only(top: _compactVisible ? 68.0 : 0.0),
+              child: SingleChildScrollView(
+                controller: _scrollController,
+                physics: const BouncingScrollPhysics(),
+                padding: const EdgeInsets.all(16),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.center,
+                  children: [
+                    // Full filter (measured)
+                    Container(
+                      key: _filterKey,
+                      child: FilterBar(
+                        statusOptions: const [
+                          'all',
+                          'abnormal',
+                          'danger',
+                          'warning',
+                        ],
+                        showStatus: false,
+                        periodOptions: HomeFilters.periodOptions,
+                        selectedDayRange: _selectedDayRange,
+                        selectedStatus: _selectedStatus,
+                        selectedPeriod: _selectedPeriod,
+                        maxRangeDays: 3,
+                        onDayRangeChanged: (dr) {
+                          setState(() => _selectedDayRange = dr);
+                          try {
+                            widget.onDayRangeChanged(dr);
+                          } catch (_) {}
+                          WidgetsBinding.instance.addPostFrameCallback(
+                            (_) => _measureFilter(),
+                          );
+                        },
+                        onStatusChanged: (s) {
+                          final normalized =
+                              (s == null || s == HomeFilters.defaultStatus)
+                              ? 'all'
+                              : s;
+                          setState(() => _selectedStatus = normalized);
+                          try {
+                            widget.onStatusChanged(normalized);
+                          } catch (_) {}
+                        },
+                        onPeriodChanged: (p) {
+                          setState(
+                            () => _selectedPeriod =
+                                p ?? HomeFilters.defaultPeriod,
+                          );
+                          try {
+                            widget.onPeriodChanged(p);
+                          } catch (_) {}
+                        },
+                      ),
                     ),
-                  );
-                }),
-            ],
-          ),
+                    const SizedBox(height: 24),
+                    _SummaryRow(
+                      filteredLogs: filtered,
+                      allLogs: _allLogs,
+                      selectedStatus: _selectedStatus,
+                    ),
+                    const SizedBox(height: 12),
+                    const Divider(height: 1),
+                    const SizedBox(height: 12),
+
+                    if (filtered.isEmpty)
+                      _EmptyState(
+                        onClearFilters: () {
+                          setState(() {
+                            _selectedDayRange = HomeFilters.defaultDayRange;
+                            _selectedStatus = HomeFilters.defaultStatus;
+                            _selectedPeriod = HomeFilters.defaultPeriod;
+                          });
+                          try {
+                            widget.onDayRangeChanged(
+                              HomeFilters.defaultDayRange,
+                            );
+                            widget.onStatusChanged(HomeFilters.defaultStatus);
+                            widget.onPeriodChanged(HomeFilters.defaultPeriod);
+                          } catch (_) {}
+                        },
+                        onRefresh: widget.onRefresh,
+                      )
+                    else
+                      ...filtered.map((log) {
+                        return Padding(
+                          padding: const EdgeInsets.only(bottom: 12),
+                          child: ActionLogCard(
+                            data: log,
+                            onUpdated: (newStatus, {bool? confirmed}) => widget
+                                .onEventUpdated
+                                ?.call(log.eventId, confirmed: confirmed),
+                          ),
+                        );
+                      }),
+                  ],
+                ),
+              ),
+            ),
+
+            // Sticky compact filter
+            Positioned(
+              left: 0,
+              right: 0,
+              top: 0,
+              child: AnimatedOpacity(
+                opacity: _compactVisible ? 1.0 : 0.0,
+                duration: const Duration(milliseconds: 200),
+                child: IgnorePointer(
+                  ignoring: !_compactVisible,
+                  child: SafeArea(
+                    child: Container(
+                      margin: const EdgeInsets.fromLTRB(16, 8, 16, 0),
+                      child: GestureDetector(
+                        onTap: () {
+                          _scrollController.animateTo(
+                            0,
+                            duration: const Duration(milliseconds: 300),
+                            curve: Curves.easeOut,
+                          );
+                        },
+                        child: Card(
+                          elevation: 1,
+                          color: AppTheme.cardBackground,
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(12),
+                          ),
+                          child: Padding(
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 12,
+                              vertical: 12,
+                            ),
+                            child: Row(
+                              children: [
+                                const Icon(Icons.tune_rounded, size: 20),
+                                const SizedBox(width: 10),
+                                Expanded(
+                                  child: Text(
+                                    _formatRangeShort(_selectedDayRange),
+                                    style: Theme.of(
+                                      context,
+                                    ).textTheme.bodyMedium,
+                                  ),
+                                ),
+                                const SizedBox(width: 8),
+                                const Icon(Icons.expand_less_rounded),
+                              ],
+                            ),
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+            ),
+          ],
         ),
       ),
     );
@@ -237,8 +391,15 @@ class _CancelEventLogScreenState extends State<CancelEventLogScreen> {
 }
 
 class _SummaryRow extends StatelessWidget {
-  const _SummaryRow({required this.logs});
-  final List<LogEntry> logs;
+  const _SummaryRow({
+    required this.filteredLogs,
+    required this.allLogs,
+    required this.selectedStatus,
+  });
+
+  final List<LogEntry> filteredLogs;
+  final List<LogEntry> allLogs;
+  final String selectedStatus;
 
   bool _isCritical(LogEntry e) {
     final t = e.eventType.toLowerCase();
@@ -250,15 +411,18 @@ class _SummaryRow extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final int total = logs.length;
-    final int critical = logs.where(_isCritical).length;
-    final int others = (total - critical).clamp(0, total);
+    final int totalAll = allLogs.length;
+    final int critical = filteredLogs.where(_isCritical).length;
+    final int others = (filteredLogs.length - critical).clamp(
+      0,
+      filteredLogs.length,
+    );
 
     return Row(
       children: [
         Expanded(
           child: _SummaryCard(
-            title: 'Cảnh báo',
+            title: 'Bất thường',
             value: '$critical',
             icon: Icons.emergency_rounded,
             color: Colors.red,
@@ -268,7 +432,7 @@ class _SummaryRow extends StatelessWidget {
         Expanded(
           child: _SummaryCard(
             title: 'Tổng nhật ký',
-            value: '$total',
+            value: '$totalAll',
             icon: Icons.list_alt_rounded,
             color: AppTheme.reportColor,
           ),
@@ -350,7 +514,7 @@ class _SummaryCard extends StatelessWidget {
                 textAlign: TextAlign.center,
                 maxLines: 2,
                 softWrap: true,
-                style: const TextStyle(
+                style: TextStyle(
                   fontSize: 12,
                   fontWeight: FontWeight.w500,
                   color: AppTheme.unselectedTextColor,

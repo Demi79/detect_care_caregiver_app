@@ -5,6 +5,7 @@ import 'package:detect_care_caregiver_app/features/subscription/screens/invoice_
 import 'package:detect_care_caregiver_app/features/subscription/widgets/invoice_app_bar.dart';
 import 'package:detect_care_caregiver_app/features/subscription/widgets/invoice_filters.dart';
 import 'package:detect_care_caregiver_app/features/subscription/widgets/invoice_screen_content.dart';
+import 'package:detect_care_caregiver_app/core/utils/error_handler.dart';
 import 'package:flutter/material.dart';
 
 class InvoicesScreen extends StatefulWidget {
@@ -182,7 +183,7 @@ class _InvoicesScreenState extends State<InvoicesScreen> {
     } catch (e) {
       if (!mounted) return;
       setState(() {
-        _error = 'Không thể tải hóa đơn: $e';
+        _error = formatErrorMessage(e);
         _isLoading = false;
         _hasMore = false;
       });

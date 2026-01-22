@@ -2,14 +2,18 @@ import 'package:detect_care_caregiver_app/core/theme/app_theme.dart';
 import 'package:detect_care_caregiver_app/features/home/models/log_entry.dart';
 import 'package:detect_care_caregiver_app/features/home/widgets/filter_bar.dart';
 import 'package:flutter/material.dart';
+
 import '../constants/filter_constants.dart';
 import '../widgets/action_log_card.dart';
 
 class HighConfidenceEventsScreen extends StatelessWidget {
   final List<LogEntry> logs;
+  final List<LogEntry> allLogs;
   final DateTimeRange? selectedDayRange;
   final String selectedStatus;
   final String selectedPeriod;
+  final ScrollController? scrollController;
+  final Key? filterBarKey;
 
   final ValueChanged<DateTimeRange?> onDayRangeChanged;
   final ValueChanged<String?> onStatusChanged;
@@ -20,6 +24,7 @@ class HighConfidenceEventsScreen extends StatelessWidget {
   const HighConfidenceEventsScreen({
     super.key,
     required this.logs,
+    required this.allLogs,
     required this.selectedDayRange,
     required this.selectedStatus,
     required this.selectedPeriod,
@@ -28,11 +33,23 @@ class HighConfidenceEventsScreen extends StatelessWidget {
     required this.onPeriodChanged,
     this.onRefresh,
     this.onEventUpdated,
+    this.scrollController,
+    this.filterBarKey,
   });
 
   @override
   Widget build(BuildContext context) {
     final filtered = logs.where((log) {
+      try {
+        final ls = log.lifecycleState?.toString().toLowerCase();
+        if (ls != null && ls == 'canceled') return false;
+      } catch (_) {}
+      try {
+        if (log.status.toString().toLowerCase() == 'unknowns') return false;
+      } catch (_) {}
+      try {
+        if (log.status.toString().toLowerCase() == 'suspect') return false;
+      } catch (_) {}
       final st = log.status.toLowerCase();
       final selectedSt = selectedStatus.toLowerCase();
 
@@ -86,27 +103,43 @@ class HighConfidenceEventsScreen extends StatelessWidget {
 
     // --- UI ---
     return SingleChildScrollView(
-      physics: const BouncingScrollPhysics(),
+      controller: scrollController,
+      physics: filtered.isEmpty
+          ? const NeverScrollableScrollPhysics()
+          : const AlwaysScrollableScrollPhysics(),
       padding: const EdgeInsets.all(16),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.center,
         children: [
           FilterBar(
-            statusOptions: HomeFilters.statusOptions,
+            key: filterBarKey,
+            statusOptions: const [
+              'all',
+              'abnormal',
+              'danger',
+              'warning',
+              'normal',
+            ],
             periodOptions: HomeFilters.periodOptions,
             selectedDayRange: selectedDayRange,
             selectedStatus: selectedStatus,
             selectedPeriod: selectedPeriod,
+            maxRangeDays: 3,
             onDayRangeChanged: onDayRangeChanged,
             onStatusChanged: onStatusChanged,
             onPeriodChanged: onPeriodChanged,
           ),
           const SizedBox(height: 24),
-          _SummaryRow(logs: filtered),
+          _SummaryRow(
+            filteredLogs: filtered,
+            allLogs: allLogs,
+            selectedStatus: selectedStatus,
+          ),
           const SizedBox(height: 12),
           const Divider(height: 1),
           const SizedBox(height: 12),
 
+          // Empty or Log list
           if (filtered.isEmpty)
             _EmptyState(
               onClearFilters: () {
@@ -139,51 +172,78 @@ class HighConfidenceEventsScreen extends StatelessWidget {
 }
 
 class _SummaryRow extends StatelessWidget {
-  const _SummaryRow({required this.logs});
-  final List<LogEntry> logs;
+  const _SummaryRow({
+    required this.filteredLogs,
+    required this.allLogs,
+    required this.selectedStatus,
+  });
+  final List<LogEntry> filteredLogs;
+  final List<LogEntry> allLogs;
+  final String selectedStatus;
 
   @override
   Widget build(BuildContext context) {
-    // Total events after filters
-    final int total = logs.length;
-
-    // 'Nguy hiểm' (abnormal) is represented in UI as status 'danger' OR 'warning'
-    final int critical = logs.where((e) {
-      final s = e.status.toLowerCase();
-      return s == 'danger' || s == 'warning';
+    final int dangerCount = allLogs.where((e) {
+      try {
+        final ls = e.lifecycleState?.toString().toLowerCase();
+        if (ls != null && ls == 'canceled') return false;
+        return e.status.toString().toLowerCase() == 'danger';
+      } catch (_) {
+        return false;
+      }
     }).length;
 
-    // Remaining events after removing critical
-    final int others = (total - critical).clamp(0, total);
+    final int warningCount = allLogs.where((e) {
+      try {
+        final ls = e.lifecycleState?.toString().toLowerCase();
+        if (ls != null && ls == 'canceled') return false;
+        return e.status.toString().toLowerCase() == 'warning';
+      } catch (_) {
+        return false;
+      }
+    }).length;
+
+    final int normalCount = allLogs.where((e) {
+      try {
+        final ls = e.lifecycleState?.toString().toLowerCase();
+        if (ls != null && ls == 'canceled') return false;
+        return e.status.toString().toLowerCase() == 'normal';
+      } catch (_) {
+        return false;
+      }
+    }).length;
+
+    final int abnormalCount = dangerCount + warningCount;
+    final int totalAll = allLogs.length;
+
+    final Widget leftCard = _SummaryCard(
+      title: 'Bất thường',
+      value: '$abnormalCount',
+      icon: Icons.emergency_rounded,
+      color: Colors.red,
+    );
+
+    final Widget middleCard = _SummaryCard(
+      title: 'Tổng nhật ký',
+      value: '$totalAll',
+      icon: Icons.list_alt_rounded,
+      color: AppTheme.reportColor,
+    );
+
+    final Widget rightCard = _SummaryCard(
+      title: 'Bình thường',
+      value: '$normalCount',
+      icon: Icons.monitor_heart_rounded,
+      color: AppTheme.activityColor,
+    );
 
     return Row(
       children: [
-        Expanded(
-          child: _SummaryCard(
-            title: 'Cảnh báo',
-            value: '$critical',
-            icon: Icons.emergency_rounded,
-            color: Colors.red,
-          ),
-        ),
+        Expanded(child: leftCard),
         const SizedBox(width: 12),
-        Expanded(
-          child: _SummaryCard(
-            title: 'Tổng nhật ký',
-            value: '$total',
-            icon: Icons.list_alt_rounded,
-            color: AppTheme.reportColor,
-          ),
-        ),
+        Expanded(child: middleCard),
         const SizedBox(width: 12),
-        Expanded(
-          child: _SummaryCard(
-            title: 'Sự kiện khác',
-            value: '$others',
-            icon: Icons.monitor_heart_rounded,
-            color: AppTheme.activityColor,
-          ),
-        ),
+        Expanded(child: rightCard),
       ],
     );
   }
@@ -252,7 +312,7 @@ class _SummaryCard extends StatelessWidget {
                 textAlign: TextAlign.center,
                 maxLines: 2,
                 softWrap: true,
-                style: const TextStyle(
+                style: TextStyle(
                   fontSize: 12,
                   fontWeight: FontWeight.w500,
                   color: AppTheme.unselectedTextColor,
@@ -290,14 +350,14 @@ class _EmptyState extends StatelessWidget {
               color: AppTheme.text,
             ),
           ),
-          const SizedBox(height: 8),
-          Text(
-            'Thử điều chỉnh tìm kiếm hoặc bộ lọc',
-            style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-              color: AppTheme.unselectedTextColor,
-            ),
-            textAlign: TextAlign.center,
-          ),
+          // const SizedBox(height: 8),
+          // Text(
+          //   'Thử điều chỉnh tìm kiếm hoặc bộ lọc',
+          //   style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+          //     color: AppTheme.unselectedTextColor,
+          //   ),
+          //   textAlign: TextAlign.center,
+          // ),
           const SizedBox(height: 12),
           Row(
             mainAxisSize: MainAxisSize.min,

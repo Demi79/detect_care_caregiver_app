@@ -1,14 +1,15 @@
 import 'dart:convert' as convert;
 import 'dart:developer' as dev;
 
-import 'package:flutter/material.dart';
-import 'package:supabase_flutter/supabase_flutter.dart';
-import 'package:http/http.dart' as http;
-
 import 'package:detect_care_caregiver_app/core/network/api_client.dart';
+import 'package:detect_care_caregiver_app/core/utils/logger.dart';
 import 'package:detect_care_caregiver_app/features/auth/data/auth_storage.dart';
-import 'package:detect_care_caregiver_app/features/home/data/event_endpoints.dart';
 import 'package:detect_care_caregiver_app/features/events/data/events_remote_data_source.dart';
+import 'package:detect_care_caregiver_app/features/assignments/data/assignments_remote_data_source.dart';
+import 'package:detect_care_caregiver_app/features/home/data/event_endpoints.dart';
+import 'package:flutter/material.dart';
+import 'package:http/http.dart' as http;
+import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../models/event_log.dart';
 
@@ -34,20 +35,15 @@ class EventService {
 
   Future<List<EventLog>> fetchLogs({
     int page = 1,
-    int limit = 100,
+    int limit = 50,
     String? status,
     DateTimeRange? dayRange,
     String? period,
     String? search,
     String? lifecycleState,
+    bool? includeCanceled,
   }) async {
     try {
-      // final session = _supabase.auth.currentSession;
-      // if (session == null) {
-      //   print('[EventService.fetchLogs] No Supabase session found');
-      //   return [];
-      // }
-
       print(
         'filters status=$status, dayRange=${dayRange != null ? "${dayRange.start}..${dayRange.end}" : "null"}, period=$period, search=$search, page=$page, limit=$limit',
       );
@@ -74,10 +70,32 @@ class EventService {
               extra['status'] = status;
             }
           }
+
+          final bool? isCanceledArg = includeCanceled;
+          DateTime? df;
+          DateTime? dt;
+          if (dayRange != null) {
+            df = DateTime(
+              dayRange.start.year,
+              dayRange.start.month,
+              dayRange.start.day,
+            ).toUtc();
+            dt = DateTime(
+              dayRange.end.year,
+              dayRange.end.month,
+              dayRange.end.day,
+              23,
+              59,
+              59,
+            ).toUtc();
+          }
           final list = await ds.listEvents(
             page: page,
             limit: limit,
             extraQuery: extra.isNotEmpty ? extra : null,
+            isCanceled: isCanceledArg,
+            dateFrom: df,
+            dateTo: dt,
           );
           for (final r in list) {
             final m = await _normalizeRow(r);
@@ -171,10 +189,15 @@ class EventService {
                 extra['status'] = status;
               }
             }
+            // Pass through includeCanceled directly: `null` => don't send param
+            // (backend returns all), `false` => send is_canceled=false,
+            // `true` => send is_canceled=true.
+            final bool? isCanceledArg = includeCanceled;
             final list = await ds.listEvents(
               page: page,
               limit: limit,
               extraQuery: extra.isNotEmpty ? extra : null,
+              isCanceled: isCanceledArg,
             );
             for (final r in list) {
               final m = await _normalizeRow(r);
@@ -436,7 +459,8 @@ class EventService {
       } catch (_) {}
 
       List<Map<String, dynamic>> finalList = List.from(filtered);
-      if (lifecycleState == null || lifecycleState.isEmpty) {
+      if ((lifecycleState == null || lifecycleState.isEmpty) &&
+          includeCanceled == false) {
         finalList = finalList.where((e) {
           try {
             final ls = (e['lifecycle_state'] ?? e['lifecycleState'])
@@ -447,70 +471,65 @@ class EventService {
             return true;
           }
         }).toList();
-        try {
-          final finalIds = finalList
-              .map(
-                (e) => (e['eventId'] ?? e['event_id'] ?? e['id'])?.toString(),
-              )
-              .where((e) => e != null)
-              .cast<String>()
-              .toList();
-          final dropped = normalizedIds
-              .where((id) => !finalIds.contains(id))
-              .toList();
-          print(
-            '[EventService.fetchLogs] FINAL length=${finalList.length} final_ids=${finalIds.take(50).toList()} dropped_count=${dropped.length} dropped_sample=${dropped.take(50).toList()}',
-          );
-          try {
-            if (dropped.isNotEmpty) {
-              // Map dropped ids back to normalized rows to see why they were removed
-              final droppedDetails = normalizedIds
-                  .where((id) => dropped.contains(id))
-                  .map((id) {
-                    try {
-                      final row = normalized.firstWhere(
-                        (r) =>
-                            ((r['eventId'] ?? r['event_id'] ?? r['id'])
-                                ?.toString()) ==
-                            id,
-                      );
-                      final st = (row['status'] ?? '').toString();
-                      final ls =
-                          (row['lifecycle_state'] ??
-                                  row['lifecycleState'] ??
-                                  '')
-                              .toString();
-                      return {'id': id, 'status': st, 'lifecycle': ls};
-                    } catch (_) {
-                      return {'id': id};
-                    }
-                  })
-                  .toList();
-              print(
-                '[EventService DEBUG] dropped details sample=${droppedDetails.take(50).toList()}',
-              );
-            }
-          } catch (_) {}
-          try {
-            final finDanger = finalList
-                .where(
-                  (e) =>
-                      (e['status']?.toString() ?? '').toLowerCase() == 'danger',
-                )
-                .length;
-            final finWarning = finalList
-                .where(
-                  (e) =>
-                      (e['status']?.toString() ?? '').toLowerCase() ==
-                      'warning',
-                )
-                .length;
-            print(
-              '[EventService DEBUG] after lifecycle filter: danger=$finDanger warning=$finWarning total=${finalList.length}',
-            );
-          } catch (_) {}
-        } catch (_) {}
       }
+
+      try {
+        final finalIds = finalList
+            .map((e) => (e['eventId'] ?? e['event_id'] ?? e['id'])?.toString())
+            .where((e) => e != null)
+            .cast<String>()
+            .toList();
+        final dropped = normalizedIds
+            .where((id) => !finalIds.contains(id))
+            .toList();
+        print(
+          '[EventService.fetchLogs] FINAL length=${finalList.length} final_ids=${finalIds.take(50).toList()} dropped_count=${dropped.length} dropped_sample=${dropped.take(50).toList()}',
+        );
+        try {
+          if (dropped.isNotEmpty) {
+            final droppedDetails = normalizedIds
+                .where((id) => dropped.contains(id))
+                .map((id) {
+                  try {
+                    final row = normalized.firstWhere(
+                      (r) =>
+                          ((r['eventId'] ?? r['event_id'] ?? r['id'])
+                              ?.toString()) ==
+                          id,
+                    );
+                    final st = (row['status'] ?? '').toString();
+                    final ls =
+                        (row['lifecycle_state'] ?? row['lifecycleState'] ?? '')
+                            .toString();
+                    return {'id': id, 'status': st, 'lifecycle': ls};
+                  } catch (_) {
+                    return {'id': id};
+                  }
+                })
+                .toList();
+            print(
+              '[EventService DEBUG] dropped details sample=${droppedDetails.take(50).toList()}',
+            );
+          }
+        } catch (_) {}
+        try {
+          final finDanger = finalList
+              .where(
+                (e) =>
+                    (e['status']?.toString() ?? '').toLowerCase() == 'danger',
+              )
+              .length;
+          final finWarning = finalList
+              .where(
+                (e) =>
+                    (e['status']?.toString() ?? '').toLowerCase() == 'warning',
+              )
+              .length;
+          print(
+            '[EventService DEBUG] after lifecycle filter: danger=$finDanger warning=$finWarning total=${finalList.length}',
+          );
+        } catch (_) {}
+      } catch (_) {}
 
       return finalList.map(EventLog.fromJson).toList();
     } catch (e) {
@@ -537,6 +556,10 @@ class EventService {
               .single();
 
           final normalized = await _normalizeRow(row);
+          dev.log(
+            '[EventService] Supabase detail pending_until=${normalized['pending_until']}',
+            name: 'EventService',
+          );
           return EventLog.fromJson(normalized);
         } catch (e) {
           print(
@@ -554,6 +577,12 @@ class EventService {
       print('[EventService] backend fetch status=${res.statusCode}');
       if (res.statusCode == 200) {
         final data = _api.extractDataFromResponse(res);
+        try {
+          dev.log(
+            '[EventService] API detail pending_until=${data['pending_until']}',
+            name: 'EventService',
+          );
+        } catch (_) {}
         return EventLog.fromJson(data);
       } else if (res.statusCode == 401 || res.statusCode == 403) {
         throw Exception(
@@ -674,6 +703,95 @@ class EventService {
     }
   }
 
+  /// Gửi đề xuất xóa sự kiện
+  Future<EventLog> proposeDeleteEvent({
+    required String eventId,
+    required String reason,
+    DateTime? pendingUntil,
+  }) async {
+    try {
+      if (eventId.trim().isEmpty) {
+        throw Exception('ID sự kiện không hợp lệ. Vui lòng thử lại.');
+      }
+
+      final body = <String, dynamic>{
+        'reason': reason,
+        if (pendingUntil != null)
+          'pending_until': pendingUntil.toUtc().toIso8601String(),
+      };
+
+      dev.log(
+        '📤 [EventService] proposeDeleteEvent($eventId): $body',
+        name: 'EventService',
+      );
+
+      final res = await _api.post(
+        '/events/$eventId/propose-delete',
+        body: body,
+      );
+      dev.log(
+        '📥 [EventService] proposeDeleteEvent → ${res.statusCode}',
+        name: 'EventService',
+      );
+
+      if (res.statusCode == 200 || res.statusCode == 201) {
+        final decoded = _api.extractDataFromResponse(res);
+        if (decoded is Map<String, dynamic>) {
+          return EventLog.fromJson(decoded);
+        } else {
+          throw Exception('Phản hồi không hợp lệ từ server.');
+        }
+      }
+
+      String messageFromResponse(http.Response r) {
+        try {
+          final decoded = _api.extractDataFromResponse(r);
+          if (decoded is Map) {
+            for (final key in ['message', 'error', 'detail', 'description']) {
+              if (decoded.containsKey(key) && decoded[key] != null) {
+                return decoded[key].toString();
+              }
+            }
+            if (decoded.containsKey('errors')) {
+              return decoded['errors'].toString();
+            }
+          }
+        } catch (_) {}
+        try {
+          if (r.body.trim().isNotEmpty) return r.body;
+        } catch (_) {}
+        return 'Lỗi không xác định (${r.statusCode}).';
+      }
+
+      final serverMsg = messageFromResponse(res);
+
+      if (res.statusCode == 400) {
+        throw Exception(
+          'Yêu cầu không hợp lệ hoặc dữ liệu sai định dạng. $serverMsg',
+        );
+      } else if (res.statusCode == 403) {
+        throw Exception('Chỉ caregiver mới được phép gửi đề xuất. $serverMsg');
+      } else if (res.statusCode == 409) {
+        try {
+          dev.log(
+            '[EventService] proposeDeleteEvent 409 response body: ${res.body}',
+            name: 'EventService',
+          );
+        } catch (_) {}
+        throw Exception('Đã có đề xuất chờ duyệt cho sự kiện này. $serverMsg');
+      } else {
+        throw Exception(serverMsg);
+      }
+    } catch (e, st) {
+      dev.log(
+        '❌ [EventService] proposeDeleteEvent error: $e',
+        name: 'EventService',
+        stackTrace: st,
+      );
+      rethrow;
+    }
+  }
+
   Future<EventLog> createLog(Map<String, dynamic> data) async {
     try {
       final row = await _supabase
@@ -702,6 +820,130 @@ class EventService {
     }
   }
 
+  Future<EventLog> sendManualAlarm({
+    required String cameraId,
+    required String snapshotPath,
+    String? cameraName,
+    String? notes,
+    String? streamUrl,
+  }) async {
+    try {
+      if (snapshotPath.isEmpty) {
+        throw Exception('Snapshot path is empty');
+      }
+
+      final rds = EventsRemoteDataSource(api: _api);
+
+      AppLogger.api('[sendManualAlarm] 1️⃣ Creating manual alert...');
+
+      String? customerName;
+      try {
+        customerName = await _resolveCustomerName().timeout(
+          const Duration(milliseconds: 1200),
+          onTimeout: () => null,
+        );
+      } catch (e) {
+        AppLogger.d('[sendManualAlarm] resolve customer name failed: $e');
+      }
+      final camName = (cameraName != null && cameraName.trim().isNotEmpty)
+          ? cameraName.trim()
+          : 'camera';
+      final String composedNotes =
+          (customerName != null && customerName.isNotEmpty)
+          ? '$customerName phát hiện hành vi bất thường nên đã tạo sự kiện thủ công để kích hoạt quy trình cảnh báo tại $camName'
+          : (notes ?? 'Manual alarm triggered from LiveCameraScreen');
+      // 1️⃣ Create manual alert
+      final data = await rds.createManualAlert(
+        cameraId: cameraId,
+        imagePath: snapshotPath,
+        notes: composedNotes,
+        contextData: {
+          'camera_name': cameraName,
+          'stream_url': streamUrl,
+          'source': 'manual_button',
+        },
+      );
+
+      AppLogger.api('[sendManualAlarm] Raw response from createManualAlert:');
+      AppLogger.api('  - Full data: ${data.toString().substring(0, 200)}...');
+      AppLogger.api('  - Keys: ${data.keys.toList()}');
+
+      final eventData = data['event'] is Map ? data['event'] : data;
+      final eventId =
+          eventData['event_id'] ?? eventData['eventId'] ?? eventData['id'];
+
+      AppLogger.api('[sendManualAlarm] ✅ Created alert - eventId=$eventId');
+
+      if (eventId == null || eventId.toString().isEmpty) {
+        AppLogger.apiError(
+          '[sendManualAlarm] ❌ EventID extraction failed - eventData keys=${eventData.keys.toList()}',
+        );
+        throw Exception('createManualAlert did not return eventId');
+      }
+
+      // 2️⃣ Try to fetch fresh event from REST API (SOURCE OF TRUTH)
+      // But if it fails, return a constructed EventLog from creation response
+      AppLogger.api(
+        '[sendManualAlarm] 2️⃣ Fetching fresh event directly from REST API...',
+      );
+      EventLog? freshEvent;
+      try {
+        final rdsForFetch = EventsRemoteDataSource(api: _api);
+        final freshEventData = await rdsForFetch.getEventById(
+          eventId: eventId.toString(),
+        );
+        freshEvent = EventLog.fromJson(freshEventData);
+
+        AppLogger.api('[sendManualAlarm] ✅ Fetched fresh event from REST API:');
+        AppLogger.api('  - eventId: ${freshEvent.eventId}');
+        AppLogger.api('  - status: ${freshEvent.status}');
+      } catch (fetchErr) {
+        AppLogger.apiError(
+          '[sendManualAlarm] ⚠️ REST fetch failed (non-fatal): $fetchErr - falling back to created event',
+        );
+        try {
+          freshEvent = EventLog.fromJson(eventData);
+          AppLogger.api(
+            '[sendManualAlarm] ✅ Using creation response as fallback for eventId=$eventId',
+          );
+        } catch (fbErr) {
+          AppLogger.apiError(
+            '[sendManualAlarm] ❌ Fallback EventLog creation also failed: $fbErr',
+          );
+          rethrow;
+        }
+      }
+
+      AppLogger.api('[sendManualAlarm] ✅ Complete');
+
+      return freshEvent;
+    } catch (e, st) {
+      AppLogger.apiError('[sendManualAlarm] ❌ Fatal error: $e');
+      dev.log('sendManualAlarm stackTrace: $st', name: 'EventService');
+      rethrow;
+    }
+  }
+
+  Future<String?> _resolveCustomerName() async {
+    try {
+      final ds = AssignmentsRemoteDataSource(api: _api);
+      final assignments = await ds.listPending(status: 'accepted');
+      if (assignments.isEmpty) return null;
+      // Pick the most recent accepted assignment
+      final a = assignments.first;
+      if (a.customerName != null && a.customerName!.trim().isNotEmpty) {
+        return a.customerName!.trim();
+      }
+      if (a.customerUsername != null && a.customerUsername!.trim().isNotEmpty) {
+        return a.customerUsername!.trim();
+      }
+      return null;
+    } catch (e) {
+      AppLogger.d('[_resolveCustomerName] failed: $e');
+      return null;
+    }
+  }
+
   Future<Map<String, dynamic>> _normalizeRow(Map<String, dynamic> row) async {
     final rawDetected = row[EventEndpoints.detectedAt];
     final dt = _parseDetectedAtAny(rawDetected);
@@ -716,6 +958,7 @@ class EventService {
       'lifecycle_state': row['lifecycle_state'] ?? row['lifecycleState'],
       'detectedAt': detectedAtIso,
       'confirm_status': row[EventEndpoints.confirmStatus],
+      'updated_by': row['updated_by'] ?? row['updatedBy'],
     };
   }
 
@@ -807,34 +1050,6 @@ class EventService {
         name: 'EventService.fetchLogs',
         stackTrace: st,
       );
-    }
-  }
-
-  Future<EventLog> sendManualAlarm({
-    required String cameraId,
-    required String snapshotPath,
-    String? cameraName,
-    String? notes,
-    String? streamUrl,
-  }) async {
-    try {
-      final rds = EventsRemoteDataSource(api: _api);
-
-      final data = await rds.createManualAlert(
-        cameraId: cameraId,
-        imagePath: snapshotPath,
-        notes: notes ?? "Manual alarm triggered from LiveCameraScreen",
-        contextData: {
-          "camera_name": cameraName,
-          "stream_url": streamUrl,
-          "source": "manual_button",
-        },
-      );
-
-      return EventLog.fromJson(data);
-    } catch (e) {
-      print("❌ [EventService.sendManualAlarm] $e");
-      rethrow;
     }
   }
 }

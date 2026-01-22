@@ -8,9 +8,12 @@ import '../widgets/action_log_card.dart';
 
 class LowConfidenceEventsScreen extends StatelessWidget {
   final List<LogEntry> logs;
+  final List<LogEntry> allLogs;
   final DateTimeRange? selectedDayRange;
   final String selectedStatus;
   final String selectedPeriod;
+  final ScrollController? scrollController;
+  final Key? filterBarKey;
 
   final ValueChanged<DateTimeRange?> onDayRangeChanged;
   final ValueChanged<String?> onStatusChanged;
@@ -21,6 +24,7 @@ class LowConfidenceEventsScreen extends StatelessWidget {
   const LowConfidenceEventsScreen({
     super.key,
     required this.logs,
+    required this.allLogs,
     required this.selectedDayRange,
     required this.selectedStatus,
     required this.selectedPeriod,
@@ -29,12 +33,20 @@ class LowConfidenceEventsScreen extends StatelessWidget {
     required this.onPeriodChanged,
     this.onRefresh,
     this.onEventUpdated,
+    this.scrollController,
+    this.filterBarKey,
   });
 
   @override
   Widget build(BuildContext context) {
-    const lowAllowed = {'unknown', 'suspect'};
+    final lowAllowed = const {'unknowns', 'suspect'};
+    final int totalAll = allLogs.length;
+
     final filtered = logs.where((log) {
+      try {
+        final ls = log.lifecycleState?.toString().toLowerCase();
+        if (ls != null && ls == 'canceled') return false;
+      } catch (_) {}
       final st = log.status.toLowerCase();
       if (!lowAllowed.contains(st)) return false;
 
@@ -42,7 +54,7 @@ class LowConfidenceEventsScreen extends StatelessWidget {
 
       bool statusMatches;
       if (selectedSt == 'all') {
-        statusMatches = true; // already constrained by lowAllowed above
+        statusMatches = true;
       } else {
         statusMatches = st == selectedSt;
       }
@@ -66,46 +78,70 @@ class LowConfidenceEventsScreen extends StatelessWidget {
         );
         if (dateOnly.isBefore(start) || dateOnly.isAfter(end)) return false;
       }
-
       final slot = selectedPeriod.toLowerCase();
       if (slot != 'all' && slot.isNotEmpty) {
         final hour = dt.hour;
-        bool inSlot = switch (slot) {
-          '00-06' => hour >= 0 && hour < 6,
-          '06-12' => hour >= 6 && hour < 12,
-          '12-18' => hour >= 12 && hour < 18,
-          '18-24' => hour >= 18 && hour < 24,
-          'morning' => hour >= 5 && hour < 12,
-          'afternoon' => hour >= 12 && hour < 18,
-          'evening' => hour >= 18 && hour < 22,
-          'night' => hour >= 22 || hour < 5,
-          _ => true,
-        };
+        bool inSlot;
+        switch (slot) {
+          case '00-06':
+            inSlot = hour >= 0 && hour < 6;
+            break;
+          case '06-12':
+            inSlot = hour >= 6 && hour < 12;
+            break;
+          case '12-18':
+            inSlot = hour >= 12 && hour < 18;
+            break;
+          case '18-24':
+            inSlot = hour >= 18 && hour < 24;
+            break;
+          case 'morning':
+            inSlot = hour >= 5 && hour < 12;
+            break;
+          case 'afternoon':
+            inSlot = hour >= 12 && hour < 18;
+            break;
+          case 'evening':
+            inSlot = hour >= 18 && hour < 22;
+            break;
+          case 'night':
+            inSlot = hour >= 22 || hour < 5;
+            break;
+          default:
+            inSlot = true;
+        }
         if (!inSlot) return false;
       }
       return true;
     }).toList();
 
-    // --- UI ---
     return SingleChildScrollView(
-      physics: const BouncingScrollPhysics(),
+      controller: scrollController,
+      physics: filtered.isEmpty
+          ? const NeverScrollableScrollPhysics()
+          : const AlwaysScrollableScrollPhysics(),
       padding: const EdgeInsets.all(16),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.center,
         children: [
           FilterBar(
-            // Low-confidence should not include 'normal' (now shown in high-confidence)
-            statusOptions: const ['all', 'unknown', 'suspect'],
+            key: filterBarKey,
+            statusOptions: const ['all', 'suspect', 'unknowns'],
             periodOptions: HomeFilters.periodOptions,
             selectedDayRange: selectedDayRange,
             selectedStatus: selectedStatus,
             selectedPeriod: selectedPeriod,
+            maxRangeDays: 3,
             onDayRangeChanged: onDayRangeChanged,
             onStatusChanged: onStatusChanged,
             onPeriodChanged: onPeriodChanged,
           ),
           const SizedBox(height: 24),
-          _SummaryRow(logs: filtered),
+          _SummaryRow(
+            filteredLogs: filtered,
+            allLogs: allLogs,
+            selectedStatus: selectedStatus,
+          ),
           const SizedBox(height: 12),
           const Divider(height: 1),
           const SizedBox(height: 12),
@@ -117,7 +153,6 @@ class LowConfidenceEventsScreen extends StatelessWidget {
                 onStatusChanged('all');
                 onPeriodChanged(HomeFilters.defaultPeriod);
               },
-              onRefresh: onRefresh,
             )
           else
             ...filtered.map((log) {
@@ -142,45 +177,110 @@ class LowConfidenceEventsScreen extends StatelessWidget {
 }
 
 class _SummaryRow extends StatelessWidget {
-  const _SummaryRow({required this.logs});
-  final List<LogEntry> logs;
+  const _SummaryRow({
+    required this.filteredLogs,
+    required this.allLogs,
+    required this.selectedStatus,
+  });
+  final List<LogEntry> filteredLogs;
+  final List<LogEntry> allLogs;
+  final String selectedStatus;
 
   @override
   Widget build(BuildContext context) {
-    final int total = logs.length;
-    final int suspectCount = logs
-        .where((e) => e.status.toLowerCase() == 'suspect')
-        .length;
-    final int others = (total - suspectCount).clamp(0, total);
+    final sel = selectedStatus.toLowerCase();
+
+    final int suspectCount = filteredLogs.where((e) {
+      try {
+        return e.status.toLowerCase() == 'suspect';
+      } catch (_) {
+        return false;
+      }
+    }).length;
+
+    final int unknownCount = filteredLogs.where((e) {
+      try {
+        return e.status.toLowerCase() == 'unknowns';
+      } catch (_) {
+        return false;
+      }
+    }).length;
+
+    final int totalLow = suspectCount + unknownCount;
+    final int totalAll = allLogs.length; // include canceled events for total
+
+    late final Widget leftCard;
+    late final Widget middleCard;
+    late final Widget rightCard;
+
+    middleCard = _SummaryCard(
+      title: 'Tổng nhật ký',
+      value: '$totalAll',
+      icon: Icons.list_alt_rounded,
+      color: AppTheme.reportColor,
+    );
+
+    if (sel == 'all') {
+      leftCard = _SummaryCard(
+        title: 'Đáng ngờ',
+        value: '$suspectCount',
+        icon: Icons.help_outline_rounded,
+        color: const Color(0xFFF59E0B),
+      );
+      rightCard = _SummaryCard(
+        title: 'Sự kiện khác',
+        value: '$unknownCount',
+        icon: Icons.help_outline_rounded,
+        color: AppTheme.activityColor,
+      );
+    } else if (sel == 'suspect') {
+      leftCard = _SummaryCard(
+        title: 'Đáng ngờ',
+        value: '$suspectCount',
+        icon: Icons.help_outline_rounded,
+        color: const Color(0xFFF59E0B),
+      );
+      rightCard = _SummaryCard(
+        title: 'Sự kiện khác',
+        value: '0',
+        icon: Icons.help_outline_rounded,
+        color: AppTheme.activityColor,
+      );
+    } else if (sel == 'unknowns') {
+      leftCard = _SummaryCard(
+        title: 'Không xác định',
+        value: '$unknownCount',
+        icon: Icons.help_outline_rounded,
+        color: Colors.grey,
+      );
+      rightCard = _SummaryCard(
+        title: 'Sự kiện khác',
+        value: '0',
+        icon: Icons.report_off_rounded,
+        color: AppTheme.activityColor,
+      );
+    } else {
+      leftCard = _SummaryCard(
+        title: 'Đáng ngờ',
+        value: '$suspectCount',
+        icon: Icons.help_outline_rounded,
+        color: const Color(0xFFF59E0B),
+      );
+      rightCard = _SummaryCard(
+        title: 'Sự kiện khác',
+        value: '$unknownCount',
+        icon: Icons.help_outline_rounded,
+        color: AppTheme.activityColor,
+      );
+    }
 
     return Row(
       children: [
-        Expanded(
-          child: _SummaryCard(
-            title: 'Đáng ngờ',
-            value: '$suspectCount',
-            icon: Icons.emergency_rounded,
-            color: Colors.red,
-          ),
-        ),
+        Expanded(child: leftCard),
         const SizedBox(width: 12),
-        Expanded(
-          child: _SummaryCard(
-            title: 'Tổng nhật ký',
-            value: '$total',
-            icon: Icons.list_alt_rounded,
-            color: AppTheme.reportColor,
-          ),
-        ),
+        Expanded(child: middleCard),
         const SizedBox(width: 12),
-        Expanded(
-          child: _SummaryCard(
-            title: 'Sự kiện khác',
-            value: '$others',
-            icon: Icons.monitor_heart_rounded,
-            color: AppTheme.activityColor,
-          ),
-        ),
+        Expanded(child: rightCard),
       ],
     );
   }
@@ -249,7 +349,7 @@ class _SummaryCard extends StatelessWidget {
                 textAlign: TextAlign.center,
                 maxLines: 2,
                 softWrap: true,
-                style: const TextStyle(
+                style: TextStyle(
                   fontSize: 12,
                   fontWeight: FontWeight.w500,
                   color: AppTheme.unselectedTextColor,
@@ -287,14 +387,14 @@ class _EmptyState extends StatelessWidget {
               color: AppTheme.text,
             ),
           ),
-          const SizedBox(height: 8),
-          Text(
-            'Thử điều chỉnh tìm kiếm hoặc bộ lọc',
-            style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-              color: AppTheme.unselectedTextColor,
-            ),
-            textAlign: TextAlign.center,
-          ),
+          // const SizedBox(height: 8),
+          // Text(
+          //   'Thử điều chỉnh tìm kiếm hoặc bộ lọc',
+          //   style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+          //     color: AppTheme.unselectedTextColor,
+          //   ),
+          //   textAlign: TextAlign.center,
+          // ),
           const SizedBox(height: 12),
           Row(
             mainAxisSize: MainAxisSize.min,

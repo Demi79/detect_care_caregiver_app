@@ -1,4 +1,6 @@
 class SharedPermissions {
+  final String caregiverId;
+  final String customerId;
   final bool streamView;
   final bool alertRead;
   final bool alertAck;
@@ -8,6 +10,8 @@ class SharedPermissions {
   final bool profileView;
 
   const SharedPermissions({
+    required this.caregiverId,
+    required this.customerId,
     required this.streamView,
     required this.alertRead,
     required this.alertAck,
@@ -19,6 +23,8 @@ class SharedPermissions {
 
   factory SharedPermissions.fromJson(Map<String, dynamic> json) {
     return SharedPermissions(
+      caregiverId: json['caregiver_id'] ?? '',
+      customerId: json['customer_id'] ?? '',
       streamView: json['stream:view'] ?? json['stream_view'] ?? false,
       alertRead: json['alert:read'] ?? json['alert_read'] ?? false,
       alertAck: json['alert:ack'] ?? json['alert_ack'] ?? false,
@@ -34,6 +40,8 @@ class SharedPermissions {
   }
 
   Map<String, dynamic> toJson() => {
+    'caregiver_id': caregiverId,
+    'customer_id': customerId,
     'stream_view': streamView,
     'alert_read': alertRead,
     'alert_ack': alertAck,
@@ -44,6 +52,8 @@ class SharedPermissions {
   };
 
   SharedPermissions copyWith({
+    String? caregiverId,
+    String? customerId,
     bool? streamView,
     bool? alertRead,
     bool? alertAck,
@@ -53,6 +63,8 @@ class SharedPermissions {
     bool? profileView,
   }) {
     return SharedPermissions(
+      caregiverId: caregiverId ?? this.caregiverId,
+      customerId: customerId ?? this.customerId,
       streamView: streamView ?? this.streamView,
       alertRead: alertRead ?? this.alertRead,
       alertAck: alertAck ?? this.alertAck,

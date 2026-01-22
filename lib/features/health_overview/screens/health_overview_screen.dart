@@ -5,12 +5,16 @@ import 'package:flutter/material.dart';
 import 'package:detect_care_caregiver_app/features/health_overview/widgets/high_risk_time_table.dart';
 import 'package:intl/intl.dart';
 import 'package:detect_care_caregiver_app/features/auth/data/auth_storage.dart';
+import 'package:detect_care_caregiver_app/features/home/service/event_service.dart';
+import 'package:provider/provider.dart';
+import '../../../core/providers/permissions_provider.dart';
 
 import '../../../core/theme/app_theme.dart';
 import '../../../core/widgets/error_widget.dart';
 import '../../../core/widgets/loading_widget.dart';
 import '../widgets/overview_widgets.dart';
 import 'analyst_data_screen.dart';
+import 'package:detect_care_caregiver_app/features/shared_permissions/screens/caregiver_settings_screen.dart';
 
 class HealthOverviewScreen extends StatefulWidget {
   final String? patientId;
@@ -30,6 +34,12 @@ class _HealthOverviewScreenState extends State<HealthOverviewScreen> {
   bool _loading = false;
   String? _error;
   HealthReportOverviewDto? _data;
+  int _kpiTotalEvents = 0;
+  int _kpiTotalAbnormal = 0;
+  int _kpiTotalFall = 0;
+  int _kpiTotalAbnormalBehavior = 0;
+  HighRiskTimeDto? _computedHighRiskTime;
+  List<dynamic> _filteredLogs = [];
   bool _analystLoading = false;
   String? _analystError;
   List<dynamic>? _analystEntries;
@@ -66,9 +76,11 @@ class _HealthOverviewScreenState extends State<HealthOverviewScreen> {
       setState(() {
         _data = dto;
       });
+      // compute client-side resolved rate (average of ACKNOWLEDGED and RESOLVED rates)
+      await _computeResolvedRate(r);
       await _fetchAnalystSummaries(r);
     } catch (e) {
-      debugPrint('[HEALTH_OVERVIEW] fetch error: $e');
+      print('[HEALTH_OVERVIEW] fetch error: $e');
       setState(() {
         _error = e.toString();
       });
@@ -76,6 +88,137 @@ class _HealthOverviewScreenState extends State<HealthOverviewScreen> {
       setState(() {
         _loading = false;
       });
+    }
+  }
+
+  Future<void> _computeResolvedRate(DateTimeRange range) async {
+    try {
+      final svc = EventService.withDefaultClient();
+      // fetch a large page so we capture most events in the selected range
+      final logs = await svc.fetchLogs(
+        dayRange: range,
+        period: (_selectedPeriod == 'All' || _selectedPeriod.isEmpty)
+            ? null
+            : _selectedPeriod,
+      );
+
+      // Debug: print fetched logs summary to diagnose duplicate / unexpected rows
+      try {
+        print('[HEALTH_OVERVIEW] fetched logs count=${logs.length}');
+        final ids = logs.map((l) => l.eventId).toList();
+        print(
+          '[HEALTH_OVERVIEW] fetched eventIds sample=${ids.take(20).toList()}',
+        );
+
+        // Per-item brief info
+        for (var i = 0; i < logs.length; i++) {
+          try {
+            final l = logs[i];
+            print(
+              '[HEALTH_OVERVIEW] item[$i] id=${l.eventId} type=${l.eventType} status=${l.status} lifecycle=${l.lifecycleState} detected=${l.detectedAt} created=${l.createdAt}',
+            );
+          } catch (e) {
+            print('[HEALTH_OVERVIEW] item[$i] - failed to print: $e');
+          }
+        }
+
+        // Duplicate summary
+        final dup = <String, int>{};
+        for (final id in ids) {
+          dup[id] = (dup[id] ?? 0) + 1;
+        }
+        final duplicates = dup.entries.where((e) => e.value > 1).toList();
+        print(
+          '[HEALTH_OVERVIEW] duplicate id counts=${duplicates.map((e) => '${e.key}:${e.value}').toList()}',
+        );
+      } catch (e) {
+        print('[HEALTH_OVERVIEW] debug print failed: $e');
+      }
+
+      // Exclude events that have been canceled at the lifecycle level
+      final filtered = logs
+          .where(
+            (l) =>
+                (l.lifecycleState?.toString().toLowerCase() ?? '') !=
+                'canceled',
+          )
+          .toList();
+
+      if (filtered.isEmpty) {
+        setState(() {
+          _kpiTotalEvents = 0;
+          _kpiTotalAbnormal = 0;
+          _kpiTotalFall = 0;
+          _kpiTotalAbnormalBehavior = 0;
+          _computedHighRiskTime = HighRiskTimeDto(
+            morning: 0,
+            afternoon: 0,
+            evening: 0,
+            night: 0,
+            topLabel: '',
+          );
+          _filteredLogs = filtered;
+        });
+        return;
+      }
+
+      final total = filtered.length;
+      final int fallCount = filtered
+          .where((l) => l.eventType.toLowerCase() == 'fall')
+          .length;
+      final int abnormalBehaviorCount = filtered
+          .where((l) => l.eventType.toLowerCase() == 'abnormal_behavior')
+          .length;
+      final int abnormalCount = filtered.where((l) {
+        final s = l.status.toLowerCase();
+        return s == 'danger' || s == 'warning';
+      }).length;
+
+      // Compute high-risk time buckets from filtered logs
+      int morning = 0, afternoon = 0, evening = 0, night = 0;
+      for (final e in filtered) {
+        final detected = e.detectedAt;
+        if (detected == null) continue;
+        final localH = detected.toLocal().hour;
+        if (localH >= 5 && localH < 12) {
+          morning++;
+        } else if (localH >= 12 && localH < 18) {
+          afternoon++;
+        } else if (localH >= 18 && localH < 22) {
+          evening++;
+        } else {
+          night++;
+        }
+      }
+
+      String topKey = '';
+      final map = {
+        'morning': morning,
+        'afternoon': afternoon,
+        'evening': evening,
+        'night': night,
+      };
+      if (map.values.any((v) => v > 0)) {
+        topKey = map.entries.reduce((a, b) => a.value >= b.value ? a : b).key;
+      }
+
+      setState(() {
+        _kpiTotalEvents = total;
+        _kpiTotalAbnormal = abnormalCount;
+        _kpiTotalFall = fallCount;
+        _kpiTotalAbnormalBehavior = abnormalBehaviorCount;
+        _computedHighRiskTime = HighRiskTimeDto(
+          morning: morning,
+          afternoon: afternoon,
+          evening: evening,
+          night: night,
+          topLabel: topKey,
+        );
+        _filteredLogs = filtered;
+      });
+    } catch (e) {
+      print('[HEALTH_OVERVIEW] computeResolvedRate failed: $e');
+      // keep _computedResolvedRate null so UI falls back to server-provided value
     }
   }
 
@@ -115,6 +258,16 @@ class _HealthOverviewScreenState extends State<HealthOverviewScreen> {
 
   @override
   Widget build(BuildContext context) {
+    // Watch permissions provider for realtime updates
+    int? reportDays;
+    try {
+      final prov = context.watch<PermissionsProvider>();
+      final customerId = widget.patientId;
+      if (customerId != null) {
+        reportDays = prov.getReportAccessDays(customerId);
+      }
+    } catch (_) {}
+
     return Scaffold(
       backgroundColor: AppTheme.scaffoldBackground,
       // appBar: AppBar(
@@ -141,12 +294,83 @@ class _HealthOverviewScreenState extends State<HealthOverviewScreen> {
               vertical: AppTheme.spacingL,
             ),
             children: [
-              if (_loading) const LoadingWidget(),
-              if (!_loading && _error != null)
-                ErrorDisplay(error: _error!, onRetry: _fetch),
-              if (!_loading && _error == null && _data == null)
-                const Center(child: Text('Không có dữ liệu')),
-              if (!_loading && _data != null) _buildContent(context, _data!),
+              if ((reportDays ?? 0) == 0) ...[
+                Center(
+                  child: Padding(
+                    padding: const EdgeInsets.all(24),
+                    child: Column(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        const Icon(
+                          Icons.lock_outline,
+                          size: 64,
+                          color: Color(0xFFF59E0B),
+                        ),
+                        const SizedBox(height: 16),
+                        Text(
+                          'Không có quyền truy cập',
+                          style: TextStyle(
+                            fontSize: 18,
+                            fontWeight: FontWeight.w600,
+                            color: Colors.grey[800],
+                          ),
+                        ),
+                        const SizedBox(height: 8),
+                        Text(
+                          'Bạn chưa được chia sẻ quyền xem báo cáo cho bệnh nhân này. Hãy nhờ bệnh nhân cấp quyền truy cập trong "Quyền được chia sẻ".',
+                          textAlign: TextAlign.center,
+                          style: TextStyle(color: Colors.grey[600]),
+                        ),
+                        const SizedBox(height: 24),
+                        Row(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            OutlinedButton.icon(
+                              onPressed: _fetch,
+                              icon: const Icon(Icons.refresh),
+                              label: const Text('Thử lại'),
+                              style: OutlinedButton.styleFrom(
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 20,
+                                  vertical: 12,
+                                ),
+                              ),
+                            ),
+                            const SizedBox(width: 12),
+                            ElevatedButton.icon(
+                              onPressed: () {
+                                Navigator.of(context).push(
+                                  MaterialPageRoute(
+                                    builder: (_) =>
+                                        const CaregiverSettingsScreen(),
+                                  ),
+                                );
+                              },
+                              icon: const Icon(Icons.key),
+                              label: const Text('Yêu cầu quyền'),
+                              style: ElevatedButton.styleFrom(
+                                backgroundColor: const Color(0xFFF59E0B),
+                                foregroundColor: Colors.white,
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 20,
+                                  vertical: 12,
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              ] else ...[
+                if (_loading) const LoadingWidget(),
+                if (!_loading && _error != null)
+                  ErrorDisplay(error: _error!, onRetry: _fetch),
+                if (!_loading && _error == null && _data == null)
+                  const Center(child: Text('Không có dữ liệu')),
+                if (!_loading && _data != null) _buildContent(context, _data!),
+              ],
             ],
           ),
         ),
@@ -164,7 +388,7 @@ class _HealthOverviewScreenState extends State<HealthOverviewScreen> {
   //   final r = _selectedDayRange ?? _todayRange();
   //   final svc = EventService.withDefaultClient();
   //   try {
-  //     debugPrint(
+  //     print(
   //       '[DEBUG] Requesting events for ${r.start}..${r.end} (period=Afternoon)',
   //     );
   //     final logsAf = await svc.fetchLogs(
@@ -174,11 +398,11 @@ class _HealthOverviewScreenState extends State<HealthOverviewScreen> {
   //       period: 'Afternoon',
   //     );
 
-  //     debugPrint(
+  //     print(
   //       '[DEBUG] EventService returned ${logsAf.length} items (period=Afternoon)',
   //     );
 
-  //     debugPrint(
+  //     print(
   //       '[DEBUG] Requesting events for ${r.start}..${r.end} (no period)',
   //     );
   //     final logsAll = await svc.fetchLogs(
@@ -186,7 +410,7 @@ class _HealthOverviewScreenState extends State<HealthOverviewScreen> {
   //       limit: 1000,
   //       dayRange: DateTimeRange(start: r.start, end: r.end),
   //     );
-  //     debugPrint(
+  //     print(
   //       '[DEBUG] EventService returned ${logsAll.length} items (no period)',
   //     );
 
@@ -252,13 +476,13 @@ class _HealthOverviewScreenState extends State<HealthOverviewScreen> {
   //       }
   //     }
 
-  //     debugPrint(
+  //     print(
   //       '[DEBUG] Local group counts -> morning=$morning, afternoon=$afternoon, evening=$evening, night=$night',
   //     );
-  //     debugPrint(
+  //     print(
   //       '[DEBUG] UTC group counts   -> morning=$utcMorning, afternoon=$utcAfternoon, evening=$utcEvening, night=$utcNight',
   //     );
-  //     debugPrint(
+  //     print(
   //       '[DEBUG] Sample events (${samples.length}) = ${samples.join(' | ')}',
   //     );
 
@@ -273,7 +497,7 @@ class _HealthOverviewScreenState extends State<HealthOverviewScreen> {
   //       );
   //     }
   //   } catch (e) {
-  //     debugPrint('[DEBUG] fetchLogs failed: $e');
+  //     print('[DEBUG] fetchLogs failed: $e');
   //     if (mounted) {
   //       ScaffoldMessenger.of(
   //         context,
@@ -283,10 +507,9 @@ class _HealthOverviewScreenState extends State<HealthOverviewScreen> {
   // }
 
   Widget _buildContent(BuildContext context, HealthReportOverviewDto d) {
-    final abnormalRange = d.kpis.abnormalTotal;
-    final resolvedRate = d.kpis.resolvedTrueRate;
-    final avgResp = Duration(seconds: d.kpis.avgResponseSeconds);
-    final overSlaCritical = d.kpis.openCriticalOverSla;
+    // KPIs (counts) are computed client-side in _computeResolvedRate and
+    // stored in state variables: _kpiTotalEvents, _kpiTotalAbnormal,
+    // _kpiTotalFall, _kpiTotalAbnormalBehavior.
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -298,6 +521,17 @@ class _HealthOverviewScreenState extends State<HealthOverviewScreen> {
           selectedStatus: _selectedStatus,
           selectedPeriod: _selectedPeriod,
           enforceTwoDayRange: true,
+          maxPastDays: () {
+            try {
+              final prov = context.read<PermissionsProvider>();
+              final customerId = widget.patientId;
+              if (customerId != null) {
+                final days = prov.getReportAccessDays(customerId);
+                return days > 0 ? days : null;
+              }
+            } catch (_) {}
+            return null;
+          }(),
           onStatusChanged: (v) =>
               setState(() => _selectedStatus = v ?? HomeFilters.defaultStatus),
           onDayRangeChanged: (r) => setState(() {
@@ -312,20 +546,52 @@ class _HealthOverviewScreenState extends State<HealthOverviewScreen> {
         const SizedBox(height: AppTheme.spacingL),
 
         KPITiles(
-          abnormalToday: abnormalRange,
-          resolvedRate: resolvedRate,
-          avgResponse: avgResp,
-          openAlerts: overSlaCritical,
+          totalEvents: _kpiTotalEvents,
+          totalAbnormal: _kpiTotalAbnormal,
+          totalFall: _kpiTotalFall,
+          totalAbnormalBehavior: _kpiTotalAbnormalBehavior,
         ),
         const SizedBox(height: AppTheme.spacingL),
+        // Prefer client-computed high-risk time (which excludes canceled events)
+        // fall back to server-provided values when computation is not available.
+        (() {
+          final highRisk = _computedHighRiskTime ?? d.highRiskTime;
+          final highlight = (highRisk.topLabel.isNotEmpty)
+              ? highRisk.topLabel
+              : null;
+          return HighRiskTimeTable(
+            morning: highRisk.morning,
+            afternoon: highRisk.afternoon,
+            evening: highRisk.evening,
+            night: highRisk.night,
+            highlightKey: highlight,
+          );
+        }()),
+        const SizedBox(height: AppTheme.spacingL),
 
-        HighRiskTimeTable(
-          morning: d.highRiskTime.morning,
-          afternoon: d.highRiskTime.afternoon,
-          evening: d.highRiskTime.evening,
-          night: d.highRiskTime.night,
-          highlightKey: d.highRiskTime.topLabel,
-        ),
+        // Status breakdown: derive counts strictly from client-filtered logs
+        (() {
+          int danger = 0, warning = 0, normal = 0;
+          for (final l in _filteredLogs) {
+            try {
+              final s = (l.status ?? '').toString().toLowerCase();
+              if (s == 'danger') {
+                danger++;
+              } else if (s == 'warning')
+                warning++;
+              else
+                normal++;
+            } catch (_) {
+              normal++;
+            }
+          }
+
+          return StatusBreakdownBar(
+            danger: danger,
+            warning: warning,
+            normal: normal,
+          );
+        }()),
         const SizedBox(height: AppTheme.spacingL),
 
         // Container(
@@ -409,69 +675,70 @@ class _HealthOverviewScreenState extends State<HealthOverviewScreen> {
               if (_analystLoading)
                 const Center(child: CircularProgressIndicator())
               else if (_analystError != null)
-                Text('Lỗi tải kết luận: $_analystError')
+                Text('Lỗi tải kết luận: $_analystError'),
+
               // else if (_analystEntries == null || _analystEntries!.isEmpty)
               //   const Text('Không có kết luận cho khoảng thời gian này')
-              else
-                Column(
-                  crossAxisAlignment: CrossAxisAlignment.stretch,
-                  children: _analystEntries!.map((e) {
-                    final m = (e as Map<String, dynamic>);
-                    final data = m['data'];
-                    String summary = '';
-                    if (data != null && data['analyses'] is List) {
-                      try {
-                        final analyses = (data['analyses'] as List).firstWhere(
-                          (a) =>
-                              a is Map<String, dynamic> &&
-                              a['suggest_summary_daily'] != null,
-                          orElse: () => null,
-                        );
-                        if (analyses != null &&
-                            analyses is Map<String, dynamic>) {
-                          summary =
-                              analyses['suggest_summary_daily']?.toString() ??
-                              '';
-                        }
-                      } catch (_) {}
-                    }
+              // else
+              //   Column(
+              //     crossAxisAlignment: CrossAxisAlignment.stretch,
+              //     children: _analystEntries!.map((e) {
+              //       final m = (e as Map<String, dynamic>);
+              //       final data = m['data'];
+              //       String summary = '';
+              //       if (data != null && data['analyses'] is List) {
+              //         try {
+              //           final analyses = (data['analyses'] as List).firstWhere(
+              //             (a) =>
+              //                 a is Map<String, dynamic> &&
+              //                 a['suggest_summary_daily'] != null,
+              //             orElse: () => null,
+              //           );
+              //           if (analyses != null &&
+              //               analyses is Map<String, dynamic>) {
+              //             summary =
+              //                 analyses['suggest_summary_daily']?.toString() ??
+              //                 '';
+              //           }
+              //         } catch (_) {}
+              //       }
 
-                    final date = m['date']?.toString() ?? '';
-                    return Container(
-                      margin: const EdgeInsets.only(top: AppTheme.spacingS),
-                      padding: const EdgeInsets.all(AppTheme.spacingS),
-                      decoration: BoxDecoration(
-                        color: AppTheme.primaryBlue.withAlpha(
-                          (0.03 * 255).round(),
-                        ),
-                        borderRadius: BorderRadius.circular(8),
-                      ),
-                      child: Row(
-                        children: [
-                          Expanded(
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Text(
-                                  date,
-                                  style: Theme.of(context).textTheme.bodySmall
-                                      ?.copyWith(color: AppTheme.textSecondary),
-                                ),
-                                const SizedBox(height: 6),
-                                Text(
-                                  summary.isEmpty
-                                      ? 'Không có kết luận'
-                                      : summary,
-                                  style: Theme.of(context).textTheme.bodyMedium,
-                                ),
-                              ],
-                            ),
-                          ),
-                        ],
-                      ),
-                    );
-                  }).toList(),
-                ),
+              //       final date = m['date']?.toString() ?? '';
+              //       return Container(
+              //         margin: const EdgeInsets.only(top: AppTheme.spacingS),
+              //         padding: const EdgeInsets.all(AppTheme.spacingS),
+              //         decoration: BoxDecoration(
+              //           color: AppTheme.primaryBlue.withAlpha(
+              //             (0.03 * 255).round(),
+              //           ),
+              //           borderRadius: BorderRadius.circular(8),
+              //         ),
+              //         child: Row(
+              //           children: [
+              //             Expanded(
+              //               child: Column(
+              //                 crossAxisAlignment: CrossAxisAlignment.start,
+              //                 children: [
+              //                   Text(
+              //                     date,
+              //                     style: Theme.of(context).textTheme.bodySmall
+              //                         ?.copyWith(color: AppTheme.textSecondary),
+              //                   ),
+              //                   const SizedBox(height: 6),
+              //                   Text(
+              //                     summary.isEmpty
+              //                         ? 'Không có kết luận'
+              //                         : summary,
+              //                     style: Theme.of(context).textTheme.bodyMedium,
+              //                   ),
+              //                 ],
+              //               ),
+              //             ),
+              //           ],
+              //         ),
+              //       );
+              //     }).toList(),
+              //   ),
             ],
           ),
         ),

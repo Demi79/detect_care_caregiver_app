@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-
 import '../../../core/theme/app_theme.dart';
 
 class HighRiskTimeTable extends StatelessWidget {
@@ -16,10 +15,10 @@ class HighRiskTimeTable extends StatelessWidget {
   });
 
   static const Map<String, String> _labels = {
-    'morning': 'Buổi sáng',
-    'afternoon': 'Buổi chiều',
-    'evening': 'Buổi tối',
-    'night': 'Ban đêm',
+    'morning': 'Sáng',
+    'afternoon': 'Chiều',
+    'evening': 'Tối',
+    'night': 'Đêm',
   };
 
   @override
@@ -27,105 +26,54 @@ class HighRiskTimeTable extends StatelessWidget {
     final entries = [
       _RiskTimeEntry(
         key: 'morning',
-        label: _labels['morning'] ?? 'Buổi sáng',
+        label: _labels['morning']!,
         count: morning,
       ),
       _RiskTimeEntry(
         key: 'afternoon',
-        label: _labels['afternoon'] ?? 'Buổi chiều',
+        label: _labels['afternoon']!,
         count: afternoon,
       ),
       _RiskTimeEntry(
         key: 'evening',
-        label: _labels['evening'] ?? 'Buổi tối',
+        label: _labels['evening']!,
         count: evening,
       ),
-      _RiskTimeEntry(
-        key: 'night',
-        label: _labels['night'] ?? 'Ban đêm',
-        count: night,
-      ),
+      _RiskTimeEntry(key: 'night', label: _labels['night']!, count: night),
     ];
 
-    _RiskTimeEntry? findByKey(String key) {
-      for (final item in entries) {
-        if (item.key == key) {
-          return item;
-        }
-      }
-      return null;
-    }
-
-    final total = entries.fold<int>(0, (sum, item) => sum + item.count);
+    final total = entries.fold<int>(0, (sum, e) => sum + e.count);
     final hasData = total > 0;
 
     _RiskTimeEntry? highlight;
     if (hasData) {
       if (highlightKey != null) {
-        final selected = findByKey(highlightKey!);
-        if (selected != null && selected.count > 0) {
-          highlight = selected;
-        }
-      }
-
-      highlight ??= () {
-        final topCount = entries.fold<int>(
-          0,
-          (value, entry) => entry.count > value ? entry.count : value,
+        highlight = entries.firstWhere(
+          (e) => e.key == highlightKey && e.count > 0,
+          orElse: () => entries.first,
         );
-        if (topCount == 0) {
-          return null;
-        }
-        final candidates = entries
-            .where((entry) => entry.count == topCount)
-            .toList();
-        return candidates.length == 1 ? candidates.first : null;
-      }();
+      }
+      highlight ??= entries.reduce((a, b) => a.count >= b.count ? a : b);
     }
 
-    final theme = Theme.of(context);
-    final textTheme = theme.textTheme;
-
-    final borderColor = AppTheme.borderColor.withAlpha((0.35 * 255).round());
-    final headerBackground = AppTheme.borderColor.withAlpha(
-      (0.12 * 255).round(),
-    );
-    final highlightBackground = AppTheme.dangerColor.withAlpha(
-      (0.12 * 255).round(),
-    );
-    final highlightStroke = AppTheme.dangerColor.withAlpha(
-      (0.24 * 255).round(),
-    );
-
-    String percentageLabel(int count) {
-      if (!hasData || count == 0) {
-        return '0%';
-      }
-      final pct = (count / total) * 100.0;
-      if (pct >= 99.5) {
-        return '100%';
-      }
-      return pct >= 10
-          ? '${pct.toStringAsFixed(0)}%'
-          : '${pct.toStringAsFixed(1)}%';
+    String pct(int c) {
+      if (!hasData || c == 0) return '0%';
+      final p = (c / total) * 100;
+      return p >= 10 ? '${p.toStringAsFixed(0)}%' : '${p.toStringAsFixed(1)}%';
     }
 
-    String summaryText() {
-      if (!hasData) {
-        return 'Khung giờ rủi ro cao: Không có dữ liệu';
-      }
-      if (highlight == null) {
-        return 'Khung giờ rủi ro cao: -';
-      }
-      return 'Khung giờ rủi ro cao: ${highlight.label} (${percentageLabel(highlight.count)})';
-    }
+    final textTheme = Theme.of(context).textTheme;
+    final borderColor = AppTheme.borderColor.withAlpha(90);
+    final headerBg = AppTheme.borderColor.withAlpha(30);
+    final hlBg = AppTheme.dangerColor.withAlpha(30);
+    final hlStroke = AppTheme.dangerColor.withAlpha(60);
 
-    Widget headerCell(String title, {TextAlign align = TextAlign.left}) {
-      return Padding(
-        padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 12),
+    Widget headerCell(String text) => Padding(
+      padding: const EdgeInsets.symmetric(vertical: 12),
+      child: Center(
         child: Text(
-          title,
-          textAlign: align,
+          text,
+          textAlign: TextAlign.center,
           style:
               textTheme.labelSmall?.copyWith(
                 fontWeight: FontWeight.w700,
@@ -133,78 +81,55 @@ class HighRiskTimeTable extends StatelessWidget {
               ) ??
               const TextStyle(fontWeight: FontWeight.w700),
         ),
-      );
-    }
+      ),
+    );
 
-    Widget dataCell(
-      String value, {
-      TextAlign align = TextAlign.left,
-      bool bold = false,
-    }) {
-      return Padding(
-        padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 12),
+    Widget dataCell(String text, {bool bold = false}) => Padding(
+      padding: const EdgeInsets.symmetric(vertical: 12),
+      child: Center(
         child: Text(
-          value,
-          textAlign: align,
-          style:
-              (align == TextAlign.right
-                      ? textTheme.bodySmall
-                      : textTheme.bodyMedium)
-                  ?.copyWith(
-                    fontWeight: bold ? FontWeight.w600 : FontWeight.w500,
-                  ) ??
-              TextStyle(fontWeight: bold ? FontWeight.w600 : FontWeight.w500),
+          text,
+          textAlign: TextAlign.center,
+          style: textTheme.bodyMedium?.copyWith(
+            fontWeight: bold ? FontWeight.w600 : FontWeight.w500,
+          ),
         ),
-      );
-    }
+      ),
+    );
 
-    Widget labelCell(_RiskTimeEntry entry, bool isHighlight) {
-      final baseStyle =
-          textTheme.bodyMedium?.copyWith(
-            fontWeight: isHighlight ? FontWeight.w600 : FontWeight.w500,
-          ) ??
-          TextStyle(
-            fontWeight: isHighlight ? FontWeight.w600 : FontWeight.w500,
-          );
-      return Padding(
-        padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 12),
-        child: Row(
-          children: [
-            if (isHighlight)
-              const Icon(
-                Icons.local_fire_department_rounded,
-                size: 16,
-                color: AppTheme.dangerColor,
-              )
-            else
-              Container(
-                width: 10,
-                height: 10,
-                decoration: BoxDecoration(
-                  color: AppTheme.primaryBlue,
-                  borderRadius: BorderRadius.circular(3),
-                ),
-              ),
-            const SizedBox(width: 10),
-            Expanded(
-              child: Text(
-                entry.label,
-                style: baseStyle,
-                overflow: TextOverflow.ellipsis,
+    Widget labelCell(_RiskTimeEntry e, bool hl) => Padding(
+      padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 12),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.center, // 🔹 center horizontally
+        crossAxisAlignment: CrossAxisAlignment.center, // 🔹 center vertically
+        children: [
+          if (hl)
+            Icon(
+              Icons.local_fire_department_rounded,
+              size: 16,
+              color: AppTheme.dangerColor,
+            )
+          else
+            Container(
+              width: 10,
+              height: 10,
+              decoration: BoxDecoration(
+                color: AppTheme.primaryBlue,
+                borderRadius: BorderRadius.circular(3),
               ),
             ),
-          ],
-        ),
-      );
-    }
-
-    final tableBorder = TableBorder(
-      top: BorderSide(color: borderColor, width: 0.7),
-      bottom: BorderSide(color: borderColor, width: 0.7),
-      left: BorderSide(color: borderColor, width: 0.7),
-      right: BorderSide(color: borderColor, width: 0.7),
-      horizontalInside: BorderSide(color: borderColor, width: 0.6),
-      verticalInside: BorderSide(color: borderColor, width: 0.6),
+          const SizedBox(width: 6),
+          Flexible(
+            child: Text(
+              e.label,
+              style: textTheme.bodyMedium?.copyWith(
+                fontWeight: hl ? FontWeight.w600 : FontWeight.w500,
+              ),
+              overflow: TextOverflow.ellipsis,
+            ),
+          ),
+        ],
+      ),
     );
 
     return Container(
@@ -217,12 +142,13 @@ class HighRiskTimeTable extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
+          /// Header
           Row(
             children: [
               Container(
                 padding: const EdgeInsets.all(8),
                 decoration: BoxDecoration(
-                  color: AppTheme.primaryBlue.withAlpha((0.12 * 255).round()),
+                  color: AppTheme.primaryBlue.withAlpha(30),
                   borderRadius: BorderRadius.circular(12),
                 ),
                 child: const Icon(
@@ -234,12 +160,10 @@ class HighRiskTimeTable extends StatelessWidget {
               const SizedBox(width: 12),
               Text(
                 'Khung Giờ Rủi Ro Cao',
-                style:
-                    textTheme.titleMedium?.copyWith(
-                      fontWeight: FontWeight.w700,
-                      fontSize: 16,
-                    ) ??
-                    const TextStyle(fontSize: 16, fontWeight: FontWeight.w700),
+                style: textTheme.titleMedium?.copyWith(
+                  fontWeight: FontWeight.w700,
+                  fontSize: 16,
+                ),
               ),
               const Spacer(),
               if (hasData)
@@ -249,70 +173,64 @@ class HighRiskTimeTable extends StatelessWidget {
                     vertical: 6,
                   ),
                   decoration: BoxDecoration(
-                    color: AppTheme.primaryBlue.withAlpha((0.08 * 255).round()),
+                    color: AppTheme.primaryBlue.withAlpha(20),
                     borderRadius: BorderRadius.circular(999),
                   ),
                   child: Text(
                     'Tổng: $total',
-                    style:
-                        textTheme.labelSmall?.copyWith(
-                          fontWeight: FontWeight.w600,
-                          color: AppTheme.primaryBlue,
-                        ) ??
-                        const TextStyle(
-                          fontWeight: FontWeight.w600,
-                          color: AppTheme.primaryBlue,
-                        ),
+                    style: textTheme.labelSmall?.copyWith(
+                      fontWeight: FontWeight.w600,
+                      color: AppTheme.primaryBlue,
+                    ),
                   ),
                 ),
             ],
           ),
           const SizedBox(height: AppTheme.spacingS),
+
+          /// Table
           Table(
+            border: TableBorder.all(color: borderColor, width: 0.6),
+            defaultVerticalAlignment: TableCellVerticalAlignment.middle,
             columnWidths: const {
               0: FlexColumnWidth(),
               1: FixedColumnWidth(88),
               2: FixedColumnWidth(88),
             },
-            border: tableBorder,
-            defaultVerticalAlignment: TableCellVerticalAlignment.middle,
             children: [
               TableRow(
-                decoration: BoxDecoration(color: headerBackground),
+                decoration: BoxDecoration(color: headerBg),
                 children: [
                   headerCell('Khung giờ'),
-                  headerCell('Số lượng', align: TextAlign.right),
-                  headerCell('Tỷ lệ', align: TextAlign.right),
+                  headerCell('Số lượng'),
+                  headerCell('Tỷ lệ'),
                 ],
               ),
-              for (final entry in entries)
+              for (final e in entries)
                 TableRow(
                   decoration: BoxDecoration(
-                    color: highlight?.key == entry.key
-                        ? highlightBackground
-                        : Colors.white,
-                    border: highlight?.key == entry.key
-                        ? Border.all(color: highlightStroke, width: 0.9)
+                    color: highlight?.key == e.key ? hlBg : Colors.white,
+                    border: highlight?.key == e.key
+                        ? Border.all(color: hlStroke, width: 0.8)
                         : null,
                   ),
                   children: [
-                    labelCell(entry, highlight?.key == entry.key),
-                    dataCell(
-                      '${entry.count}',
-                      align: TextAlign.right,
-                      bold: highlight?.key == entry.key,
-                    ),
-                    dataCell(
-                      percentageLabel(entry.count),
-                      align: TextAlign.right,
-                      bold: highlight?.key == entry.key,
-                    ),
+                    labelCell(e, highlight?.key == e.key),
+                    dataCell('${e.count}', bold: highlight?.key == e.key),
+                    dataCell(pct(e.count), bold: highlight?.key == e.key),
                   ],
                 ),
             ],
           ),
           const SizedBox(height: AppTheme.spacingS),
-          Text(summaryText(), style: textTheme.bodyMedium),
+
+          /// Summary
+          Text(
+            hasData
+                ? 'Khung giờ rủi ro cao: ${highlight?.label ?? '-'} (${pct(highlight?.count ?? 0)})'
+                : 'Khung giờ rủi ro cao: Không có dữ liệu',
+            style: textTheme.bodyMedium,
+          ),
         ],
       ),
     );
@@ -323,7 +241,6 @@ class _RiskTimeEntry {
   final String key;
   final String label;
   final int count;
-
   const _RiskTimeEntry({
     required this.key,
     required this.label,

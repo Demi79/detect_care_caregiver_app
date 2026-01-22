@@ -14,13 +14,13 @@ class TabSelector extends StatelessWidget {
 
   static const List<_TabConfig> _tabs = [
     _TabConfig(
-      key: 'warning',
-      label: 'Cảnh báo',
+      key: 'highConfidence',
+      label: 'Sự kiện',
       icon: Icons.warning_amber_rounded,
       color: AppTheme.warningColor,
     ),
     _TabConfig(
-      key: 'activity',
+      key: 'lowConfidence',
       label: 'Nghi ngờ',
       icon: Icons.event_available_rounded,
       color: AppTheme.activityColor,

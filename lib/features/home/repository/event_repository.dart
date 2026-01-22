@@ -9,12 +9,13 @@ class EventRepository {
 
   Future<List<EventLog>> getEvents({
     int page = 1,
-    int limit = 100,
+    int limit = 50,
     String? status,
     DateTimeRange? dayRange,
     String? period,
     String? search,
     String? lifecycleState,
+    bool? includeCanceled,
   }) async {
     try {
       final events = await _service.fetchLogs(
@@ -25,6 +26,7 @@ class EventRepository {
         period: period,
         search: search,
         lifecycleState: lifecycleState,
+        includeCanceled: includeCanceled,
       );
       try {
         final sample = events.take(5).map((e) => e.eventId).toList();
@@ -88,6 +90,30 @@ class EventRepository {
       );
     } catch (e) {
       dev.log('❌ Repository proposeEvent error: $e');
+      rethrow;
+    }
+  }
+
+  Future<EventLog> proposeDeleteEvent({
+    required String eventId,
+    required String reason,
+    DateTime? pendingUntil,
+  }) async {
+    try {
+      dev.log('🔧 [Repository] proposeDeleteEvent');
+      if (eventId.trim().isEmpty) {
+        throw Exception(
+          'Không tìm thấy ID sự kiện. Không thể gửi đề xuất xóa.',
+        );
+      }
+
+      return await _service.proposeDeleteEvent(
+        eventId: eventId,
+        reason: reason,
+        pendingUntil: pendingUntil,
+      );
+    } catch (e) {
+      dev.log('❌ Repository proposeDeleteEvent error: $e');
       rethrow;
     }
   }

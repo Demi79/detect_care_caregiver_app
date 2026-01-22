@@ -187,7 +187,7 @@ extension _ActionLogCardHelpers on ActionLogCard {
       final api = CameraApi(
         ApiClient(tokenProvider: AuthStorage.getAccessToken),
       );
-      final response = await api.getCamerasByUser(customerId: customerId);
+      final response = await api.getCamerasByUser(userId: customerId);
 
       if (response['data'] is! List) {
         AppLogger.e(
@@ -216,12 +216,21 @@ extension _ActionLogCardHelpers on ActionLogCard {
         return;
       }
 
-      AppLogger.d('🎬 [ActionLogCard] Mở LiveCameraScreen với url=$cameraUrl');
+      final eventCustomerId = event.contextData['customer_id']?.toString();
+
+      AppLogger.d(
+        '🎬 [ActionLogCard] Mở LiveCameraScreen với url=$cameraUrl, customerId=$eventCustomerId',
+      );
       if (!context.mounted) return;
       Navigator.push(
         context,
         MaterialPageRoute(
-          builder: (_) => LiveCameraScreen(initialUrl: cameraUrl),
+          builder: (_) => LiveCameraScreen(
+            initialUrl: cameraUrl,
+            loadCache: false,
+            camera: matched,
+            customerId: eventCustomerId,
+          ),
         ),
       );
     } catch (e) {
@@ -258,6 +267,7 @@ extension _ActionLogCardHelpers on ActionLogCard {
         userId: userId,
         cameraId: event.cameraId,
       );
+      await AlarmStatusService.instance.refreshStatus();
       ActiveAlarmNotifier.instance.update(false);
 
       final rootCtx =

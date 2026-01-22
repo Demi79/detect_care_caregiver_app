@@ -1,5 +1,6 @@
 import 'dart:async';
 
+import 'package:detect_care_caregiver_app/core/events/app_events.dart';
 import 'package:detect_care_caregiver_app/core/models/notification.dart';
 import 'package:detect_care_caregiver_app/core/utils/backend_enums.dart';
 import 'package:detect_care_caregiver_app/features/alarm/data/alarm_remote_data_source.dart';
@@ -60,8 +61,8 @@ class _NotificationScreenState extends State<NotificationScreen> {
   final List<Map<String, dynamic>> _filterOptions = [
     {'label': 'Tất cả loại', 'type': null},
     {'label': 'Cảnh báo sự kiện', 'type': 'event_alert'},
-    {'label': 'Yêu cầu xác nhận', 'type': 'confirmation_request'},
-    {'label': 'Lời mời người chăm sóc', 'type': 'caregiver_invitation'},
+    // {'label': 'Yêu cầu xác nhận', 'type': 'confirmation_request'},
+    // {'label': 'Lời mời người chăm sóc', 'type': 'caregiver_invitation'},
     {'label': 'Cập nhật hệ thống', 'type': 'system_update'},
     {'label': 'Khẩn cấp', 'type': 'emergency_alert'},
   ];
@@ -95,9 +96,25 @@ class _NotificationScreenState extends State<NotificationScreen> {
             });
           });
     } catch (_) {}
+
+    try {
+      _notificationReceivedSub = AppEvents.instance.notificationReceived.listen((
+        _,
+      ) {
+        try {
+          _debounceTimer?.cancel();
+        } catch (_) {}
+        _debounceTimer = Timer(const Duration(milliseconds: 800), () async {
+          if (!mounted) return;
+          await _loadNotifications();
+          await _fetchUnreadCount();
+        });
+      });
+    } catch (_) {}
   }
 
   StreamSubscription<Map<String, dynamic>?>? _notificationSubscription;
+  StreamSubscription<void>? _notificationReceivedSub;
   Timer? _debounceTimer;
 
   Future<void> _loadNotifications() async {
@@ -129,6 +146,7 @@ class _NotificationScreenState extends State<NotificationScreen> {
 
   Future<void> _fetchUnreadCount() async {
     final count = await _apiService.getUnreadCount();
+    if (!mounted || count == null) return;
     setState(() => _unreadCount = count);
   }
 
@@ -761,17 +779,17 @@ class _NotificationScreenState extends State<NotificationScreen> {
                                                 color: Colors.grey.shade500,
                                               ),
                                             ),
-                                            const Spacer(),
-                                            if (!_isSelectionMode &&
-                                                _shouldShowSeverityActionButton(
-                                                  n,
-                                                  severity,
-                                                ))
-                                              _buildSeverityActionButton(
-                                                context,
-                                                n,
-                                                severity,
-                                              ),
+                                            // const Spacer(),
+                                            // if (!_isSelectionMode &&
+                                            //     _shouldShowSeverityActionButton(
+                                            //       n,
+                                            //       severity,
+                                            //     ))
+                                            //   _buildSeverityActionButton(
+                                            //     context,
+                                            //     n,
+                                            //     severity,
+                                            //   ),
                                           ],
                                         ),
                                       ],
@@ -829,6 +847,9 @@ class _NotificationScreenState extends State<NotificationScreen> {
       _notificationSubscription?.cancel();
     } catch (_) {}
     try {
+      _notificationReceivedSub?.cancel();
+    } catch (_) {}
+    try {
       _debounceTimer?.cancel();
     } catch (_) {}
     _searchController.dispose();
@@ -861,27 +882,27 @@ class _NotificationScreenState extends State<NotificationScreen> {
     );
   }
 
-  Widget _buildSeverityActionButton(
-    BuildContext context,
-    NotificationModel notification,
-    _NotificationSeverity severity,
-  ) {
-    final color = _severityColor(severity);
-    return TextButton.icon(
-      onPressed: () =>
-          _showNotificationActionSheet(context, notification, severity),
-      icon: Icon(_severityActionIcon(severity), size: 16, color: color),
-      label: Text(
-        _severityActionLabel(severity),
-        style: TextStyle(color: color, fontWeight: FontWeight.w600),
-      ),
-      style: TextButton.styleFrom(
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
-        backgroundColor: color.withOpacity(0.08),
-        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-      ),
-    );
-  }
+  // Widget _buildSeverityActionButton(
+  //   BuildContext context,
+  //   NotificationModel notification,
+  //   _NotificationSeverity severity,
+  // ) {
+  //   final color = _severityColor(severity);
+  //   return TextButton.icon(
+  //     onPressed: () =>
+  //         _showNotificationActionSheet(context, notification, severity),
+  //     icon: Icon(_severityActionIcon(severity), size: 16, color: color),
+  //     label: Text(
+  //       _severityActionLabel(severity),
+  //       style: TextStyle(color: color, fontWeight: FontWeight.w600),
+  //     ),
+  //     style: TextButton.styleFrom(
+  //       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+  //       backgroundColor: color.withOpacity(0.08),
+  //       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+  //     ),
+  //   );
+  // }
 
   bool _hasSeverityActions(_NotificationSeverity severity) {
     return severity == _NotificationSeverity.danger ||
@@ -1497,7 +1518,7 @@ class _NotificationScreenState extends State<NotificationScreen> {
       print('[NotificationScreen] load contacts error: $e');
     }
     if (phoneToCall == null || phoneToCall.isEmpty) {
-      return '112';
+      return '115';
     }
     return phoneToCall;
   }

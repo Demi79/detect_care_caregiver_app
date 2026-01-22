@@ -3,14 +3,25 @@ import 'package:permission_handler/permission_handler.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import 'package:detect_care_caregiver_app/core/services/direct_caller.dart';
+import 'package:detect_care_caregiver_app/core/utils/phone_utils.dart';
 
 String normalizePhoneNumber(String phone) {
-  var normalized = phone.replaceAll(RegExp(r'[\s\-\(\)]'), '');
-  if (normalized.startsWith('+84')) {
-    normalized = '0${normalized.substring(3)}';
-  } else if (normalized.startsWith('84')) {
-    normalized = '0${normalized.substring(2)}';
-  }
+  // Prefer central phone utilities to produce a local format starting with 0
+  try {
+    final local = PhoneUtils.toLocalVietnamese(phone);
+    // Ensure only digits and starts with 0
+    final cleaned = local.replaceAll(RegExp(r'\D'), '');
+    if (cleaned.startsWith('0')) return cleaned;
+    // If PhoneUtils returned something unexpected, fall back to manual cleanup
+  } catch (_) {}
+
+  // Fallback manual normalization (robust against +84, 0084, 84 prefixes)
+  var normalized = phone.replaceAll(RegExp(r'[\s\-\(\)\+]'), '');
+  if (normalized.startsWith('00')) normalized = normalized.substring(2);
+  if (normalized.startsWith('84')) normalized = '0${normalized.substring(2)}';
+  if (!normalized.startsWith('0')) normalized = '0$normalized';
+  // Strip any non-digit characters just in case
+  normalized = normalized.replaceAll(RegExp(r'\D'), '');
   return normalized;
 }
 

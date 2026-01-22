@@ -1,5 +1,12 @@
 import 'dart:async';
 
+import 'package:flutter/foundation.dart';
+import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
+import 'package:provider/provider.dart';
+
+import 'package:detect_care_caregiver_app/core/utils/logger.dart';
+import 'package:detect_care_caregiver_app/core/providers/permissions_provider.dart';
 import 'package:detect_care_caregiver_app/features/auth/data/auth_storage.dart';
 import 'package:detect_care_caregiver_app/features/camera/models/camera_entry.dart';
 import 'package:detect_care_caregiver_app/features/camera/screens/camera_timeline_screen.dart';
@@ -11,11 +18,8 @@ import 'package:detect_care_caregiver_app/features/camera/widgets/add_camera_dia
 import 'package:detect_care_caregiver_app/features/camera/widgets/components/camera_layouts.dart';
 import 'package:detect_care_caregiver_app/features/camera/widgets/components/camera_views.dart';
 import 'package:detect_care_caregiver_app/features/camera/widgets/components/controls_bar.dart';
+import 'package:detect_care_caregiver_app/features/shared_permissions/screens/caregiver_settings_screen.dart';
 import 'package:detect_care_caregiver_app/features/subscription/data/service_package_api.dart';
-import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
-import 'package:flutter/foundation.dart';
-import 'package:shared_preferences/shared_preferences.dart';
 
 enum _CameraHomeMenuOption {
   toggleView,
@@ -35,8 +39,6 @@ class _LiveCameraHomeScreenState extends State<LiveCameraHomeScreen>
     with TickerProviderStateMixin, AutomaticKeepAliveClientMixin {
   late final CameraHomeState _state;
   late final VoidCallback _stateListener;
-  late final AnimationController _fabAnimationController;
-  late final Animation<double> _fabAnimation;
 
   @override
   bool get wantKeepAlive => true;
@@ -58,42 +60,25 @@ class _LiveCameraHomeScreenState extends State<LiveCameraHomeScreen>
       if (!mounted) return;
       _precacheThumbnails(6);
     });
-
-    // Setup FAB animation
-    _fabAnimationController = AnimationController(
-      duration: const Duration(milliseconds: 200),
-      vsync: this,
-    );
-    _fabAnimation = Tween<double>(begin: 0.0, end: 1.0).animate(
-      CurvedAnimation(parent: _fabAnimationController, curve: Curves.easeInOut),
-    );
-    _fabAnimationController.forward();
   }
 
   Future<void> _precacheThumbnails(int limit) async {
-    try {
-      final cameras = _state.cameras;
-      var count = 0;
-      for (final c in cameras) {
-        final url = c.thumb;
-        if (url != null && url.startsWith('http')) {
-          try {
-            await precacheImage(NetworkImage(url), context);
-          } catch (e) {
-            debugPrint('Precache failed for $url: $e');
-          }
-          count++;
-          if (count >= limit) break;
-        }
+    final validUrls = _state.cameras
+        .map((c) => c.thumb)
+        .where((url) => url != null && url.startsWith('http'))
+        .take(limit);
+
+    for (final url in validUrls) {
+      try {
+        await precacheImage(NetworkImage(url!), context);
+      } catch (e) {
+        debugPrint('Precache failed for $url: $e');
       }
-    } catch (e) {
-      debugPrint('Error during precache thumbnails: $e');
     }
   }
 
   @override
   void dispose() {
-    _fabAnimationController.dispose();
     _state.removeListener(_stateListener);
     _state.dispose();
     super.dispose();
@@ -102,38 +87,34 @@ class _LiveCameraHomeScreenState extends State<LiveCameraHomeScreen>
   Future<void> _playCamera(CameraEntry camera) async {
     if (!mounted) return;
 
-    debugPrint(
-      '[LiveCameraHomeScreen] Opening LiveCameraScreen for: ${camera.name}',
-    );
-    // Remove any previously saved RTSP URL so the new screen doesn't restore it
-    try {
-      final prefs = await SharedPreferences.getInstance();
-      await prefs.remove('rtsp_url');
-    } catch (e) {
-      debugPrint('Failed to clear saved RTSP URL: $e');
-    }
+    final playUrl = camera.rtspUrl?.isNotEmpty == true
+        ? camera.rtspUrl!
+        : camera.hlsUrl?.isNotEmpty == true
+        ? camera.hlsUrl!
+        : camera.url;
 
-    if (!mounted) return;
+    AppLogger.api(
+      '▶️ Mở LiveCameraScreen với cameraId=${camera.id}, customerId=${camera.userId}, playUrl=$playUrl',
+    );
 
     final result = await Navigator.of(context).push<String?>(
       MaterialPageRoute(
         builder: (_) => LiveCameraScreen(
-          initialUrl: camera.url,
-          loadCache: false, // Don't load cache when opening from list
+          initialUrl: playUrl,
+          loadCache: false,
           camera: camera,
+          customerId: camera.userId,
         ),
         settings: const RouteSettings(name: 'live_camera_screen'),
       ),
     );
 
-    // Handle result from LiveCameraScreen (snapshot path if taken)
-    if (result != null && mounted) {
-      debugPrint('[LiveCameraHomeScreen] Snapshot taken: $result');
-    }
-
-    // Force refresh thumbnails after returning from camera screen
     if (mounted) {
-      await _state.refreshThumbnails();
+      if (result != null) {
+        debugPrint('[LiveCameraHomeScreen] Snapshot taken: $result');
+      }
+      // Chỉ refresh thumbnail của camera vừa xem thay vì tất cả
+      await _state.refreshCameraThumb(camera);
     }
   }
 
@@ -152,23 +133,20 @@ class _LiveCameraHomeScreenState extends State<LiveCameraHomeScreen>
     if (!mounted) return;
     switch (option) {
       case _CameraHomeMenuOption.toggleView:
-        HapticFeedback.selectionClick();
-        _state.toggleView();
-        break;
       case _CameraHomeMenuOption.toggleSort:
         HapticFeedback.selectionClick();
-        _state.toggleSort();
-        break;
+        option == _CameraHomeMenuOption.toggleView
+            ? _state.toggleView()
+            : _state.toggleSort();
       case _CameraHomeMenuOption.refreshThumbnails:
-        if (_state.refreshing) return;
-        HapticFeedback.mediumImpact();
-        _state.refreshThumbnails();
-        break;
+        if (!_state.refreshing) {
+          HapticFeedback.mediumImpact();
+          _state.refreshThumbnails();
+        }
       case _CameraHomeMenuOption.settings:
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(content: Text('Cài đặt đang được phát triển.')),
         );
-        break;
     }
   }
 
@@ -188,29 +166,27 @@ class _LiveCameraHomeScreenState extends State<LiveCameraHomeScreen>
       ),
     );
 
-    if (!mounted) return;
+    if (!mounted || cameraData == null) return;
 
-    if (cameraData != null) {
-      try {
-        await _state.updateCamera(camera.id, cameraData);
-        if (!mounted) return;
-
+    try {
+      await _state.updateCamera(camera.id, cameraData);
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Đã cập nhật camera: ${cameraData['camera_name']}'),
+          ),
+        );
+      }
+    } catch (e) {
+      debugPrint('[API] Error updating camera: $e');
+      if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text(
-              'Đã cập nhật camera: ${cameraData['camera_name'] ?? ''}',
+              kDebugMode ? 'Lỗi cập nhật camera: $e' : 'Lỗi cập nhật camera',
             ),
           ),
         );
-      } catch (e) {
-        debugPrint('[API] Error updating camera: $e');
-        if (!mounted) return;
-        final message = kDebugMode
-            ? 'Lỗi cập nhật camera: $e'
-            : 'Lỗi cập nhật camera';
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(SnackBar(content: Text(message)));
       }
     }
   }
@@ -219,15 +195,12 @@ class _LiveCameraHomeScreenState extends State<LiveCameraHomeScreen>
     final userId = await AuthStorage.getUserId();
     if (!mounted) return;
 
-    // Đảm bảo quota đã được validate
     if (_state.quotaValidation == null) {
       await _state.validateCameraQuota();
       if (!mounted) return;
     }
 
-    // Kiểm tra quota trước khi hiển thị dialog
-    if (_state.quotaValidation != null && !_state.quotaValidation!.canAdd) {
-      if (!mounted) return;
+    if (_state.quotaValidation?.canAdd == false) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text(
@@ -247,38 +220,29 @@ class _LiveCameraHomeScreenState extends State<LiveCameraHomeScreen>
       builder: (ctx) => AddCameraDialog(userId: userId),
     );
 
-    if (!mounted) return;
+    if (!mounted || cameraData == null) return;
 
-    debugPrint('[ADD CAMERA] userId: $userId, cameraData: $cameraData');
-
-    if (cameraData != null) {
-      try {
-        await _state.addCamera(cameraData);
-        if (!mounted) return;
-
+    try {
+      await _state.addCamera(cameraData);
+      if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text('Đã thêm camera: ${cameraData['camera_name'] ?? ''}'),
+            content: Text('Đã thêm camera: ${cameraData['camera_name']}'),
           ),
         );
-      } catch (e) {
-        debugPrint('[API] Error creating camera: $e');
-        if (!mounted) return;
-
+      }
+    } catch (e) {
+      debugPrint('[API] Error creating camera: $e');
+      if (mounted) {
         ScaffoldMessenger.of(
           context,
         ).showSnackBar(SnackBar(content: Text('Lỗi tạo camera: $e')));
       }
-    } else {
-      debugPrint('[ADD CAMERA] No camera data provided');
     }
   }
 
-  Future<void> _upgradePlan() async {
-    // Navigate to subscription screen
+  void _upgradePlan() {
     if (!mounted) return;
-
-    // TODO: Navigate to subscription/upgrade screen
     ScaffoldMessenger.of(context).showSnackBar(
       const SnackBar(content: Text('Tính năng nâng cấp sẽ được triển khai')),
     );
@@ -305,26 +269,24 @@ class _LiveCameraHomeScreenState extends State<LiveCameraHomeScreen>
       ),
     );
 
-    if (confirmed == true && mounted) {
-      try {
-        await _state.deleteCamera(camera);
+    if (confirmed != true || !mounted) return;
 
-        if (!mounted) return;
+    try {
+      await _state.deleteCamera(camera);
+      if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text('Đã xóa "${camera.name}"'),
             action: SnackBarAction(
               label: 'Hoàn tác',
-              onPressed: () {
-                if (!mounted) return;
-                _state.undoDelete(camera.id);
-              },
+              onPressed: () => mounted ? _state.undoDelete(camera.id) : null,
             ),
             duration: const Duration(seconds: 6),
           ),
         );
-      } catch (e) {
-        if (!mounted) return;
+      }
+    } catch (e) {
+      if (mounted) {
         ScaffoldMessenger.of(
           context,
         ).showSnackBar(SnackBar(content: Text('Lỗi khi xóa camera: $e')));
@@ -332,21 +294,19 @@ class _LiveCameraHomeScreenState extends State<LiveCameraHomeScreen>
     }
   }
 
-  void _onSearchChanged(String value) {
-    if (!mounted) return;
-    _state.updateSearch(value);
-  }
+  void _onSearchChanged(String value) =>
+      mounted ? _state.updateSearch(value) : null;
 
   Widget _buildContentView(List<CameraEntry> cameras) {
     final statusNote = _state.lastRefreshed == null
         ? 'Chưa đồng bộ'
         : 'Cập nhật ${_formatRelativeTime(_state.lastRefreshed!)}';
+
     return RefreshIndicator(
       key: const ValueKey('content'),
       color: Colors.blueAccent,
       backgroundColor: Colors.white,
       onRefresh: () async {
-        if (!mounted) return;
         await _state.loadCameras();
         await _state.refreshThumbnails();
       },
@@ -367,126 +327,24 @@ class _LiveCameraHomeScreenState extends State<LiveCameraHomeScreen>
             sliver: _state.grid
                 ? CameraGrid(
                     cameras: cameras,
-                    onPlay: (camera) {
-                      if (!mounted) return;
-                      _playCamera(camera);
-                    },
-                    onDelete: (camera) {
-                      if (!mounted) return;
-                      _confirmAndRemove(camera);
-                    },
-                    onEdit: (camera) {
-                      if (!mounted) return;
-                      _editCamera(camera);
-                    },
-                    onRefreshRequested: (camera) {
-                      if (!mounted) return;
-                      _state.refreshCameraThumb(camera);
-                    },
-                    onShowTimeline: (camera) {
-                      if (!mounted) return;
-                      _openCameraTimeline(camera);
-                    },
+                    onPlay: _playCamera,
+                    onDelete: _confirmAndRemove,
+                    onEdit: _editCamera,
+                    onRefreshRequested: _state.refreshCameraThumb,
+                    onShowTimeline: _openCameraTimeline,
                     searchQuery: _state.search,
                     statusNote: statusNote,
                   )
                 : CameraList(
                     cameras: cameras,
-                    onPlay: (camera) {
-                      if (!mounted) return;
-                      _playCamera(camera);
-                    },
-                    onDelete: (camera) {
-                      if (!mounted) return;
-                      _confirmAndRemove(camera);
-                    },
-                    onEdit: (camera) {
-                      if (!mounted) return;
-                      _editCamera(camera);
-                    },
-                    onShowTimeline: (camera) {
-                      if (!mounted) return;
-                      _openCameraTimeline(camera);
-                    },
+                    onPlay: _playCamera,
+                    onDelete: _confirmAndRemove,
+                    onShowTimeline: _openCameraTimeline,
                     searchQuery: _state.search,
                     statusNote: statusNote,
                   ),
           ),
         ],
-      ),
-    );
-  }
-
-  Widget _buildSummaryBar(List<CameraEntry> filteredCameras) {
-    final total = _state.cameras.length;
-    if (total == 0) return const SizedBox.shrink();
-    final onlineCount = _state.cameras.where((c) => c.isOnline).length;
-    final filtered = filteredCameras.length;
-    final systemStatus = onlineCount == total
-        ? 'Tất cả camera đang online'
-        : '$onlineCount/$total camera đang online';
-    final lastUpdated = _state.lastRefreshed == null
-        ? 'Chưa đồng bộ'
-        : 'Cập nhật ${_formatRelativeTime(_state.lastRefreshed!)}';
-
-    return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-      child: Container(
-        width: double.infinity,
-        padding: const EdgeInsets.all(14),
-        decoration: BoxDecoration(
-          gradient: LinearGradient(
-            colors: [Colors.blueAccent.shade200, Colors.blueAccent],
-            begin: Alignment.topLeft,
-            end: Alignment.bottomRight,
-          ),
-          borderRadius: BorderRadius.circular(18),
-          boxShadow: [
-            BoxShadow(
-              color: Colors.blueAccent.shade700.withOpacity(0.25),
-              blurRadius: 10,
-              offset: const Offset(0, 4),
-            ),
-          ],
-        ),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
-              children: [
-                const Text(
-                  'Camera',
-                  style: TextStyle(
-                    color: Colors.white,
-                    fontSize: 18,
-                    fontWeight: FontWeight.w700,
-                  ),
-                ),
-                if (filtered != total) ...[
-                  const SizedBox(width: 8),
-                  Text(
-                    'Hiển thị $filtered/$total',
-                    style: const TextStyle(color: Colors.white70, fontSize: 14),
-                  ),
-                ],
-              ],
-            ),
-            const SizedBox(height: 6),
-            Text(
-              systemStatus,
-              style: const TextStyle(
-                color: Colors.white70,
-                fontSize: 14,
-                fontWeight: FontWeight.w500,
-              ),
-            ),
-            const SizedBox(height: 2),
-            Text(
-              lastUpdated,
-              style: const TextStyle(color: Colors.white60, fontSize: 13),
-            ),
-          ],
-        ),
       ),
     );
   }
@@ -505,18 +363,34 @@ class _LiveCameraHomeScreenState extends State<LiveCameraHomeScreen>
 
     final filteredCameras = _state.filteredCameras;
 
+    // Check stream_view permission
+    bool hasStreamPermission = true;
+    String? customerIdToCheck;
+    try {
+      final prov = context.watch<PermissionsProvider>();
+      // Try to get customer ID from active assignment
+      if (_state.cameras.isNotEmpty && _state.cameras.first.userId != null) {
+        customerIdToCheck = _state.cameras.first.userId;
+      }
+
+      if (customerIdToCheck != null && customerIdToCheck.isNotEmpty) {
+        hasStreamPermission = prov.hasPermission(
+          customerIdToCheck,
+          'stream_view',
+        );
+        AppLogger.d(
+          '[LiveCameraHome] Permission check: customerId=$customerIdToCheck, hasStreamPermission=$hasStreamPermission',
+        );
+      }
+    } catch (e) {
+      AppLogger.w('[LiveCameraHome] Permission check error: $e');
+      hasStreamPermission = true;
+    }
+
     return PopScope(
       canPop: true,
       onPopInvokedWithResult: (didPop, result) async {
         if (didPop) return;
-        // Fire-and-forget token fetch for debug
-        AuthStorage.getAccessToken()
-            .then((token) {
-              debugPrint(
-                '[LiveCameraHomeScreen] Token when popping to Home: $token',
-              );
-            })
-            .catchError((_) {});
         Navigator.of(
           context,
         ).pushNamedAndRemoveUntil('/home', (route) => false);
@@ -665,18 +539,76 @@ class _LiveCameraHomeScreenState extends State<LiveCameraHomeScreen>
         //     ),
         //   )
         // : null,
-        body: Column(
-          children: [
-            // Camera quota banner
-            // CameraQuotaBanner(
-            //   quotaValidation: _state.quotaValidation,
-            //   onUpgradePressed: _upgradePlan,
-            // ),
-            // if (_state.cameras.isNotEmpty) _buildSummaryBar(filteredCameras),
-
-            // Main content
-            Expanded(
-              child: AnimatedSwitcher(
+        body: !hasStreamPermission
+            ? Center(
+                child: Padding(
+                  padding: const EdgeInsets.all(24),
+                  child: Column(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      Icon(
+                        Icons.lock_outline,
+                        size: 64,
+                        color: const Color(0xFFF59E0B),
+                      ),
+                      const SizedBox(height: 16),
+                      Text(
+                        'Không có quyền truy cập',
+                        style: TextStyle(
+                          fontSize: 18,
+                          fontWeight: FontWeight.w600,
+                          color: Colors.grey[800],
+                        ),
+                      ),
+                      const SizedBox(height: 8),
+                      Text(
+                        'Bạn chưa được chia sẻ quyền xem camera. Hãy nhờ bệnh nhân cấp quyền truy cập trong "Quyền được chia sẻ".',
+                        textAlign: TextAlign.center,
+                        style: TextStyle(color: Colors.grey[600]),
+                      ),
+                      const SizedBox(height: 24),
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          OutlinedButton.icon(
+                            onPressed: () => setState(() {}),
+                            icon: const Icon(Icons.refresh),
+                            label: const Text('Thử lại'),
+                            style: OutlinedButton.styleFrom(
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 20,
+                                vertical: 12,
+                              ),
+                            ),
+                          ),
+                          const SizedBox(width: 12),
+                          ElevatedButton.icon(
+                            onPressed: () {
+                              Navigator.of(context).push(
+                                MaterialPageRoute(
+                                  builder: (_) =>
+                                      const CaregiverSettingsScreen(),
+                                ),
+                              );
+                            },
+                            icon: const Icon(Icons.key),
+                            label: const Text('Yêu cầu quyền'),
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: const Color(0xFFF59E0B),
+                              foregroundColor: Colors.white,
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 20,
+                                vertical: 12,
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ],
+                  ),
+                ),
+              )
+            : AnimatedSwitcher(
                 duration: const Duration(milliseconds: 150),
                 child: _state.loading
                     ? const LoadingView()
@@ -685,16 +617,10 @@ class _LiveCameraHomeScreenState extends State<LiveCameraHomeScreen>
                     : filteredCameras.isEmpty
                     ? NoSearchResultsView(
                         searchQuery: _state.search,
-                        onClearSearch: () {
-                          if (!mounted) return;
-                          _state.updateSearch('');
-                        },
+                        onClearSearch: () => _state.updateSearch(''),
                       )
                     : _buildContentView(filteredCameras),
               ),
-            ),
-          ],
-        ),
       ),
     );
   }

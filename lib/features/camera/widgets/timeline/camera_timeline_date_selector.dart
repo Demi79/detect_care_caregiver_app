@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+
 import 'camera_timeline_components.dart';
 import 'camera_timeline_zoom_control.dart';
 
@@ -11,6 +12,8 @@ class CameraTimelineDateSelector extends StatelessWidget {
   final bool showZoom;
   final double zoomLevel;
   final ValueChanged<double> onAdjustZoom;
+  final bool canGoToPrev;
+  final bool canGoToNext;
 
   const CameraTimelineDateSelector({
     super.key,
@@ -22,6 +25,8 @@ class CameraTimelineDateSelector extends StatelessWidget {
     this.showZoom = true,
     this.zoomLevel = 0.5,
     required this.onAdjustZoom,
+    this.canGoToPrev = true,
+    this.canGoToNext = true,
   });
 
   @override
@@ -34,7 +39,11 @@ class CameraTimelineDateSelector extends StatelessWidget {
       padding: padding,
       child: Row(
         children: [
-          CameraTimelineCircleButton(icon: Icons.chevron_left, onTap: onPrev),
+          CameraTimelineCircleButton(
+            icon: Icons.chevron_left,
+            onTap: canGoToPrev ? onPrev : null,
+            enabled: canGoToPrev,
+          ),
           Expanded(
             child: Container(
               margin: const EdgeInsets.symmetric(horizontal: 12),
@@ -62,7 +71,11 @@ class CameraTimelineDateSelector extends StatelessWidget {
               ),
             ),
           ),
-          CameraTimelineCircleButton(icon: Icons.chevron_right, onTap: onNext),
+          CameraTimelineCircleButton(
+            icon: Icons.chevron_right,
+            onTap: canGoToNext ? onNext : null,
+            enabled: canGoToNext,
+          ),
           if (showZoom) ...[
             const SizedBox(width: 8),
             CameraTimelineZoomControl(

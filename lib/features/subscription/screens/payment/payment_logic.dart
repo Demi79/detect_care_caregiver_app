@@ -115,7 +115,7 @@ class PaymentController {
 
     // Xử lý deep link khi app được mở bằng link (cold start)
     _appLinks!
-        .getInitialLink()
+        .getInitialAppLink()
         .then((initial) async {
           try {
             if (initial != null && _isPaymentDeepLink(initial)) {

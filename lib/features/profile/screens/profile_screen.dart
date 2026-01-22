@@ -3,10 +3,12 @@ import 'package:detect_care_caregiver_app/features/profile/repositories/user_rep
 import 'package:detect_care_caregiver_app/features/profile/screens/edit_user_screen.dart';
 import 'package:detect_care_caregiver_app/features/profile/services/user_services.dart';
 import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
 
 import 'package:detect_care_caregiver_app/core/network/api_client.dart';
 import 'package:detect_care_caregiver_app/features/auth/data/auth_storage.dart';
 import 'package:detect_care_caregiver_app/features/profile/data/user_remote_data_source.dart';
+import 'package:detect_care_caregiver_app/core/providers/permissions_provider.dart';
 
 class ProfileScreen extends StatefulWidget {
   final String? userId;
@@ -139,6 +141,13 @@ class _ProfileScreenState extends State<ProfileScreen> {
     if (confirm != true) return;
 
     try {
+      try {
+        final permProvider = context.read<PermissionsProvider>();
+        permProvider.reset();
+      } catch (e) {
+        debugPrint('Logout: error resetting permissions provider: $e');
+      }
+
       await AuthStorage.clear();
     } catch (e) {
       debugPrint('Logout: error clearing auth storage: $e');
@@ -170,7 +179,14 @@ class _ProfileScreenState extends State<ProfileScreen> {
     if (widget.embedInParent) {
       return Container(
         color: backgroundColor,
-        child: SafeArea(child: bodyWidget),
+        child: SafeArea(
+          child: Column(
+            children: [
+              _buildEmbeddedHeader('Hồ sơ cá nhân'),
+              Expanded(child: bodyWidget),
+            ],
+          ),
+        ),
       );
     }
 
@@ -208,6 +224,31 @@ class _ProfileScreenState extends State<ProfileScreen> {
         ),
       ),
       body: bodyWidget,
+    );
+  }
+
+  Widget _buildEmbeddedHeader(String title) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        border: Border(
+          bottom: BorderSide(
+            color: const Color(0xFFE2E8F0).withValues(alpha: 0.5),
+            width: 0.5,
+          ),
+        ),
+      ),
+      child: Center(
+        child: Text(
+          title,
+          style: const TextStyle(
+            fontSize: 20,
+            fontWeight: FontWeight.w600,
+            color: Color(0xFF007AFF),
+          ),
+        ),
+      ),
     );
   }
 
