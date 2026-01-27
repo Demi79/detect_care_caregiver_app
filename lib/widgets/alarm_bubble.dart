@@ -3,13 +3,13 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 
 import 'package:detect_care_caregiver_app/core/events/app_events.dart';
+import 'package:detect_care_caregiver_app/core/ui/in_app_alert.dart';
 import 'package:detect_care_caregiver_app/core/utils/logger.dart';
 import 'package:detect_care_caregiver_app/features/alarm/data/alarm_status.dart';
 import 'package:detect_care_caregiver_app/features/alarm/services/active_alarm_notifier.dart';
 import 'package:detect_care_caregiver_app/features/alarm/services/alarm_status_service.dart';
 import 'package:detect_care_caregiver_app/features/home/models/event_log.dart';
 import 'package:detect_care_caregiver_app/features/home/service/event_service.dart';
-import 'package:detect_care_caregiver_app/features/home/widgets/alert_new_event_card.dart';
 
 class AlarmBubbleOverlay extends StatefulWidget {
   const AlarmBubbleOverlay({super.key});
@@ -125,111 +125,7 @@ class _AlarmBubbleOverlayState extends State<AlarmBubbleOverlay>
     }
 
     if (!mounted || event == null) return;
-    final ev = event;
-
-    await showGeneralDialog(
-      context: context,
-      barrierDismissible: true,
-      barrierLabel: 'alarm-event-card',
-      barrierColor: const Color.fromRGBO(0, 0, 0, 0.35),
-      pageBuilder: (_, __, ___) {
-        return SafeArea(
-          child: Center(
-            child: ConstrainedBox(
-              constraints: const BoxConstraints(maxWidth: 520, minWidth: 220),
-              child: Padding(
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 16,
-                  vertical: 24,
-                ),
-                child: Material(
-                  color: Colors.transparent,
-                  child: AlertEventCard(
-                    event: ev,
-                    eventId: ev.eventId,
-                    eventType: ev.eventType,
-                    timestamp: ev.createdAt ?? ev.detectedAt ?? DateTime.now(),
-                    createdAt: ev.createdAt,
-                    severity: _mapSeverityFrom(ev),
-                    description: _resolveDescription(ev),
-                    isHandled: _isHandled(ev),
-                    detectionData: ev.detectionData,
-                    contextData: ev.contextData,
-                    cameraId: _resolveCameraId(ev),
-                    confidence: _resolveConfidence(ev),
-                    imageUrls: ev.imageUrls,
-                    onDismiss: () {
-                      Navigator.of(context, rootNavigator: true).maybePop();
-                    },
-                    onMarkHandled: () {
-                      _alarmStatusService.refreshStatus();
-                    },
-                    onEmergencyCall: () {
-                      _alarmStatusService.refreshStatus();
-                    },
-                  ),
-                ),
-              ),
-            ),
-          ),
-        );
-      },
-    );
-  }
-
-  String _mapSeverityFrom(EventLog e) {
-    final s = e.status.toString().toLowerCase();
-    if (s.contains('danger')) return 'critical';
-    if (s.contains('warning')) return 'medium';
-    if (s.contains('critical')) return 'critical';
-    if (s.contains('high')) return 'high';
-    if (s.contains('medium')) return 'medium';
-    if (s.contains('low')) return 'low';
-    return 'high';
-  }
-
-  String _resolveDescription(EventLog e) {
-    if ((e.eventDescription?.isNotEmpty ?? false)) return e.eventDescription!;
-    if ((e.notes?.isNotEmpty ?? false)) return e.notes!;
-    return 'Chạm "Chi tiết" để xem thêm…';
-  }
-
-  String? _resolveCameraId(EventLog e) {
-    try {
-      final det = e.detectionData;
-      final ctx = e.contextData;
-      final val =
-          det['camera_id'] ??
-          det['camera'] ??
-          ctx['camera_id'] ??
-          ctx['camera'];
-      return val?.toString();
-    } catch (_) {
-      return e.cameraId;
-    }
-  }
-
-  double? _resolveConfidence(EventLog e) {
-    try {
-      if (e.confidenceScore != 0.0) return e.confidenceScore;
-      final det = e.detectionData;
-      final ctx = e.contextData;
-      final c =
-          det['confidence'] ?? det['confidence_score'] ?? ctx['confidence'];
-      if (c == null) return null;
-      if (c is num) return c.toDouble();
-      return double.tryParse(c.toString());
-    } catch (_) {
-      return null;
-    }
-  }
-
-  bool _isHandled(EventLog e) {
-    try {
-      return e.confirmStatus;
-    } catch (_) {
-      return false;
-    }
+    await InAppAlert.show(event, allowProposedOrUpdated: true);
   }
 
   @override

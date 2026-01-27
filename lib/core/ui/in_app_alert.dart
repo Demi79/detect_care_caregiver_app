@@ -24,7 +24,10 @@ class InAppAlert {
   static DateTime? _lastShownMinute;
   static final Set<String> _activeEventIds = <String>{};
 
-  static Future<void> show(LogEntry e) async {
+  static Future<void> show(
+    LogEntry e, {
+    bool allowProposedOrUpdated = false,
+  }) async {
     print('🧩 [InAppAlert] Request to show popup for event ${e.eventId}');
     // print(' - _showing: $_showing');
     print(' - isForeground: ${AppLifecycle.isForeground}');
@@ -117,6 +120,42 @@ class InAppAlert {
         }
       }
     } catch (_) {}
+
+    if (!allowProposedOrUpdated) {
+      try {
+        String? updatedBy;
+        try {
+          updatedBy = (e as dynamic).updatedBy?.toString();
+        } catch (_) {
+          updatedBy = null;
+        }
+        final updFromContext = e.contextData?['updated_by']?.toString();
+        final updFromDetection = e.detectionData?['updated_by']?.toString();
+
+        String? proposedBy;
+        try {
+          proposedBy = (e as dynamic).proposedBy?.toString();
+        } catch (_) {
+          proposedBy = null;
+        }
+        final propFromContext = e.contextData?['proposed_by']?.toString();
+        final propFromDetection = e.detectionData?['proposed_by']?.toString();
+
+        final hasUpdatedBy =
+            (updatedBy?.isNotEmpty ?? false) ||
+            (updFromContext?.isNotEmpty ?? false) ||
+            (updFromDetection?.isNotEmpty ?? false);
+        final hasProposedBy =
+            (proposedBy?.isNotEmpty ?? false) ||
+            (propFromContext?.isNotEmpty ?? false) ||
+            (propFromDetection?.isNotEmpty ?? false);
+
+        if (hasUpdatedBy || hasProposedBy) {
+          print('❌ Popup suppressed: event already proposed/updated');
+          return;
+        }
+      } catch (_) {}
+    }
 
     final eventTime = e.createdAt ?? e.detectedAt ?? DateTime.now();
     DateTime truncateToMinute(DateTime t) =>

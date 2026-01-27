@@ -322,41 +322,41 @@ class _SettingsScreenState extends State<SettingsScreen> {
       //     }
       //   },
       // ),
-      SettingsItem(
-        icon: Icons.security_outlined,
-        title: 'Bảo mật',
-        onTap: () {},
-        trailing: Container(
-          width: 8,
-          height: 8,
-          decoration: const BoxDecoration(
-            color: Colors.green,
-            shape: BoxShape.circle,
-          ),
-        ),
-      ),
-      const SettingsDivider(),
-      SettingsItem(
-        icon: Icons.language_outlined,
-        title: 'Riêng tư',
-        onTap: () {},
-        trailing: Container(
-          width: 8,
-          height: 8,
-          decoration: const BoxDecoration(
-            color: Colors.orange,
-            shape: BoxShape.circle,
-          ),
-        ),
-      ),
-      const SettingsDivider(),
-      SettingsItem(
-        icon: Icons.help_outline,
-        title: 'Trợ giúp & Hỗ trợ',
-        onTap: () {},
-      ),
-      const SettingsDivider(),
-      SettingsItem(icon: Icons.star_outline, title: 'Đánh giá', onTap: () {}),
+      // SettingsItem(
+      //   icon: Icons.security_outlined,
+      //   title: 'Bảo mật',
+      //   onTap: () {},
+      //   trailing: Container(
+      //     width: 8,
+      //     height: 8,
+      //     decoration: const BoxDecoration(
+      //       color: Colors.green,
+      //       shape: BoxShape.circle,
+      //     ),
+      //   ),
+      // ),
+      // const SettingsDivider(),
+      // SettingsItem(
+      //   icon: Icons.language_outlined,
+      //   title: 'Riêng tư',
+      //   onTap: () {},
+      //   trailing: Container(
+      //     width: 8,
+      //     height: 8,
+      //     decoration: const BoxDecoration(
+      //       color: Colors.orange,
+      //       shape: BoxShape.circle,
+      //     ),
+      //   ),
+      // ),
+      // const SettingsDivider(),
+      // SettingsItem(
+      //   icon: Icons.help_outline,
+      //   title: 'Trợ giúp & Hỗ trợ',
+      //   onTap: () {},
+      // ),
+      // const SettingsDivider(),
+      // SettingsItem(icon: Icons.star_outline, title: 'Đánh giá', onTap: () {}),
     ],
   );
 }

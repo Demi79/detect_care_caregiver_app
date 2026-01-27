@@ -50,6 +50,7 @@ class _CancelEventLogScreenState extends State<CancelEventLogScreen> {
   bool _compactVisible = false;
 
   List<LogEntry> _allLogs = [];
+  List<LogEntry> _allLogsInRange = [];
 
   @override
   void initState() {
@@ -71,13 +72,25 @@ class _CancelEventLogScreenState extends State<CancelEventLogScreen> {
         page: 1,
         limit: 200,
         status: null,
-        dayRange: _selectedDayRange,
+        dayRange: null,
         period: null,
         search: null,
         includeCanceled: null,
       );
       if (!mounted) return;
       setState(() => _allLogs = allEvents);
+
+      final inRange = await repo.getEvents(
+        page: 1,
+        limit: 200,
+        status: null,
+        dayRange: _selectedDayRange,
+        period: null,
+        search: null,
+        includeCanceled: null,
+      );
+      if (!mounted) return;
+      setState(() => _allLogsInRange = inRange);
     } catch (_) {}
   }
 
@@ -254,6 +267,7 @@ class _CancelEventLogScreenState extends State<CancelEventLogScreen> {
                         maxRangeDays: 3,
                         onDayRangeChanged: (dr) {
                           setState(() => _selectedDayRange = dr);
+                          _loadAllTotals();
                           try {
                             widget.onDayRangeChanged(dr);
                           } catch (_) {}
@@ -285,7 +299,7 @@ class _CancelEventLogScreenState extends State<CancelEventLogScreen> {
                     const SizedBox(height: 24),
                     _SummaryRow(
                       filteredLogs: filtered,
-                      allLogs: _allLogs,
+                      allLogsInRange: _allLogsInRange,
                       selectedStatus: _selectedStatus,
                     ),
                     const SizedBox(height: 12),
@@ -393,25 +407,24 @@ class _CancelEventLogScreenState extends State<CancelEventLogScreen> {
 class _SummaryRow extends StatelessWidget {
   const _SummaryRow({
     required this.filteredLogs,
-    required this.allLogs,
+    required this.allLogsInRange,
     required this.selectedStatus,
   });
 
   final List<LogEntry> filteredLogs;
-  final List<LogEntry> allLogs;
+  final List<LogEntry> allLogsInRange;
   final String selectedStatus;
 
   bool _isCritical(LogEntry e) {
-    final t = e.eventType.toLowerCase();
-    return t == 'fall' ||
-        t == 'fall_detection' ||
-        t == 'abnormal_behavior' ||
-        t == 'visitor_detected';
+    final s = e.status.toLowerCase();
+    final ls = (e.lifecycleState ?? '').toString().toLowerCase();
+    return (s == 'danger' || s == 'warning') &&
+        (ls.contains('cancel') || ls.contains('cancelled'));
   }
 
   @override
   Widget build(BuildContext context) {
-    final int totalAll = allLogs.length;
+    final int totalAll = allLogsInRange.length;
     final int critical = filteredLogs.where(_isCritical).length;
     final int others = (filteredLogs.length - critical).clamp(
       0,
